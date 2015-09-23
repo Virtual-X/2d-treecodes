@@ -12,7 +12,7 @@
 #define LMAX 15
 
 #ifndef ORDER
-#define ORDER 14
+#define ORDER 2
 #endif
 
 using namespace std;
@@ -100,44 +100,49 @@ namespace TreeCodeDiego
 
     Node build(const int x, const int y, const int l, const int s, const int e, const int mask)
     {
+	const double h = ext / (1 << l);
+	const double x0 = xmin + h * x, y0 = ymin + h * y;
+	
 	assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
     
-#ifndef NDEBUG
-	{
-	    const double h = ext / (1 << l);
-	    const double x0 = xmin + h * x, y0 = ymin + h * y;
-	
-	    for(int i = s; i < e; ++i)
-		assert(data[0][i] >= x0 && data[0][i] < x0 + h && data[1][i] >= y0 && data[1][i] < y0 + h);
-	}
+#ifndef NDEBUG	
+	for(int i = s; i < e; ++i)
+	    assert(data[0][i] >= x0 && data[0][i] < x0 + h && data[1][i] >= y0 && data[1][i] < y0 + h);
 #endif
 
 	Node node = {x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
     
-	if (e - s > 0)
 	{	
-	    realtype xcom = 0, ycom = 0, mass = 0, r = 0;
+	    realtype xsum = 0, ysum = 0, mass = 0, r = 0;
 	
 	    for(int i = s; i < e; ++i)
-		mass += data[2][i];
+		mass += abs(data[2][i]);
 
 	    for(int i = s; i < e; ++i)
-		xcom += data[0][i] * data[2][i];
+		xsum += data[0][i] * abs(data[2][i]);
 
 	    for(int i = s; i < e; ++i)
-		ycom += data[1][i] * data[2][i];
+		ysum += data[1][i] * abs(data[2][i]);
 
-	    xcom /= mass;
-	    ycom /= mass;
-		
+	    if (mass != 0 && e - s > 0)
+	    {
+		node.xcom = xsum / mass;
+		node.ycom = ysum / mass;
+	    }
+	    else
+	    {
+		node.xcom = x0 + h / 2;
+		node.ycom = y0 + h / 2;
+	    }
+	    
 	    for(int i = s; i < e; ++i)
-		r = max(r, pow(data[0][i] - xcom, (realtype)2) + pow(data[1][i] - ycom, (realtype)2));
+		r = max(r, pow(data[0][i] - node.xcom, (realtype)2) + pow(data[1][i] - node.ycom, (realtype)2));
 	
 	    r = sqrt(r);
-
-	    node.xcom = xcom;
-	    node.ycom = ycom;
 	    node.r = r;
+
+	    assert(node.xcom >= x0 && node.xcom < x0 + h && node.ycom >= y0 && node.ycom < y0 + h);
+	    assert(r < 1.5 * h);
 	}
     
 	if (node.leaf)
