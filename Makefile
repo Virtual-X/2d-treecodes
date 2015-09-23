@@ -2,7 +2,7 @@ CXX ?= g++
 
 fmm-order-pressure ?= 12
 
-CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG
+CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp
 
 TREECODEFLAGS = -DORDER=$(fmm-order-pressure) -std=c++11
 
