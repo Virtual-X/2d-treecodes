@@ -171,20 +171,13 @@ namespace TreeCodeDiego
 	if (4 * node.r * node.r < thetasquared * r2)
 	{
 	    complex<realtype> z(xt - node.xcom, yt - node.ycom);
-	
 	    complex<realtype> s = node.expansions[0] * log(z);
-	    assert(!isnan(s.real()) && !isnan(s.imag()));
 	    complex<realtype> prod = complex<realtype>(1,0) / z;
-	    assert(!isinf(prod.real()));
+
 	    for(int n = 1; n <= ORDER; ++n)
 	    {
 		s += prod * node.expansions[n];
-
-		if (isnan(s.real()))
-		    printf("oops %f and z is %f %f node expansion is %f\n", s.real(), z.real(), z.imag(), node.expansions[n].real());
-	    
-		assert(!isnan(s.real()) && !isnan(s.imag()));
-	    
+		    
 		prod /= z;
 	    }
 
@@ -227,13 +220,16 @@ void treecode_potential(const realtype theta,
 	data[c].resize(nsrc);
 
     thetasquared = theta * theta;
+    
     xmin = *min_element(xsrc, xsrc + nsrc);
     ymin = *min_element(ysrc, ysrc + nsrc);
     
     const realtype ext0 = (*max_element(xsrc, xsrc + nsrc) - xmin);
     const realtype ext1 = (*max_element(ysrc, ysrc + nsrc) - ymin);
     
-    ext = max(ext0, ext1) * (1 + eps);
+    ext = max(ext0, ext1) * (1 + 2 * eps);
+    xmin -= eps * ext;
+    ymin -= eps * ext;
 
     vector< pair<int, int> > kv(nsrc);
     

@@ -1,6 +1,6 @@
 #pragma once
 
-typedef float realtype;
+typedef double realtype;
 
 extern "C"
 void treecode_potential(const realtype theta,
