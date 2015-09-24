@@ -31,6 +31,7 @@ namespace TreeCodeDiego
 	int x, y, l, s, e;
 	bool leaf;
 	realtype xcom, ycom, r;
+	
 	complex<realtype> expansions[ORDER + 1];
     };
 
@@ -113,10 +114,10 @@ namespace TreeCodeDiego
 	Node node = {x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
     
 	{	
-	    realtype xsum = 0, ysum = 0, mass = 0, r = 0;
+	    realtype xsum = 0, ysum = 0, weight = 0, r = 0;
 	
 	    for(int i = s; i < e; ++i)
-		mass += abs(data[2][i]);
+		weight += abs(data[2][i]);
 
 	    for(int i = s; i < e; ++i)
 		xsum += data[0][i] * abs(data[2][i]);
@@ -124,10 +125,10 @@ namespace TreeCodeDiego
 	    for(int i = s; i < e; ++i)
 		ysum += data[1][i] * abs(data[2][i]);
 
-	    if (mass != 0 && e - s > 0)
+	    if (weight != 0 && e - s > 0)
 	    {
-		node.xcom = xsum / mass;
-		node.ycom = ysum / mass;
+		node.xcom = xsum / weight;
+		node.ycom = ysum / weight;
 	    }
 	    else
 	    {

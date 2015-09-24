@@ -12,6 +12,11 @@ else
 	TREECODEFLAGS += $(CXXFLAGS)
 endif
 
+ifeq "$(gprof)" "1"
+	CXXFLAGS += -pg
+	TREECODEFLAGS += -pg
+endif
+
 test: main.cpp treecode.o treecode.h
 	$(CXX) $(CXXFLAGS)  main.cpp treecode.o -g -o test
 

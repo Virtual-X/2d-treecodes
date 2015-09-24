@@ -8,7 +8,7 @@
 
 #include "treecode.h"
 
-void test(realtype theta, double tol, FILE * f = NULL)
+void test(realtype theta, double tol, FILE * f = NULL, bool verify = true)
 {
     const realtype eps = std::numeric_limits<realtype>::epsilon() * 10;
     
@@ -65,43 +65,45 @@ void test(realtype theta, double tol, FILE * f = NULL)
 #if 0 //while waiting clarifications from Sid, i overwrite his reference data with mine
     if (!f)
 #endif
+	if (verify)
 #pragma omp parallel for
-    for(int i = 0; i < NDST; ++i)
-    {
-	const realtype xd = xdst[i];
-	const realtype yd = ydst[i];
+	    for(int i = 0; i < NDST; ++i)
+	    {
+		const realtype xd = xdst[i];
+		const realtype yd = ydst[i];
 	
-	realtype s = 0;
+		realtype s = 0;
 	
-	for(int j = 0; j < NSRC; ++j)
-	{
-	    const realtype xr = xd - xsrc[j];
-	    const realtype yr = yd - ysrc[j];
-	    const realtype r = sqrt(xr * xr + yr * yr + eps);
-	    s += log(r) * sources[j]; 
-	}
+		for(int j = 0; j < NSRC; ++j)
+		{
+		    const realtype xr = xd - xsrc[j];
+		    const realtype yr = yd - ysrc[j];
+		    const realtype r = sqrt(xr * xr + yr * yr + eps);
+		    s += log(r) * sources[j]; 
+		}
 	
-	ref[i] = s;
-    }
+		ref[i] = s;
+	    }
 
     realtype * targets = new realtype[NDST];
 
     printf("Testing with %d sources and %d targets...\n", NDST, NSRC);
     treecode_potential(0.8, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, targets);
-           
-    for(int i = 0; i < NDST; ++i)
-    {
-	assert(!std::isnan(ref[i]));
-	assert(!std::isnan(targets[i]));
+
+    if (verify)
+	for(int i = 0; i < NDST; ++i)
+	{
+	    assert(!std::isnan(ref[i]));
+	    assert(!std::isnan(targets[i]));
 	    
-	const double err = ref[i] - targets[i];
-	const double relerr = err/std::max(1e-6, std::max(fabs(targets[i]), fabs(ref[i]))); 
+	    const double err = ref[i] - targets[i];
+	    const double relerr = err/std::max(1e-6, std::max(fabs(targets[i]), fabs(ref[i]))); 
 	    
-	if (fabs(relerr) >= tol && fabs(err) >= tol)
-	    printf("%d: %e ref: %e -> %e %e\n", i, targets[i], ref[i], err, relerr);
+	    if (fabs(relerr) >= tol && fabs(err) >= tol)
+		printf("%d: %e ref: %e -> %e %e\n", i, targets[i], ref[i], err, relerr);
 	    
-	assert(fabs(relerr) < tol || fabs(err) < tol);
-    }
+	    assert(fabs(relerr) < tol || fabs(err) < tol);
+	}
 	
     delete [] xdst;
     delete [] ydst;
@@ -123,13 +125,15 @@ int main()
 	{
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
-	    test(0.8, 1e-8, fin);
+	    test(0.8, 1e-8, fin, true);
 	    fclose(fin);
 	};
 
     file2test("diegoBinaryN400");
     file2test("diegoBinaryN2000");
     file2test("diegoBinaryN12000");
+
+    return 0;
     
     for(int itest = 0; itest < 100; ++itest)
     {
