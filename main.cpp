@@ -1,3 +1,5 @@
+#include <unistd.h>
+
 #include <cstdlib>
 #include <cstdio>
 #include <cmath>
@@ -149,6 +151,12 @@ int main(int argc, char ** argv)
     
     auto file2test = [&] (const char * filename)
 	{
+	    if (access(filename, R_OK) == -1)
+	    {
+		printf("WARNING: reference file <%s> not found, i skip this test.\n", filename);
+		return;
+	    }
+	    
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
 	    test(theta, tol, fin, verify);
@@ -159,9 +167,7 @@ int main(int argc, char ** argv)
     file2test("diegoBinaryN2000");
     file2test("diegoBinaryN12000");
 
-    return 0;
-    
-    for(int itest = 0; itest < 100; ++itest)
+    for(int itest = 0; itest < 10; ++itest)
     {
 	printf("test nr %d\n", itest);
 	test(theta, tol, NULL, verify);
