@@ -38,14 +38,12 @@ namespace TreeCodeDiego
     map<int, Node> tree;
 
     void upward(Node& node)
-    {
-	complex<realtype> rp, prod, ZM(node.xcom, node.ycom);
-    
+    {    
 	const int s = node.s, e = node.e;
     
 	for(int i = s; i < e; ++i)
 	{
-	    const complex<realtype> rp = complex<realtype>(data[0][i], data[1][i]) - ZM;
+	    const complex<realtype> rp = complex<realtype>(data[0][i] - node.xcom, data[1][i] - node.ycom);
 	
 	    complex<realtype> prod = rp;
 	
@@ -76,8 +74,7 @@ namespace TreeCodeDiego
     
 	for (int j = 1; j <= ORDER; ++j)
 	{
-	    complex<realtype> csum;
-	    complex<realtype> prod(1, 0);
+	    complex<realtype> csum, prod(1, 0);
 	
 	    for (int k = j; k >= 1; --k)
 	    {
