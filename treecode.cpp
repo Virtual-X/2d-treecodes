@@ -5,7 +5,6 @@
 #include <limits>
 #include <vector>
 #include <map>
-#include <complex>
 #include "treecode.h"
 
 #define LEAF_MAXCOUNT 100
@@ -32,34 +31,47 @@ namespace TreeCodeDiego
 	bool leaf;
 	realtype xcom, ycom, r, mass;
 	
-	complex<realtype> expansions[ORDER];
+	realtype expansions[2][ORDER];
+
+	void clrxp()
+	    {
+		for(int c = 0; c < 2; ++c)
+		    for(int i = 0; i < ORDER; ++i)
+			expansions[c][i] = 0;
+	    }
     };
 
     map<int, Node> tree;
 
     void upward(Node& node)
     {
-	complex<realtype> rp, prod, ZM(node.xcom, node.ycom);
-    
 	const int s = node.s, e = node.e;
     
 	for(int i = s; i < e; ++i)
 	{
-	    const complex<realtype> rp = complex<realtype>(data[0][i], data[1][i]) - ZM;
-	
-	    complex<realtype> prod = rp;
-	
+	    const realtype rrp = data[0][i] - node.xcom;
+	    const realtype irp = data[1][i] - node.ycom;
+	    
+	    realtype rprod = rrp;
+	    realtype iprod = irp;
+	    
 	    for (int n = 0; n < ORDER; ++n)
 	    {
-		node.expansions[n] -= prod * (data[2][i] / (n + 1)); 
+		const realtype term = data[2][i] / (n + 1);
+		node.expansions[0][n] -= rprod * term;
+		node.expansions[1][n] -= iprod * term;
 
-		prod *= rp;
+		const realtype rnewprod = rprod * rrp - iprod * irp;
+		const realtype inewprod = rprod * irp + iprod * rrp;
+
+		rprod = rnewprod;
+		iprod = inewprod;
 	    }
 
 	    node.mass += data[2][i];
 	} 
     }
-
+    
     constexpr unsigned int factorial(const int n)
     {
 	return n <= 1 ? 1 : (n * factorial(n - 1));
@@ -72,23 +84,32 @@ namespace TreeCodeDiego
 
     void upward(const Node src, Node& dst)
     {
-	complex<realtype> rb(src.xcom - dst.xcom, src.ycom - dst.ycom);
-    
+	const realtype rrp = src.xcom - dst.xcom;
+	const realtype irp = src.ycom - dst.ycom;
+	
 	for (int j = 0; j < ORDER; ++j)
 	{
-	    complex<realtype> csum;
-	    complex<realtype> prod(1, 0);
-	
+	    realtype rsum = 0, isum = 0, rprod = 1, iprod = 0;
+	    
 	    for (int k = j; k >= 0; --k)
 	    {
-		csum += prod * src.expansions[k] * (realtype)binomial(j, k);
+		const realtype bterm = binomial(j, k);
+		rsum += bterm * (src.expansions[0][k] * rprod - src.expansions[1][k] * iprod);
+		isum += bterm * (src.expansions[1][k] * rprod + src.expansions[0][k] * iprod);
 
-		prod *= rb;
+		const realtype rnewprod = rprod * rrp - iprod * irp;
+		const realtype inewprod = rprod * irp + iprod * rrp;
+
+		rprod = rnewprod;
+		iprod = inewprod;
 	    }
 	
-	    csum -= prod * (src.mass / (j + 1));
-	
-	    dst.expansions[j] += csum;
+	    const realtype term = src.mass / (j + 1);
+	    rsum -= rprod * term;
+	    isum -= iprod * term;
+	    
+	    dst.expansions[0][j] += rsum;
+	    dst.expansions[1][j] += isum;
 	}
 
 	dst.mass += src.mass; 
@@ -112,7 +133,8 @@ namespace TreeCodeDiego
 #endif
 
 	Node node = {x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
-    
+	node.clrxp();
+	
 	{	
 	    realtype xsum = 0, ysum = 0, weight = 0, mass = 0, r = 0;
 
@@ -182,18 +204,27 @@ namespace TreeCodeDiego
 
 	if (4 * node.r * node.r < thetasquared * r2)
 	{
-	    complex<realtype> z(xt - node.xcom, yt - node.ycom);
-	    complex<realtype> s = node.mass * log(z);
-	    complex<realtype> prod = complex<realtype>(1,0) / z;
+	    realtype rz = xt - node.xcom, iz = yt - node.ycom;
+	    
+	    const realtype rinvz = rz / r2;
+	    const realtype iinvz = -iz / r2;
 
+	    realtype rprod = rinvz;
+	    realtype iprod = iinvz;
+	    realtype rs = node.mass * log(sqrt(r2));
+	    
 	    for(int n = 0; n < ORDER; ++n)
 	    {
-		s += prod * node.expansions[n];
-		    
-		prod /= z;
+		rs += rprod * node.expansions[0][n] - iprod * node.expansions[1][n];
+
+		const realtype rnewprod = rinvz * rprod - iinvz * iprod;
+		const realtype inewprod = iinvz * rprod + rinvz * iprod;
+		
+		rprod = rnewprod;
+		iprod = inewprod;
 	    }
 
-	    return s.real();
+	    return rs;
 	}
 	else
 	{
