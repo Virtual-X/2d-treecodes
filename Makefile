@@ -1,10 +1,10 @@
 CXX ?= g++
 
-fmm-order-pressure ?= 12
+treecode-potential-order ?= 12
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp
 
-TREECODEFLAGS = -DORDER=$(fmm-order-pressure) -std=c++11
+TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11
 
 ifeq "$(config)" "release"
 	TREECODEFLAGS += -O3 -DNDEBUG -ftree-vectorize

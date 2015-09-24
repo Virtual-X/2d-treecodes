@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cassert>
+#include <cstring>
 
 #include <algorithm>
 #include <limits>
@@ -87,23 +88,36 @@ void test(realtype theta, double tol, FILE * f = NULL, bool verify = true)
 
     realtype * targets = new realtype[NDST];
 
-    printf("Testing with %d sources and %d targets...\n", NDST, NSRC);
-    treecode_potential(0.8, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, targets);
+    printf("Testing with %d sources and %d targets (theta %.3e)...\n", NDST, NSRC, theta);
+    treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, targets);
 
     if (verify)
+    {
+	double linf = 0, l1 = 0, linf_rel = 0, l1_rel = 0;
 	for(int i = 0; i < NDST; ++i)
 	{
 	    assert(!std::isnan(ref[i]));
 	    assert(!std::isnan(targets[i]));
 	    
 	    const double err = ref[i] - targets[i];
-	    const double relerr = err/std::max(1e-6, std::max(fabs(targets[i]), fabs(ref[i]))); 
+	    const double maxval = std::max(fabs(targets[i]), fabs(ref[i]));
+	    const double relerr = err/std::max(1e-6, maxval); 
 	    
 	    if (fabs(relerr) >= tol && fabs(err) >= tol)
 		printf("%d: %e ref: %e -> %e %e\n", i, targets[i], ref[i], err, relerr);
 	    
 	    assert(fabs(relerr) < tol || fabs(err) < tol);
+
+	    l1 += fabs(err);
+	    l1_rel += fabs(relerr);
+
+	    linf = std::max(linf, fabs(err));
+	    linf_rel = std::max(linf_rel, fabs(relerr));
 	}
+	
+	printf("l-infinity errors: %.03e (absolute) %.03e (relative)\n", linf, linf_rel);
+	printf("       l-1 errors: %.03e (absolute) %.03e (relative)\n", l1, l1_rel);
+    }
 	
     delete [] xdst;
     delete [] ydst;
@@ -117,15 +131,27 @@ void test(realtype theta, double tol, FILE * f = NULL, bool verify = true)
     printf("TEST PASSED.\n");
 }
 
-int main()
+int main(int argc, char ** argv)
 {
     srand48(1451);
 
+    double theta = 1, tol = 1e-8;
+    bool verify = true;
+    
+    if (argc > 1)
+	theta = atof(argv[1]);
+
+    if (argc > 2)
+	tol = atof(argv[2]);
+
+    if (argc > 3)
+	verify = strcmp(argv[3], "profile") != 0;
+    
     auto file2test = [&] (const char * filename)
 	{
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
-	    test(0.8, 1e-8, fin, true);
+	    test(theta, tol, fin, verify);
 	    fclose(fin);
 	};
 
@@ -138,6 +164,6 @@ int main()
     for(int itest = 0; itest < 100; ++itest)
     {
 	printf("test nr %d\n", itest);
-	test(1.0, 1e-8);
+	test(theta, tol, NULL, verify);
     }
 }

@@ -117,13 +117,13 @@ namespace TreeCodeDiego
 	    realtype xsum = 0, ysum = 0, weight = 0, r = 0;
 	
 	    for(int i = s; i < e; ++i)
-		weight += abs(data[2][i]);
+		weight += fabs(data[2][i]);
 
 	    for(int i = s; i < e; ++i)
-		xsum += data[0][i] * abs(data[2][i]);
+		xsum += data[0][i] * fabs(data[2][i]);
 
 	    for(int i = s; i < e; ++i)
-		ysum += data[1][i] * abs(data[2][i]);
+		ysum += data[1][i] * fabs(data[2][i]);
 
 	    if (weight != 0 && e - s > 0)
 	    {
@@ -149,20 +149,24 @@ namespace TreeCodeDiego
 	if (node.leaf)
 	    upward(node);
 	else
+	{
+	    const vector<int>::const_iterator itbegins = keys.begin();
+	    
 	    for(int c = 0; c < 4; ++c)
 	    {
 		const int shift = 2 * (LMAX - l - 1);
 	    
 		const int key1 = mask | (c << shift);
 		const int key2 = key1 + (1 << shift) - 1;
-	    
-		const int indexmin = lower_bound(keys.begin() + s, keys.begin() + e, key1) - (keys.begin());
-		const int indexsup = upper_bound(keys.begin() + s, keys.begin() + e, key2) - (keys.begin());
+
+		const int indexmin = lower_bound(itbegins + s, itbegins + e, key1) - itbegins;
+		const int indexsup = upper_bound(itbegins + s, itbegins + e, key2) - itbegins;
 
 		Node child = build((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 
 		upward(child, node);
 	    }
+	}
    
 	const int entry = nodeid(x, y, l);
 	assert(tree.find(entry) == tree.end());
