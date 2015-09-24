@@ -30,9 +30,9 @@ namespace TreeCodeDiego
     {
 	int x, y, l, s, e;
 	bool leaf;
-	realtype xcom, ycom, r;
+	realtype xcom, ycom, r, mass;
 	
-	complex<realtype> expansions[ORDER + 1];
+	complex<realtype> expansions[ORDER];
     };
 
     map<int, Node> tree;
@@ -49,14 +49,14 @@ namespace TreeCodeDiego
 	
 	    complex<realtype> prod = rp;
 	
-	    for (int n = 1; n <= ORDER; ++n)
+	    for (int n = 0; n < ORDER; ++n)
 	    {
-		node.expansions[n] -= prod * (data[2][i] / n); 
+		node.expansions[n] -= prod * (data[2][i] / (n + 1)); 
 
 		prod *= rp;
 	    }
-	
-	    node.expansions[0] += data[2][i];
+
+	    node.mass += data[2][i];
 	} 
     }
 
@@ -74,24 +74,24 @@ namespace TreeCodeDiego
     {
 	complex<realtype> rb(src.xcom - dst.xcom, src.ycom - dst.ycom);
     
-	for (int j = 1; j <= ORDER; ++j)
+	for (int j = 0; j < ORDER; ++j)
 	{
 	    complex<realtype> csum;
 	    complex<realtype> prod(1, 0);
 	
-	    for (int k = j; k >= 1; --k)
+	    for (int k = j; k >= 0; --k)
 	    {
-		csum += prod * src.expansions[k] * (realtype)binomial(j - 1, k - 1);
+		csum += prod * src.expansions[k] * (realtype)binomial(j, k);
 
 		prod *= rb;
 	    }
 	
-	    csum -= prod * src.expansions[0] / (realtype)j;
+	    csum -= prod * (src.mass / (j + 1));
 	
 	    dst.expansions[j] += csum;
 	}
 
-	dst.expansions[0] += src.expansions[0]; 
+	dst.mass += src.mass; 
     }
 
     int nodeid(const int x, const int y, const int l)
@@ -114,10 +114,7 @@ namespace TreeCodeDiego
 	Node node = {x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
     
 	{	
-	    realtype xsum = 0, ysum = 0, weight = 0, r = 0;
-	
-	    for(int i = s; i < e; ++i)
-		weight += fabs(data[2][i]);
+	    realtype xsum = 0, ysum = 0, weight = 0, mass = 0, r = 0;
 
 	    for(int i = s; i < e; ++i)
 		xsum += data[0][i] * fabs(data[2][i]);
@@ -125,6 +122,11 @@ namespace TreeCodeDiego
 	    for(int i = s; i < e; ++i)
 		ysum += data[1][i] * fabs(data[2][i]);
 
+	    for(int i = s; i < e; ++i)
+		weight += fabs(data[2][i]);
+
+	    node.mass = 0;
+	    
 	    if (weight != 0 && e - s > 0)
 	    {
 		node.xcom = xsum / weight;
@@ -181,10 +183,10 @@ namespace TreeCodeDiego
 	if (4 * node.r * node.r < thetasquared * r2)
 	{
 	    complex<realtype> z(xt - node.xcom, yt - node.ycom);
-	    complex<realtype> s = node.expansions[0] * log(z);
+	    complex<realtype> s = node.mass * log(z);
 	    complex<realtype> prod = complex<realtype>(1,0) / z;
 
-	    for(int n = 1; n <= ORDER; ++n)
+	    for(int n = 0; n < ORDER; ++n)
 	    {
 		s += prod * node.expansions[n];
 		    
