@@ -13,7 +13,7 @@
 #include <cassert>
 #include <cmath>
 
-#include <algorithm>
+#include <parallel/algorithm>
 #include <limits>
 
 #include "treecode.h"
@@ -207,11 +207,11 @@ void treecode_potential(const realtype theta,
 
     thetasquared = theta * theta;
 
-    xmin = *min_element(xsrc, xsrc + nsrc);
-    ymin = *min_element(ysrc, ysrc + nsrc);
+    xmin = *__gnu_parallel::min_element(xsrc, xsrc + nsrc);
+    ymin = *__gnu_parallel::min_element(ysrc, ysrc + nsrc);
 
-    const realtype ext0 = (*max_element(xsrc, xsrc + nsrc) - xmin);
-    const realtype ext1 = (*max_element(ysrc, ysrc + nsrc) - ymin);
+    const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
+    const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
 
     ext = max(ext0, ext1) * (1 + 2 * eps);
     xmin -= eps * ext;
@@ -220,53 +220,62 @@ void treecode_potential(const realtype theta,
     pair<int, int> * kv = NULL;
     posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
 
-    for(int i = 0; i < nsrc; ++i)
+#pragma omp parallel
     {
-	int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
-	int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
-
-	assert(x >= 0 && y >= 0);
-	assert(x < (1 << LMAX) && y < (1 << LMAX));
-
-	x = (x | (x << 8)) & 0x00FF00FF;
-	x = (x | (x << 4)) & 0x0F0F0F0F;
-	x = (x | (x << 2)) & 0x33333333;
-	x = (x | (x << 1)) & 0x55555555;
-
-	y = (y | (y << 8)) & 0x00FF00FF;
-	y = (y | (y << 4)) & 0x0F0F0F0F;
-	y = (y | (y << 2)) & 0x33333333;
-	y = (y | (y << 1)) & 0x55555555;
-
-	const int key = x | (y << 1);
-
-	kv[i].first = key;
-	kv[i].second = i;
+#pragma omp for
+	for(int i = 0; i < nsrc; ++i)
+	{
+	    int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
+	    int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
+	    
+	    assert(x >= 0 && y >= 0);
+	    assert(x < (1 << LMAX) && y < (1 << LMAX));
+	    
+	    x = (x | (x << 8)) & 0x00FF00FF;
+	    x = (x | (x << 4)) & 0x0F0F0F0F;
+	    x = (x | (x << 2)) & 0x33333333;
+	    x = (x | (x << 1)) & 0x55555555;
+	    
+	    y = (y | (y << 8)) & 0x00FF00FF;
+	    y = (y | (y << 4)) & 0x0F0F0F0F;
+	    y = (y | (y << 2)) & 0x33333333;
+	    y = (y | (y << 1)) & 0x55555555;
+	    
+	    const int key = x | (y << 1);
+	    
+	    kv[i].first = key;
+	    kv[i].second = i;
+	}
+	
+	__gnu_parallel::sort(kv, kv + nsrc);
+		
+#pragma omp for
+	for(int i = 0; i < nsrc; ++i)
+	{
+	    keys[i] = kv[i].first;
+	    
+	    const int entry = kv[i].second;
+	    assert(entry >= 0 && entry < nsrc);
+	    
+	    xdata[i] = xsrc[entry];
+	    ydata[i] = ysrc[entry];
+	    vdata[i] = vsrc[entry];
+	}
+  
+#pragma omp single
+	{
+	    free(kv);
+	}
     }
-
-    sort(kv, kv + nsrc);
-
-    for(int i = 0; i < nsrc; ++i)
-    {
-	keys[i] = kv[i].first;
-
-	const int entry = kv[i].second;
-	assert(entry >= 0 && entry < nsrc);
-
-	xdata[i] = xsrc[entry];
-	ydata[i] = ysrc[entry];
-	vdata[i] = vsrc[entry];
-    }
-
-    free(kv);
-
+	    
     Node * root = build(0, 0, 0, 0, nsrc, 0);
-
+    
     free(keys);
 
+#pragma omp parallel for
     for(int i = 0; i < ndst; ++i)
 	vdst[i] = evaluate(xdst[i], ydst[i], *root);
-
+    
     free(xdata);
     free(ydata);
     free(vdata);
