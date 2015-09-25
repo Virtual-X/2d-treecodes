@@ -14,16 +14,21 @@ CXX ?= g++
 CC = gcc
 
 treecode-potential-order ?= 12
+config ?= release
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp 
 
-TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11 -march=native
+TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11 -march=native -fopenmp
 
 ifeq "$(config)" "release"
 	TREECODEFLAGS += -O3 -DNDEBUG -ftree-vectorize
 else
 	TREECODEFLAGS += $(CXXFLAGS)
 endif
+
+KERNELSFLAGS = -DORDER=$(treecode-potential-order) -O4 -DNDEBUG  -ftree-vectorize \
+	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math \
+	-ftree-vectorizer-verbose=0
 
 ifeq "$(gprof)" "1"
 	CXXFLAGS += -pg
@@ -32,15 +37,15 @@ endif
 
 test: main.cpp treecode.o treecode-kernels.o treecode.h
 	$(CXX) $(CXXFLAGS)  main.cpp treecode.o treecode-kernels.o -g -o test
-	ar rcs treecode.a treecode.o
+	ar rcs treecode.a treecode.o treecode-kernels.o
 
 treecode.o: treecode.cpp treecode.h Makefile
 	$(CXX) $(TREECODEFLAGS) -c $<
 
 treecode-kernels.o: treecode-kernels.c treecode.h Makefile
-	$(CC) -O4 -DNDEBUG -DORDER=$(treecode-potential-order)  -ftree-vectorize -std=c99 -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=1 -c $<
+	$(CC) $(KERNELSFLAGS) -c $<
 
 clean:
-	rm -f test *.o
+	rm -f test *.o *.a
 
 .PHONY = clean

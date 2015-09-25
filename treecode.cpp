@@ -18,7 +18,7 @@
 
 #include "treecode.h"
 
-#define LEAF_MAXCOUNT 80
+#define LEAF_MAXCOUNT 96
 #define LMAX 15
 
 using namespace std;
