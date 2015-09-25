@@ -30,18 +30,33 @@ namespace TreeCodeDiego
 	int x, y, l, s, e;
 	bool leaf;
 	realtype xcom, ycom, r, mass;
+
+	Node * children[4];
 	
 	realtype expansions[2][ORDER];
 
-	void clrxp()
+	void clr()
 	    {
+		for(int i = 0; i < 4; ++i)
+		    children[i] = NULL;
+		
 		for(int c = 0; c < 2; ++c)
 		    for(int i = 0; i < ORDER; ++i)
 			expansions[c][i] = 0;
 	    }
-    };
 
-    map<int, Node> tree;
+	void dispose()
+	    {
+		if (!leaf)
+		    for(int i = 0; i < 4; ++i)
+		    {
+			children[i]->dispose();
+			
+			delete children[i];
+			children[i] = NULL;
+		    }
+	    }
+    };
 
     void upward(Node& node)
     {
@@ -58,6 +73,7 @@ namespace TreeCodeDiego
 	    for (int n = 0; n < ORDER; ++n)
 	    {
 		const realtype term = data[2][i] / (n + 1);
+		
 		node.expansions[0][n] -= rprod * term;
 		node.expansions[1][n] -= iprod * term;
 
@@ -120,7 +136,7 @@ namespace TreeCodeDiego
 	return ((1 << 2 * l) - 1) / 3 + (x + (1 << l) * y);
     }
 
-    Node build(const int x, const int y, const int l, const int s, const int e, const int mask)
+    Node * build(const int x, const int y, const int l, const int s, const int e, const int mask)
     {
 	const double h = ext / (1 << l);
 	const double x0 = xmin + h * x, y0 = ymin + h * y;
@@ -132,8 +148,8 @@ namespace TreeCodeDiego
 	    assert(data[0][i] >= x0 && data[0][i] < x0 + h && data[1][i] >= y0 && data[1][i] < y0 + h);
 #endif
 
-	Node node = {x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
-	node.clrxp();
+	Node & node = *new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
+	node.clr();
 	
 	{	
 	    realtype xsum = 0, ysum = 0, weight = 0, mass = 0, r = 0;
@@ -186,16 +202,15 @@ namespace TreeCodeDiego
 		const int indexmin = lower_bound(itbegins + s, itbegins + e, key1) - itbegins;
 		const int indexsup = upper_bound(itbegins + s, itbegins + e, key2) - itbegins;
 
-		Node child = build((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+		node.children[c] = build((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 
-		upward(child, node);
+		upward(*node.children[c], node);
 	    }
 	}
    
 	const int entry = nodeid(x, y, l);
-	assert(tree.find(entry) == tree.end());
-    
-	return tree[entry] = node;
+
+	return &node;
     }
 
     realtype evaluate(const realtype xt, const realtype yt, const Node node)
@@ -228,25 +243,28 @@ namespace TreeCodeDiego
 	}
 	else
 	{
-	    realtype s = 0;
+	    
 
 	    if (node.leaf)
-		for(int i = node.s; i < node.e; ++i)
+	    {
+		const int s = node.s;
+		/*	for(int i = node.s; i < node.e; ++i)
 		{
 		    const realtype xr = xt - data[0][i];
 		    const realtype yr = yt - data[1][i];
 		    s += log(sqrt(xr * xr + yr * yr + eps)) * data[2][i];
-		}
+		    }*/ 
+		return treecode_n2(&data[0][s], &data[1][s], &data[2][s], node.e - s, xt, yt);
+	    }
 	    else
+	    {
+		realtype s = 0;
+		
 		for(int c = 0; c < 4; ++c)
-		{
-		    const int entry = nodeid((node.x << 1) + (c & 1), (node.y << 1) + (c >> 1), node.l + 1);
-		    assert(tree.find(entry) != tree.end());
+		    s += evaluate(xt, yt, *node.children[c]);
 
-		    s += evaluate(xt, yt, tree[entry]);
-		}
-
-	    return s;
+		return s;
+	    }
 	}
     }
 }
@@ -315,14 +333,15 @@ void treecode_potential(const realtype theta,
     }
 
     kv.clear();
-    tree.clear();
 
-    Node root = build(0, 0, 0, 0, nsrc, 0);
+    Node * root = build(0, 0, 0, 0, nsrc, 0);
 
     for(int i = 0; i < ndst; ++i)
-	vdst[i] = evaluate(xdst[i], ydst[i], root);
+	vdst[i] = evaluate(xdst[i], ydst[i], *root);
     
     for(int c = 0; c < 3; ++c)
 	data[c].clear();
+
+    root->dispose();
 }
 

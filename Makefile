@@ -1,4 +1,5 @@
 CXX ?= g++
+CC = gcc
 
 treecode-potential-order ?= 12
 
@@ -17,11 +18,15 @@ ifeq "$(gprof)" "1"
 	TREECODEFLAGS += -pg
 endif
 
-test: main.cpp treecode.o treecode.h
-	$(CXX) $(CXXFLAGS)  main.cpp treecode.o -g -o test
+test: main.cpp treecode.o treecode-kernels.o treecode.h
+	$(CXX) $(CXXFLAGS)  main.cpp treecode.o treecode-kernels.o -g -o test
+	ar rcs treecode.a treecode.o
 
 treecode.o: treecode.cpp treecode.h Makefile
 	$(CXX) $(TREECODEFLAGS) -c $<
+
+treecode-kernels.o: treecode-kernels.c treecode.h Makefile
+	$(CC) -O4 -DNDEBUG -ftree-vectorize -std=c99 -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=1 -c $<
 
 clean:
 	rm -f test *.o
