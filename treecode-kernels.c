@@ -31,8 +31,7 @@ realtype treecode_n2(const realtype * __restrict__ const _xsrc,
 	const realtype * const ysrc = _ysrc + i; 
 	const realtype * const vsrc = _vsrc + i;
 
-#pragma ivdep
-#pragma unroll
+#pragma GCC ivdep
 	for(int j = 0; j < NACC; ++j)
 	{
 	    const realtype xr = xt - xsrc[j];
@@ -75,7 +74,6 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 {
     realtype m = 0, w = 0, wx = 0, wy = 0;
 
-#pragma unroll 8
     for(int i = 0; i < nsources; ++i)
     {
 	const realtype sv = sources[i];
@@ -104,7 +102,6 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
     
     realtype r2 = 0;
     
-#pragma unroll 
     for(int i = 0; i < nsources; ++i)
     {
 	const realtype xr = xsources[i] - xcom;
@@ -129,32 +126,26 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 	realtype rprod = rrp;
 	realtype iprod = irp;
 
-#pragma unroll
-#pragma ivdep
-	for (int n = 0; n < ORDER; ++n)
-	{
-	    const realtype term = sources[i] / (n + 1);
+	 const realtype term = sources[i];
 		
-	    rexpansions[n] -= rprod * term;
-	    iexpansions[n] -= iprod * term;
-
+	 rexpansions[0] -= rprod * term;
+	 iexpansions[0] -= iprod * term;
+	    
+#pragma GCC ivdep
+	for (int n = 1; n < ORDER; ++n)
+	{
 	    const realtype rnewprod = rprod * rrp - iprod * irp;
 	    const realtype inewprod = rprod * irp + iprod * rrp;
 
 	    rprod = rnewprod;
 	    iprod = inewprod;
+
+	     const realtype term = sources[i] / (n + 1);
+		
+	    rexpansions[n] -= rprod * term;
+	    iexpansions[n] -= iprod * term;
 	}
     } 
-}
-
-unsigned int factorial(const int n)
-{
-    return n <= 1 ? 1 : (n * factorial(n - 1));
-}
-
-unsigned int binomial(const int n, const int k)
-{
-    return factorial(n) / (factorial(n - k) * factorial(k));
 }
 
 extern const realtype binomlut[20][20];
@@ -169,25 +160,24 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
     
     V4 rresult[ORDER];
 #pragma ivdep
-#pragma unroll
+
     for (int i = 0; i < ORDER; ++i)
 	rresult[i] = zero;
 
     V4 iresult[ORDER];
 #pragma ivdep
-#pragma unroll
+
     for (int i = 0; i < ORDER; ++i)
 	iresult[i] = zero;
 
-#pragma unroll
     for (int j = 0; j < ORDER; ++j)
     {
 	V4 rsum = {0, 0, 0, 0}, isum = {0, 0, 0, 0}, rprod = {1, 1, 1, 1}, iprod = {0, 0, 0, 0};
 	
-#pragma unroll
 	for (int k = j; k >= 0; --k)
 	{
-	    const realtype bterm = binomlut[j][k]; 
+	    const realtype bterm = binomlut[j][k];
+	    
 	    rsum += bterm * (rsrcxp[k] * rprod - isrcxp[k] * iprod);
 	    isum += bterm * (isrcxp[k] * rprod + rsrcxp[k] * iprod);
 
@@ -199,6 +189,7 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 	}
 	
 	const V4 term = srcmass / (j + 1);
+	
 	rsum -= rprod * term;
 	isum -= iprod * term;
 	    
@@ -206,12 +197,14 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 	iresult[j] += isum;
     }
 
+#pragma GCC ivdep
     for(int i = 0; i < ORDER; ++i)
     {
 	const V4 re = rresult[i];
 	rdstxp[i] = re[0] + re[1] + re[2] + re[3];
     }
 
+#pragma GCC ivdep
     for(int i = 0; i < ORDER; ++i)
     {
 	const V4 im = iresult[i];
@@ -222,7 +215,7 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 const realtype binomlut[20][20] = { 1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,6,4,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,10,10,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,6,15,20,15,6,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,7,21,35,35,21,7,1,0,0,0,0,0,0,0,0,0,0,0,0,1,8,28,56,70,56,28,8,1,0,0,0,0,0,0,0,0,0,0,0,1,9,36,84,126,126,84,36,9,1,0,0,0,0,0,0,0,0,0,0,1,10,45,120,210,252,210,120,45,10,1,0,0,0,0,0,0,0,0,0,1,11,55,165,330,462,462,330,165,55,11,1,0,0,0,0,0,0,0,0,1,12,66,220,495,792,924,792,495,220,66,12,1,0,0,0,0,0,0,0,1,13,78,286,715,1287,1716,1716,1287,715,286,78,13,1,0,0,0,0,0,0,1,14,91,364,1001,2002,3003,3432,3003,2002,1001,364,91,14,1,0,0,0,0,0,1,15,105,455,1365,3003,5005,6435,6435,5005,3003,1365,455,105,15,1,0,0,0,0,1,16,120,560,1820,4368,8008,11440,12870,11440,8008,4368,1820,560,120,16,1,0,0,0,1,17,136,680,2380,6188,12376,19448,24310,24310,19448,12376,6188,2380,680,136,17,1,0,0,1,18,153,816,3060,8568,18564,31824,43758,48620,43758,31824,18564,8568,3060,816,153,18,1,0,1,19,171,969,3876,11628,27132,50388,75582,92378,92378,75582,50388,27132,11628,3876,969,171,19,1};
 
 
-realtype treecode_e2p(const realtype mass,
+realtype __attribute__((pure)) treecode_e2p(const realtype mass,
 		      const realtype rz,
 		      const realtype iz,
 		      const realtype * __restrict__ const rxp,
@@ -237,17 +230,23 @@ realtype treecode_e2p(const realtype mass,
     realtype iprod = iinvz;
     realtype rs = mass * log(sqrt(r2));
 
-#pragma unroll ORDER
-    for(int n = 0; n < ORDER; ++n)
-    {
-	rs += rprod * rxp[n] - iprod * ixp[n];
+    rs += rprod * rxp[0] - iprod * ixp[0];
 
+    realtype rprods[ORDER], iprods[ORDER];
+    for(int n = 1; n < ORDER; ++n)
+    {
 	const realtype rnewprod = rinvz * rprod - iinvz * iprod;
 	const realtype inewprod = iinvz * rprod + rinvz * iprod;
 		
 	rprod = rnewprod;
 	iprod = inewprod;
-    }
 
+	rprods[n] = rprod;
+	iprods[n] = iprod;
+    }
+    
+    for(int n = 1; n < ORDER; ++n)
+    	rs += rprods[n] * rxp[n] - iprods[n] * ixp[n];
+    
     return rs;
 }

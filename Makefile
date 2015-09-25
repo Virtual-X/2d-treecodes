@@ -26,7 +26,7 @@ treecode.o: treecode.cpp treecode.h Makefile
 	$(CXX) $(TREECODEFLAGS) -c $<
 
 treecode-kernels.o: treecode-kernels.c treecode.h Makefile
-	$(CC) -O4 -DNDEBUG -DORDER=$(treecode-potential-order)  -ftree-vectorize -std=c99 -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=2 -c $<
+	$(CC) -O4 -DNDEBUG -DORDER=$(treecode-potential-order)  -ftree-vectorize -std=c99 -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=1 -c $<
 
 clean:
 	rm -f test *.o
