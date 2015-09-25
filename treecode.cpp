@@ -109,9 +109,9 @@ namespace TreeCodeDiego
 		}
 
 	    }
-	    
+
 #pragma omp taskwait
-	    
+
 	    for(int c = 0; c < 4; ++c)
 	    {
 	    	Node * chd = node->children[c];
@@ -119,10 +119,10 @@ namespace TreeCodeDiego
 		node->w += chd->w;
 		node->wx += chd->wx;
 		node->wy += chd->wy;
-		
+
 		node->children[c] = chd;
 	    }
-	    
+
 	    realtype rcandidates[4];
 	    node->r = 0;
 	    for(int c = 0; c < 4; ++c)
@@ -229,69 +229,70 @@ void treecode_potential(const realtype theta,
     pair<int, int> * kv = NULL;
     posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
 
-#pragma omp parallel
+    Node * root = NULL;
+
+#pragma omp parallel shared(root)
     {
 #pragma omp for
 	for(int i = 0; i < nsrc; ++i)
 	{
 	    int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
 	    int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
-	    
+
 	    assert(x >= 0 && y >= 0);
 	    assert(x < (1 << LMAX) && y < (1 << LMAX));
-	    
+
 	    x = (x | (x << 8)) & 0x00FF00FF;
 	    x = (x | (x << 4)) & 0x0F0F0F0F;
 	    x = (x | (x << 2)) & 0x33333333;
 	    x = (x | (x << 1)) & 0x55555555;
-	    
+
 	    y = (y | (y << 8)) & 0x00FF00FF;
 	    y = (y | (y << 4)) & 0x0F0F0F0F;
 	    y = (y | (y << 2)) & 0x33333333;
 	    y = (y | (y << 1)) & 0x55555555;
-	    
+
 	    const int key = x | (y << 1);
-	    
+
 	    kv[i].first = key;
 	    kv[i].second = i;
 	}
-	
+
 	__gnu_parallel::sort(kv, kv + nsrc);
-		
+
 #pragma omp for
 	for(int i = 0; i < nsrc; ++i)
 	{
 	    keys[i] = kv[i].first;
-	    
+
 	    const int entry = kv[i].second;
 	    assert(entry >= 0 && entry < nsrc);
-	    
+
 	    xdata[i] = xsrc[entry];
 	    ydata[i] = ysrc[entry];
 	    vdata[i] = vsrc[entry];
 	}
-  
+
 #pragma omp single
 	{
 	    free(kv);
 	}
-    }
 
-    Node * root;
-#pragma omp parallel
-    {
-#pragma omp single nowait
+#pragma omp single //with nowait it crashes
 	{
 	    build(&root, 0, 0, 0, 0, nsrc, 0);
 	}
-    }
-    
-    free(keys);
 
-#pragma omp parallel for
-    for(int i = 0; i < ndst; ++i)
-	vdst[i] = evaluate(xdst[i], ydst[i], *root);
-    
+#pragma omp single
+	{
+	    free(keys);
+	}
+
+#pragma omp for
+	for(int i = 0; i < ndst; ++i)
+	    vdst[i] = evaluate(xdst[i], ydst[i], *root);
+    }
+
     free(xdata);
     free(ydata);
     free(vdata);
