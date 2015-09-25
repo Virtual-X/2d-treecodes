@@ -18,7 +18,7 @@ config ?= release
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp 
 
-TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11 -march=native
+TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11 -march=native -fopenmp
 
 ifeq "$(config)" "release"
 	TREECODEFLAGS += -O3 -DNDEBUG -ftree-vectorize
@@ -28,7 +28,7 @@ endif
 
 KERNELSFLAGS = -DORDER=$(treecode-potential-order) -O4 -DNDEBUG  -ftree-vectorize \
 	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math \
-	-ftree-vectorizer-verbose=0 
+	-ftree-vectorizer-verbose=0
 
 ifeq "$(gprof)" "1"
 	CXXFLAGS += -pg
