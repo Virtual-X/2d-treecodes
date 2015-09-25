@@ -67,7 +67,7 @@ namespace TreeCodeDiego
 	    }
     };
 
-    Node * build(const int x, const int y, const int l, const int s, const int e, const int mask)
+    void build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask)
     {
 	const double h = ext / (1 << l);
 	const double x0 = xmin + h * x, y0 = ymin + h * y;
@@ -79,16 +79,17 @@ namespace TreeCodeDiego
 	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
 #endif
 
-	Node & node = *new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
-	node.clr();
+	Node * node = new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
+	*_node = node;
+	node->clr();
 
-	if (node.leaf)
+	if (node->leaf)
 	{
 	    treecode_p2e(&xdata[s], &ydata[s], &vdata[s], e - s,
-			 x0, y0, h, &node.mass, &node.w, &node.wx, &node.wy, &node.r,
-			 node.expansions[0], node.expansions[1]);
+			 x0, y0, h, &node->mass, &node->w, &node->wx, &node->wy, &node->r,
+			 node->expansions[0], node->expansions[1]);
 
-	    assert(node.r < 1.5 * h);
+	    assert(node->r < 1.5 * h);
 	}
 	else
 	{
@@ -102,43 +103,53 @@ namespace TreeCodeDiego
 		const size_t indexmin = lower_bound(keys + s, keys + e, key1) - keys;
 		const size_t indexsup = upper_bound(keys + s, keys + e, key2) - keys;
 
-		Node * chd = build((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+#pragma omp task firstprivate(node, c, x, y, l, indexmin, indexsup, key1)
+		{
+		    build(&node->children[c], (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+		}
 
-		node.mass += chd->mass;
-		node.w += chd->w;
-		node.wx += chd->wx;
-		node.wy += chd->wy;
-
-		node.children[c] = chd;
 	    }
-
-	    realtype rcandidates[4];
-	    node.r = 0;
+	    
+#pragma omp taskwait
+	    
 	    for(int c = 0; c < 4; ++c)
-		node.r = max(node.r,
-			     node.children[c]->r +
-			     sqrt(pow(node.xcom() - node.children[c]->xcom(), 2) +
-				  pow(node.ycom() - node.children[c]->ycom(), 2)));
+	    {
+	    	Node * chd = node->children[c];
+		node->mass += chd->mass;
+		node->w += chd->w;
+		node->wx += chd->wx;
+		node->wy += chd->wy;
+		
+		node->children[c] = chd;
+	    }
+	    
+	    realtype rcandidates[4];
+	    node->r = 0;
+	    for(int c = 0; c < 4; ++c)
+		node->r = max(node->r,
+			     node->children[c]->r +
+			     sqrt(pow(node->xcom() - node->children[c]->xcom(), 2) +
+				  pow(node->ycom() - node->children[c]->ycom(), 2)));
 
-	    node.r = min(node.r, 1.4143 * h);
+	    node->r = min(node->r, 1.4143 * h);
 
-	    assert(node.r < 1.5 * h);
+	    assert(node->r < 1.5 * h);
 
 #ifndef NDEBUG
 	    {
 		realtype r = 0;
 
 		for(int i = s; i < e; ++i)
-		    r = max(r, pow(xdata[i] - node.xcom(), (realtype)2) + pow(ydata[i] - node.ycom(), (realtype)2));
+		    r = max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
 
-		assert (sqrt(r) <= node.r);
+		assert (sqrt(r) <= node->r);
 	    }
 #endif
 
 	    V4 srcmass, rx, ry,  chldexp[2][ORDER];
 	    for(int c = 0; c < 4; ++c)
 	    {
-		Node * chd = node.children[c];
+		Node * chd = node->children[c];
 
 		srcmass[c] = chd->mass;
 		rx[c] = chd->xcom();
@@ -149,22 +160,20 @@ namespace TreeCodeDiego
 			chldexp[i][j][c] = chd->expansions[i][j];
 	    }
 
-	    rx -= node.xcom();
-	    ry -= node.ycom();
+	    rx -= node->xcom();
+	    ry -= node->ycom();
 
-	    treecode_e2e(srcmass, rx, ry, chldexp[0], chldexp[1], node.expansions[0], node.expansions[1]);
+	    treecode_e2e(srcmass, rx, ry, chldexp[0], chldexp[1], node->expansions[0], node->expansions[1]);
 	}
 
 #ifndef NDEBUG
 	{
 	    for(int i = 0; i < ORDER; ++i)
-		assert(!::isnan((double)node.expansions[0][i]) && !::isnan(node.expansions[1][i]));
+		assert(!::isnan((double)node->expansions[0][i]) && !::isnan(node->expansions[1][i]));
 
-	    assert(node.xcom() >= x0 && node.xcom() < x0 + h && node.ycom() >= y0 && node.ycom() < y0 + h || node.e - node.s == 0);
+	    assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
 	}
 #endif
-
-	return &node;
     }
 
     realtype evaluate(const realtype xt, const realtype yt, const Node node)
@@ -267,8 +276,15 @@ void treecode_potential(const realtype theta,
 	    free(kv);
 	}
     }
-	    
-    Node * root = build(0, 0, 0, 0, nsrc, 0);
+
+    Node * root;
+#pragma omp parallel
+    {
+#pragma omp single nowait
+	{
+	    build(&root, 0, 0, 0, 0, nsrc, 0);
+	}
+    }
     
     free(keys);
 
