@@ -178,28 +178,35 @@ namespace TreeCodeDiego
 #endif
     }
 
-    realtype evaluate(const realtype xt, const realtype yt, const Node node)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Node node)
     {
 	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
 	if (4 * node.r * node.r < thetasquared * r2)
-	    return treecode_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1]);
+	    *result = treecode_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1]);
 	else
 	{
 	    if (node.leaf)
 	    {
 		const int s = node.s;
 
-		return treecode_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
+		*result = treecode_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
 	    }
 	    else
 	    {
-		realtype s = 0;
+		realtype s[4] = {0, 0, 0, 0};
 
 		for(int c = 0; c < 4; ++c)
-		    s += evaluate(xt, yt, *node.children[c]);
+		{
+		    Node * chd = node.children[c];
+		    realtype * ptr = s + c;
+//#pragma omp task firstprivate(ptr, xt, yt, chd)
+		    evaluate(ptr, xt, yt, *chd);
+		}
 
-		return s;
+//#pragma omp taskwait
+
+		*result = s[0] + s[1] + s[2] + s[3];
 	    }
 	}
     }
@@ -292,7 +299,7 @@ void treecode_potential(const realtype theta,
 
 #pragma omp for
 	for(int i = 0; i < ndst; ++i)
-	    vdst[i] = evaluate(xdst[i], ydst[i], *root);
+	    evaluate(vdst + i, xdst[i], ydst[i], *root);
     }
 
     free(xdata);
