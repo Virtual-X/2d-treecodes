@@ -36,7 +36,13 @@ extern "C"
 		      const V4 * __restrict__ const isrcxp,
 		      realtype * __restrict__ const rdstxp,
 		      realtype * __restrict__ const idstxp);
-		          
+
+    realtype treecode_e2p(const realtype mass,
+			  const realtype rx,
+			  const realtype ry,
+			  const realtype * __restrict__ const rxp,
+			  const realtype * __restrict__ const ixp);
+    
     void treecode_potential(const realtype theta,
 			    const realtype * const xsources,
 			    const realtype * const ysources,
