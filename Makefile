@@ -14,6 +14,7 @@ CXX ?= g++
 CC = gcc
 
 treecode-potential-order ?= 12
+config ?= release
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp 
 
