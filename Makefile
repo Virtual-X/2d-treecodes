@@ -3,9 +3,9 @@ CC = gcc
 
 treecode-potential-order ?= 12
 
-CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp
+CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp 
 
-TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11
+TREECODEFLAGS = -DORDER=$(treecode-potential-order) -std=c++11 -march=native
 
 ifeq "$(config)" "release"
 	TREECODEFLAGS += -O3 -DNDEBUG -ftree-vectorize
@@ -26,7 +26,7 @@ treecode.o: treecode.cpp treecode.h Makefile
 	$(CXX) $(TREECODEFLAGS) -c $<
 
 treecode-kernels.o: treecode-kernels.c treecode.h Makefile
-	$(CC) -O4 -DNDEBUG -ftree-vectorize -std=c99 -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=1 -c $<
+	$(CC) -O4 -DNDEBUG -DORDER=$(treecode-potential-order)  -ftree-vectorize -std=c99 -mavx -march=native -mtune=native -fassociative-math -ffast-math -ftree-vectorizer-verbose=1 -c $<
 
 clean:
 	rm -f test *.o
