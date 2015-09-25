@@ -103,9 +103,11 @@ namespace TreeCodeDiego
 		const size_t indexmin = lower_bound(keys + s, keys + e, key1) - keys;
 		const size_t indexsup = upper_bound(keys + s, keys + e, key2) - keys;
 
-#pragma omp task firstprivate(node, c, x, y, l, indexmin, indexsup, key1)
+		Node ** chd = &node->children[c];
+
+#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1)
 		{
-		    build(&node->children[c], (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+		    build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 		}
 
 	    }
