@@ -105,7 +105,7 @@ namespace TreeCodeDiego
 
 		Node ** chd = &node->children[c];
 
-#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1)
+#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (c < 3 && l < 8)
 		{
 		    build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 		}
