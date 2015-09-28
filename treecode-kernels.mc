@@ -10,51 +10,38 @@
  *  before getting a written permission from the author of this file.
  */
 divert(-1)
+
 define(`forloop',
        `pushdef(`$1', `$2')_forloop(`$1', `$2', `$3', `$4')popdef(`$1')')
+       
 define(`_forloop',
        `$4`'ifelse($1, `$3', ,
 		   `define(`$1', incr($1))_forloop(`$1', `$2', `$3', `$4')')')
 
 define(`forrloop',
        `pushdef(`$1', `$2')_forrloop(`$1', `$2', `$3', `$4')popdef(`$1')')
+       
 define(`_forrloop',
        `$4`'ifelse($1, `$3', ,
 		   `define(`$1', decr($1))_forrloop(`$1', `$2', `$3', `$4')')')
 
 define(BINOMIAL, `syscmd(python binomial.py $1 $2)')
 
-
-#1 iteration variable
-#2 iteration start
-#3 iteration end
-#4 body
+#USAGE LUNROLL
+#$1 iteration variable
+#$2 iteration start
+#$3 iteration end
+#$4 body
 
 define(LUNROLL, `forloop($1, $2, $3,`$4')')
 define(RLUNROLL, `forrloop($1, $2, $3, `$4')')
+define(NACC, 8)
+define(`TMP', $1_$2)
 divert(0)
 #include <math.h>
 #include <immintrin.h>
 #include "treecode.h"
 
-#if ORDER > 20 || ORDER < 1
-#error MAX ORDER supported is 20
-#endif
-
-#define N2SIZE 64
-#define EPS (10 * __DBL_EPSILON__)
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
-define(NACC, 32)
-#include <math.h>
-#include <immintrin.h>
-#include "treecode.h"
-
-#if ORDER > 20 || ORDER < 1
-#error MAX ORDER supported is 20
-#endif
-
-#define N2SIZE 64
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
@@ -65,25 +52,22 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 		      const realtype xt,
 		      const realtype yt)
 {
-    realtype s[NACC];
-    for(int i = 0; i < NACC; ++i)
-	s[i] = 0;
-
+    realtype dummy LUNROLL(`i', 0, NACC, `, TMP(s,i) = 0') ; 
+ 
     const int nnice = NACC * (nsources / NACC);
 
     for(int i = 0; i < nnice; i += NACC)
     {
-	const realtype * const xsrc = _xsrc + i;
-	const realtype * const ysrc = _ysrc + i;
-	const realtype * const vsrc = _vsrc + i;
+	const realtype * __restrict__ const xsrc = _xsrc + i;
+	const realtype * __restrict__ const ysrc = _ysrc + i;
+	const realtype * __restrict__ const vsrc = _vsrc + i;
 
 	LUNROLL(j, 0, eval(NACC - 1), `
-	{
-	    const realtype xr = xt - xsrc[j];
-	    const realtype yr = yt - ysrc[j];
-
-	    s[j] += log(xr * xr + yr * yr + EPS) * vsrc[j];
-	}')
+	const realtype TMP(xr, j) = xt - xsrc[j];')
+	LUNROLL(j, 0, eval(NACC - 1), `
+	const realtype TMP(yr, j) = yt - ysrc[j];')
+	LUNROLL(j, 0, eval(NACC - 1), `
+	TMP(s, j) += log(TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS) * vsrc[j];')
     }
 
     realtype sum = 0;
@@ -96,8 +80,7 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 	sum += log(xr * xr + yr * yr + EPS) * _vsrc[i];
     }
 
-    LUNROLL(i, 0, eval(NACC - 1), `
-	sum += s[i];')
+    LUNROLL(i, 0, eval(NACC - 1), `sum += TMP(s, i);')
 
     return sum / 2;
 }
@@ -119,22 +102,18 @@ realtype __attribute__((pure)) treecode_e2p(const realtype mass,
 
     rs += rprod * rxp[0] - iprod * ixp[0];
 
-    realtype rprods[ORDER], iprods[ORDER];
-
     LUNROLL(n, 1, eval(ORDER - 1), `
-    {
-	const realtype rnewprod = rinvz * rprod - iinvz * iprod;
-	const realtype inewprod = iinvz * rprod + rinvz * iprod;
+    	const realtype TMP(rnewprod, n) = rinvz * rprod - iinvz * iprod;
+	const realtype TMP(inewprod, n) = iinvz * rprod + rinvz * iprod;
 
-	rprod = rnewprod;
-	iprod = inewprod;
+	rprod = TMP(rnewprod, n);
+	iprod = TMP(inewprod, n);
 
-	rprods[n] = rprod;
-	iprods[n] = iprod;
-    }')
+	const realtype TMP(rprods, n) = TMP(rnewprod, n);
+	const realtype TMP(iprods, n) = TMP(inewprod, n);
+    ')
 
-    LUNROLL(n, 1, eval(ORDER - 1),`
-    	rs += rprods[n] * rxp[n] - iprods[n] * ixp[n];');
+    LUNROLL(n, 1, eval(ORDER - 1),`rs += TMP(rprods, n) * rxp[n] - TMP(iprods, n) * ixp[n];')
 
     return rs;
 }
@@ -196,60 +175,43 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 
     const V4 zero = {0, 0, 0, 0};
 
-    V4 rxp[ORDER], ixp[ORDER];
-
-    {
-	LUNROLL(n, 0, eval(ORDER - 1),`
-	    rxp[n] = zero;')
-	
-	LUNROLL(n, 0, eval(ORDER - 1),`
-	    ixp[n] = zero;')
-    }
-
+    V4 dummy LUNROLL(n, 0, eval(ORDER - 1),`, TMP(rxp, n) = zero') LUNROLL(n, 0, eval(ORDER - 1),`, TMP(ixp, n) = zero');
+    
     for(int i = 0; i < nsources; i += 4)
     {
 	V4 rrp = zero, irp = zero, srcs = zero;
 
-	for(int c = 0; c < 4; ++c)
-	    if (i + c < nsources)
-		rrp[c] = xsources[i + c];
+	LUNROLL(c, 0, 3, `rrp[c] = (i + c < nsources) ? xsources[i + c] : 0;')
 
-	for(int c = 0; c < 4; ++c)
-	    if (i + c < nsources)
-		irp[c] = ysources[i + c];
+	LUNROLL(c, 0, 3, `irp[c] = (i + c < nsources) ? ysources[i + c] : 0;')
 	
-	for(int c = 0; c < 4; ++c)
-	    if (i + c < nsources)
-		srcs[c] = sources[i + c];
+	LUNROLL(c, 0, 3, `srcs[c] = (i + c < nsources) ? sources[i + c] : 0;')
 	
 	rrp -= xcom;
 	irp -= ycom;
 	
 	V4 rprod = rrp, iprod = irp;
 
-	rxp[0] -= rprod * srcs;
-	ixp[0] -= iprod * srcs;
+	TMP(rxp, 0) -= rprod * srcs;
+	TMP(ixp, 0) -= iprod * srcs;
 
 	LUNROLL(n, 1, eval(ORDER - 1),`
-	{
-	    const V4 rnewprod = rprod * rrp - iprod * irp;
-	    const V4 inewprod = rprod * irp + iprod * rrp;
+	    const V4 TMP(rnewprod, n) = rprod * rrp - iprod * irp;
+	    const V4 TMP(inewprod, n) = rprod * irp + iprod * rrp;
 
-	    rprod = rnewprod;
-	    iprod = inewprod;
+	    rprod = TMP(rnewprod, n);
+	    iprod = TMP(inewprod, n);
 
-	    const V4 term = srcs / (realtype)(n + 1);
+	    const V4 TMP(term, n) = srcs / (realtype)(n + 1);
 
-	    rxp[n] -= rprod * term;
-	    ixp[n] -= iprod * term;
-	}')
+	    TMP(rxp, n) -= rprod * TMP(term, n);
+	    TMP(ixp, n) -= iprod * TMP(term, n);
+	')
     }
 
-    LUNROLL(n, 0, eval(ORDER - 1),`
-	rexpansions[n] = rxp[n][0] + rxp[n][1] + rxp[n][2] + rxp[n][3];')
+    LUNROLL(n, 0, eval(ORDER - 1),`rexpansions[n] = TMP(rxp, n)[0] + TMP(rxp, n)[1] + TMP(rxp, n)[2] + TMP(rxp, n)[3];')
 
-    LUNROLL(n, 0, eval(ORDER - 1),`
-	iexpansions[n] = ixp[n][0] + ixp[n][1] + ixp[n][2] + ixp[n][3];')
+    LUNROLL(n, 0, eval(ORDER - 1),`iexpansions[n] = TMP(ixp, n)[0] + TMP(ixp, n)[1] + TMP(ixp, n)[2] + TMP(ixp, n)[3];')
 }
 
 void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
