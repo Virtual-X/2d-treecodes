@@ -31,7 +31,7 @@ namespace TreeCodeDiego
 
     int * keys = NULL;
 
-    realtype *xdata, *ydata, *vdata;
+    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
 
     struct Node
     {
@@ -40,12 +40,12 @@ namespace TreeCodeDiego
 	
 	realtype w, wx, wy, mass, r;
 
-	realtype xcom() const { return wx / w; }
-	realtype ycom() const { return wy / w; }
-
 	Node * children[4];
 
 	realtype expansions[2][ORDER];
+	
+	realtype xcom() const { return wx / w; }
+	realtype ycom() const { return wy / w; }
 
 	Node() = default;
 
@@ -73,7 +73,7 @@ namespace TreeCodeDiego
 	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
 #endif
 
-	Node * node = new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
+	Node * const node = new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
 	*_node = node;
 
 	if (node->leaf)
@@ -141,7 +141,7 @@ namespace TreeCodeDiego
 	    }
 #endif
 
-	    V4 srcmass, rx, ry,  chldexp[2][ORDER];
+	    V4 srcmass, rx, ry, chldexp[2][ORDER];
 	    for(int c = 0; c < 4; ++c)
 	    {
 		Node * chd = node->children[c];
@@ -300,3 +300,4 @@ void treecode_potential(const realtype theta,
 
     delete root;
 }
+
