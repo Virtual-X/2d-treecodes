@@ -9,7 +9,43 @@
  *  to employ the present software for their own publications
  *  before getting a written permission from the author of this file.
  */
+divert(-1)
+define(`forloop',
+       `pushdef(`$1', `$2')_forloop(`$1', `$2', `$3', `$4')popdef(`$1')')
+define(`_forloop',
+       `$4`'ifelse($1, `$3', ,
+		   `define(`$1', incr($1))_forloop(`$1', `$2', `$3', `$4')')')
 
+define(`forrloop',
+       `pushdef(`$1', `$2')_forrloop(`$1', `$2', `$3', `$4')popdef(`$1')')
+define(`_forrloop',
+       `$4`'ifelse($1, `$3', ,
+		   `define(`$1', decr($1))_forrloop(`$1', `$2', `$3', `$4')')')
+
+define(BINOMIAL, `syscmd(python binomial.py $1 $2)')
+
+
+#1 iteration variable
+#2 iteration start
+#3 iteration end
+#4 body
+
+define(LUNROLL, `forloop($1, $2, $3,`$4')')
+define(RLUNROLL, `forrloop($1, $2, $3, `$4')')
+divert(0)
+#include <math.h>
+#include <immintrin.h>
+#include "treecode.h"
+
+#if ORDER > 20 || ORDER < 1
+#error MAX ORDER supported is 20
+#endif
+
+#define N2SIZE 64
+#define EPS (10 * __DBL_EPSILON__)
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
+define(NACC, 32)
 #include <math.h>
 #include <immintrin.h>
 #include "treecode.h"
@@ -29,8 +65,6 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 		      const realtype xt,
 		      const realtype yt)
 {
-    enum { NACC = 32 };
-
     realtype s[NACC];
     for(int i = 0; i < NACC; ++i)
 	s[i] = 0;
@@ -43,14 +77,13 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 	const realtype * const ysrc = _ysrc + i;
 	const realtype * const vsrc = _vsrc + i;
 
-#pragma GCC ivdep
-	for(int j = 0; j < NACC; ++j)
+	LUNROLL(j, 0, eval(NACC - 1), `
 	{
 	    const realtype xr = xt - xsrc[j];
 	    const realtype yr = yt - ysrc[j];
 
 	    s[j] += log(xr * xr + yr * yr + EPS) * vsrc[j];
-	}
+	}')
     }
 
     realtype sum = 0;
@@ -63,8 +96,8 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 	sum += log(xr * xr + yr * yr + EPS) * _vsrc[i];
     }
 
-    for(int i = 0; i < NACC; ++i)
-	sum += s[i];
+    LUNROLL(i, 0, eval(NACC - 1), `
+	sum += s[i];')
 
     return sum / 2;
 }
@@ -87,7 +120,8 @@ realtype __attribute__((pure)) treecode_e2p(const realtype mass,
     rs += rprod * rxp[0] - iprod * ixp[0];
 
     realtype rprods[ORDER], iprods[ORDER];
-    for(int n = 1; n < ORDER; ++n)
+
+    LUNROLL(n, 1, eval(ORDER - 1), `
     {
 	const realtype rnewprod = rinvz * rprod - iinvz * iprod;
 	const realtype inewprod = iinvz * rprod + rinvz * iprod;
@@ -97,10 +131,10 @@ realtype __attribute__((pure)) treecode_e2p(const realtype mass,
 
 	rprods[n] = rprod;
 	iprods[n] = iprod;
-    }
+    }')
 
-    for(int n = 1; n < ORDER; ++n)
-    	rs += rprods[n] * rxp[n] - iprods[n] * ixp[n];
+    LUNROLL(n, 1, eval(ORDER - 1),`
+    	rs += rprods[n] * rxp[n] - iprods[n] * ixp[n];');
 
     return rs;
 }
@@ -160,21 +194,21 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 
     *radius = sqrt(r2);
 
+    const V4 zero = {0, 0, 0, 0};
+
     V4 rxp[ORDER], ixp[ORDER];
 
     {
-	const V4 zero = {0, 0, 0, 0};
+	LUNROLL(n, 0, eval(ORDER - 1),`
+	    rxp[n] = zero;')
 	
-	for (int n = 0; n < ORDER; ++n)
-	    rxp[n] = zero;
-	
-	for (int n = 0; n < ORDER; ++n)
-	    ixp[n] = zero;
+	LUNROLL(n, 0, eval(ORDER - 1),`
+	    ixp[n] = zero;')
     }
 
     for(int i = 0; i < nsources; i += 4)
     {
-	V4 rrp = {0, 0, 0, 0}, irp = {0, 0, 0, 0}, srcs = {0, 0, 0, 0};
+	V4 rrp = zero, irp = zero, srcs = zero;
 
 	for(int c = 0; c < 4; ++c)
 	    if (i + c < nsources)
@@ -196,8 +230,7 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 	rxp[0] -= rprod * srcs;
 	ixp[0] -= iprod * srcs;
 
-#pragma GCC ivdep
-	for (int n = 1; n < ORDER; ++n)
+	LUNROLL(n, 1, eval(ORDER - 1),`
 	{
 	    const V4 rnewprod = rprod * rrp - iprod * irp;
 	    const V4 inewprod = rprod * irp + iprod * rrp;
@@ -209,17 +242,15 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 
 	    rxp[n] -= rprod * term;
 	    ixp[n] -= iprod * term;
-	}
+	}')
     }
 
-    for(int n = 0; n < ORDER; ++n)
-	rexpansions[n] = rxp[n][0] + rxp[n][1] + rxp[n][2] + rxp[n][3];
+    LUNROLL(n, 0, eval(ORDER - 1),`
+	rexpansions[n] = rxp[n][0] + rxp[n][1] + rxp[n][2] + rxp[n][3];')
 
-    for(int n = 0; n < ORDER; ++n)
-	iexpansions[n] = ixp[n][0] + ixp[n][1] + ixp[n][2] + ixp[n][3];
+    LUNROLL(n, 0, eval(ORDER - 1),`
+	iexpansions[n] = ixp[n][0] + ixp[n][1] + ixp[n][2] + ixp[n][3];')
 }
-
-extern const realtype binomlut[20][20];
 
 void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 		  const V4 * __restrict__ const rsrcxp,
@@ -227,28 +258,27 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 		  realtype * __restrict__ const rdstxp,
 		  realtype * __restrict__ const idstxp)
 {
-    V4 zero = {0, 0, 0, 0};
+    const V4 zero = {0, 0, 0, 0};
+    const V4 one = {1, 1, 1, 1};
 
     V4 rresult[ORDER];
     
-#pragma ivdep
-    for (int i = 0; i < ORDER; ++i)
-	rresult[i] = zero;
+    LUNROLL(i, 0, eval(ORDER - 1),`
+	rresult[i] = zero;')
 
     V4 iresult[ORDER];
     
-#pragma ivdep
-    for (int i = 0; i < ORDER; ++i)
-	iresult[i] = zero;
+    LUNROLL(i, 0, eval(ORDER - 1),`
+	iresult[i] = zero;')
 
-    for (int j = 0; j < ORDER; ++j)
+    LUNROLL(j, 0, eval(ORDER - 1),`
     {
-	V4 rsum = {0, 0, 0, 0}, isum = {0, 0, 0, 0}, rprod = {1, 1, 1, 1}, iprod = {0, 0, 0, 0};
+	V4 rsum = zero, isum = zero, rprod = one, iprod = zero;
 
-	for (int k = j; k >= 0; --k)
+	RLUNROLL(k, j, 0, `
 	{
-	    const realtype bterm = binomlut[j][k];
-
+	    const realtype bterm = BINOMIAL(j, k);
+	    
 	    rsum += bterm * (rsrcxp[k] * rprod - isrcxp[k] * iprod);
 	    isum += bterm * (isrcxp[k] * rprod + rsrcxp[k] * iprod);
 
@@ -257,7 +287,7 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 
 	    rprod = rnewprod;
 	    iprod = inewprod;
-	}
+	}')
 
 	const V4 term = srcmass / (j + 1);
 
@@ -266,22 +296,17 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 
 	rresult[j] += rsum;
 	iresult[j] += isum;
-    }
+    }')
 
-#pragma GCC ivdep
-    for(int i = 0; i < ORDER; ++i)
+    LUNROLL(i, 0, eval(ORDER - 1), `
     {
 	const V4 re = rresult[i];
 	rdstxp[i] = re[0] + re[1] + re[2] + re[3];
-    }
+    }')
 
-#pragma GCC ivdep
-    for(int i = 0; i < ORDER; ++i)
+    LUNROLL(i, 0, eval(ORDER - 1), `
     {
 	const V4 im = iresult[i];
 	idstxp[i] = im[0] + im[1] + im[2] + im[3];
-    }
+    }')
 }
-
-const realtype binomlut[20][20] = { 1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,3,3,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,6,4,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,5,10,10,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,6,15,20,15,6,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,7,21,35,35,21,7,1,0,0,0,0,0,0,0,0,0,0,0,0,1,8,28,56,70,56,28,8,1,0,0,0,0,0,0,0,0,0,0,0,1,9,36,84,126,126,84,36,9,1,0,0,0,0,0,0,0,0,0,0,1,10,45,120,210,252,210,120,45,10,1,0,0,0,0,0,0,0,0,0,1,11,55,165,330,462,462,330,165,55,11,1,0,0,0,0,0,0,0,0,1,12,66,220,495,792,924,792,495,220,66,12,1,0,0,0,0,0,0,0,1,13,78,286,715,1287,1716,1716,1287,715,286,78,13,1,0,0,0,0,0,0,1,14,91,364,1001,2002,3003,3432,3003,2002,1001,364,91,14,1,0,0,0,0,0,1,15,105,455,1365,3003,5005,6435,6435,5005,3003,1365,455,105,15,1,0,0,0,0,1,16,120,560,1820,4368,8008,11440,12870,11440,8008,4368,1820,560,120,16,1,0,0,0,1,17,136,680,2380,6188,12376,19448,24310,24310,19448,12376,6188,2380,680,136,17,1,0,0,1,18,153,816,3060,8568,18564,31824,43758,48620,43758,31824,18564,8568,3060,816,153,18,1,0,1,19,171,969,3876,11628,27132,50388,75582,92378,92378,75582,50388,27132,11628,3876,969,171,19,1};
-
