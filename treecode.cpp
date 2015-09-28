@@ -37,6 +37,7 @@ namespace TreeCodeDiego
     {
 	int x, y, l, s, e;
 	bool leaf;
+	
 	realtype w, wx, wy, mass, r;
 
 	realtype xcom() const { return wx / w; }
@@ -298,7 +299,7 @@ void treecode_potential(const realtype theta,
 	    free(keys);
 	}
 
-#pragma omp for
+#pragma omp for schedule(static,1)
 	for(int i = 0; i < ndst; ++i)
 	    evaluate(vdst + i, xdst[i], ydst[i], *root);
     }
