@@ -96,24 +96,18 @@ realtype __attribute__((pure)) treecode_e2p(const realtype mass,
     const realtype rinvz = rz / r2;
     const realtype iinvz = -iz / r2;
 
-    realtype rprod = rinvz;
-    realtype iprod = iinvz;
+    realtype rprod_0 = rinvz;
+    realtype iprod_0 = iinvz;
     realtype rs = mass * log(r2) / 2;
 
-    rs += rprod * rxp[0] - iprod * ixp[0];
+    rs += rprod_0 * rxp[0] - iprod_0 * ixp[0];
 
     LUNROLL(n, 1, eval(ORDER - 1), `
-    	const realtype TMP(rnewprod, n) = rinvz * rprod - iinvz * iprod;
-	const realtype TMP(inewprod, n) = iinvz * rprod + rinvz * iprod;
+    	const realtype TMP(rprod, n) = rinvz * TMP(rprod, eval(n - 1)) - iinvz * TMP(iprod, eval(n - 1));
+	const realtype TMP(iprod, n) = iinvz * TMP(rprod, eval(n - 1)) + rinvz * TMP(iprod, eval(n - 1));
 
-	rprod = TMP(rnewprod, n);
-	iprod = TMP(inewprod, n);
-
-	const realtype TMP(rprods, n) = TMP(rnewprod, n);
-	const realtype TMP(iprods, n) = TMP(inewprod, n);
+	rs += TMP(rprod, n) * rxp[n] - TMP(iprod, n) * ixp[n];
     ')
-
-    LUNROLL(n, 1, eval(ORDER - 1),`rs += TMP(rprods, n) * rxp[n] - TMP(iprods, n) * ixp[n];')
 
     return rs;
 }
@@ -239,10 +233,8 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 
 	RLUNROLL(k, j, 0, `
 	{
-	    const realtype bterm = BINOMIAL(j, k);
-	    
-	    rsum += bterm * (rsrcxp[k] * rprod - isrcxp[k] * iprod);
-	    isum += bterm * (isrcxp[k] * rprod + rsrcxp[k] * iprod);
+	    rsum += BINOMIAL(j, k) * (rsrcxp[k] * rprod - isrcxp[k] * iprod);
+	    isum += BINOMIAL(j, k) * (isrcxp[k] * rprod + rsrcxp[k] * iprod);
 
 	    const V4 rnewprod = rprod * rx - iprod * ry;
 	    const V4 inewprod = rprod * ry + iprod * rx;
