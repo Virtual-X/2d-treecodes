@@ -160,40 +160,63 @@ void treecode_p2e(const realtype * __restrict__ const xsources,
 
     *radius = sqrt(r2);
 
-    for (int n = 0; n < ORDER; ++n)
-	rexpansions[n] = 0;
+    V4 rxp[ORDER], ixp[ORDER];
 
-    for (int n = 0; n < ORDER; ++n)
-	iexpansions[n] = 0;
-
-    for(int i = 0; i < nsources; ++i)
     {
-	const realtype rrp = xsources[i] - xcom;
-	const realtype irp = ysources[i] - ycom;
+	const V4 zero = {0, 0, 0, 0};
+	
+	for (int n = 0; n < ORDER; ++n)
+	    rxp[n] = zero;
+	
+	for (int n = 0; n < ORDER; ++n)
+	    ixp[n] = zero;
+    }
 
-	realtype rprod = rrp;
-	realtype iprod = irp;
+    for(int i = 0; i < nsources; i += 4)
+    {
+	V4 rrp = {0, 0, 0, 0}, irp = {0, 0, 0, 0}, srcs = {0, 0, 0, 0};
 
-	const realtype term = sources[i];
+	for(int c = 0; c < 4; ++c)
+	    if (i + c < nsources)
+		rrp[c] = xsources[i + c];
 
-	rexpansions[0] -= rprod * term;
-	iexpansions[0] -= iprod * term;
+	for(int c = 0; c < 4; ++c)
+	    if (i + c < nsources)
+		irp[c] = ysources[i + c];
+	
+	for(int c = 0; c < 4; ++c)
+	    if (i + c < nsources)
+		srcs[c] = sources[i + c];
+	
+	rrp -= xcom;
+	irp -= ycom;
+	
+	V4 rprod = rrp, iprod = irp;
+
+	rxp[0] -= rprod * srcs;
+	ixp[0] -= iprod * srcs;
 
 #pragma GCC ivdep
 	for (int n = 1; n < ORDER; ++n)
 	{
-	    const realtype rnewprod = rprod * rrp - iprod * irp;
-	    const realtype inewprod = rprod * irp + iprod * rrp;
+	    const V4 rnewprod = rprod * rrp - iprod * irp;
+	    const V4 inewprod = rprod * irp + iprod * rrp;
 
 	    rprod = rnewprod;
 	    iprod = inewprod;
 
-	    const realtype term = sources[i] / (n + 1);
+	    const V4 term = srcs / (realtype)(n + 1);
 
-	    rexpansions[n] -= rprod * term;
-	    iexpansions[n] -= iprod * term;
+	    rxp[n] -= rprod * term;
+	    ixp[n] -= iprod * term;
 	}
     }
+
+    for(int n = 0; n < ORDER; ++n)
+	rexpansions[n] = rxp[n][0] + rxp[n][1] + rxp[n][2] + rxp[n][3];
+
+    for(int n = 0; n < ORDER; ++n)
+	iexpansions[n] = ixp[n][0] + ixp[n][1] + ixp[n][2] + ixp[n][3];
 }
 
 extern const realtype binomlut[20][20];
