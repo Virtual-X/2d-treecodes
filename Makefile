@@ -45,6 +45,9 @@ treecode.o: treecode.cpp treecode.h Makefile
 treecode-kernels.o: treecode-kernels.c treecode.h Makefile
 	$(CC) $(KERNELSFLAGS) -c $<
 
+treecode-kernels.c: treecode-kernels.mc
+	m4 -D ORDER=$(treecode-potential-order) treecode-kernels.mc | indent > treecode-kernels.c
+
 clean:
 	rm -f test *.o *.a
 

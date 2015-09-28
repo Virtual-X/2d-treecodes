@@ -11,6 +11,7 @@
  */
 
 #include <unistd.h>
+#include <omp.h>
 
 #include <cstdlib>
 #include <cstdio>
@@ -103,8 +104,12 @@ void test(realtype theta, double tol, FILE * f = NULL, bool verify = true)
     realtype * targets = new realtype[NDST];
 
     printf("Testing with %d sources and %d targets (theta %.3e)...\n", NDST, NSRC, theta);
+    const double tstart = omp_get_wtime();
     treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, targets);
+    const double tend = omp_get_wtime();
 
+    printf("solved in %.2f ms\n", (tend - tstart) * 1e3);
+    
     if (verify)
     {
 	double linf = 0, l1 = 0, linf_rel = 0, l1_rel = 0;
