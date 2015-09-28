@@ -49,7 +49,7 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 	    const realtype xr = xt - xsrc[j];
 	    const realtype yr = yt - ysrc[j];
 
-	    s[j] += log(sqrt(xr * xr + yr * yr + EPS)) * vsrc[j];
+	    s[j] += log(xr * xr + yr * yr + EPS) * vsrc[j];
 	}
     }
 
@@ -60,13 +60,13 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
 	const realtype xr = xt - _xsrc[i];
 	const realtype yr = yt - _ysrc[i];
 
-	sum += log(sqrt(xr * xr + yr * yr + EPS)) * _vsrc[i];
+	sum += log(xr * xr + yr * yr + EPS) * _vsrc[i];
     }
 
     for(int i = 0; i < NACC; ++i)
 	sum += s[i];
 
-    return sum;
+    return sum / 2;
 }
 
 realtype __attribute__((pure)) treecode_e2p(const realtype mass,
@@ -82,7 +82,7 @@ realtype __attribute__((pure)) treecode_e2p(const realtype mass,
 
     realtype rprod = rinvz;
     realtype iprod = iinvz;
-    realtype rs = mass * log(sqrt(r2));
+    realtype rs = mass * log(r2) / 2;
 
     rs += rprod * rxp[0] - iprod * ixp[0];
 
