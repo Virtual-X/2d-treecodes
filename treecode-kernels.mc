@@ -35,7 +35,7 @@ define(BINOMIAL, `syscmd(python binomial.py $1 $2)')
 
 define(LUNROLL, `forloop($1, $2, $3,`$4')')
 define(RLUNROLL, `forrloop($1, $2, $3, `$4')')
-define(NACC, 8)
+define(NACC, 32)
 define(`TMP', $1_$2)
 divert(0)
 #include <math.h>
@@ -219,13 +219,7 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 
     V4 rresult[ORDER];
     
-    LUNROLL(i, 0, eval(ORDER - 1),`
-	rresult[i] = zero;')
-
-    V4 iresult[ORDER];
-    
-    LUNROLL(i, 0, eval(ORDER - 1),`
-	iresult[i] = zero;')
+    V4 dummy LUNROLL(i, 0, eval(ORDER - 1),`, TMP(rresult, i) = zero, TMP(iresult, i) = zero');
 
     LUNROLL(j, 0, eval(ORDER - 1),`
     {
@@ -248,19 +242,10 @@ void treecode_e2e(const V4 srcmass, const V4 rx, const V4 ry,
 	rsum -= rprod * term;
 	isum -= iprod * term;
 
-	rresult[j] += rsum;
-	iresult[j] += isum;
+	TMP(rresult, j) += rsum;
+	TMP(iresult, j) += isum;
     }')
 
-    LUNROLL(i, 0, eval(ORDER - 1), `
-    {
-	const V4 re = rresult[i];
-	rdstxp[i] = re[0] + re[1] + re[2] + re[3];
-    }')
-
-    LUNROLL(i, 0, eval(ORDER - 1), `
-    {
-	const V4 im = iresult[i];
-	idstxp[i] = im[0] + im[1] + im[2] + im[3];
-    }')
+    LUNROLL(i, 0, eval(ORDER - 1), `rdstxp[i] =  TMP(rresult, i)[0] + TMP(rresult, i)[1] + TMP(rresult, i)[2] + TMP(rresult, i)[3];')
+    LUNROLL(i, 0, eval(ORDER - 1), `idstxp[i] =  TMP(iresult, i)[0] + TMP(iresult, i)[1] + TMP(iresult, i)[2] + TMP(iresult, i)[3];') 
 }
