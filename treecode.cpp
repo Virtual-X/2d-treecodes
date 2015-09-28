@@ -47,22 +47,15 @@ namespace TreeCodeDiego
 
 	realtype expansions[2][ORDER];
 
-	void clr()
-	    {
-		mass = w = wx = wy = 0;
+	Node() = default;
 
-		for(int i = 0; i < 4; ++i)
-		    children[i] = NULL;
-	    }
-
-	void dispose()
+	~Node()
 	    {
 		if (!leaf)
 		    for(int i = 0; i < 4; ++i)
 		    {
-			children[i]->dispose();
-
 			delete children[i];
+			
 			children[i] = NULL;
 		    }
 	    }
@@ -82,7 +75,6 @@ namespace TreeCodeDiego
 
 	Node * node = new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
 	*_node = node;
-	node->clr();
 
 	if (node->leaf)
 	{
@@ -201,11 +193,9 @@ namespace TreeCodeDiego
 		{
 		    Node * chd = node.children[c];
 		    realtype * ptr = s + c;
-//#pragma omp task firstprivate(ptr, xt, yt, chd)
+
 		    evaluate(ptr, xt, yt, *chd);
 		}
-
-//#pragma omp taskwait
 
 		*result = s[0] + s[1] + s[2] + s[3];
 	    }
@@ -308,5 +298,5 @@ void treecode_potential(const realtype theta,
     free(ydata);
     free(vdata);
 
-    root->dispose();
+    delete root;
 }
