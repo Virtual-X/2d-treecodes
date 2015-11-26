@@ -18,6 +18,8 @@
 #include <parallel/algorithm>
 #include <limits>
 
+typedef REAL realtype;
+
 struct Node
 {
     int x, y, l, s, e;

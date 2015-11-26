@@ -38,14 +38,13 @@ define(RLUNROLL, `forrloop($1, $2, $3, `$4')')
 define(NACC, 32)
 define(`TMP', $1_$2)
 divert(0)
+
 #include <math.h>
-#include <immintrin.h>
-#include "potential-kernels.h"
 
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
+realtype potential_p2p(const realtype * __restrict__ const _xsrc,
   const realtype * __restrict__ const _ysrc,
   const realtype * __restrict__ const _vsrc,
   const int nsources,
@@ -85,7 +84,7 @@ realtype treecode_p2p(const realtype * __restrict__ const _xsrc,
     return sum / 2;
   }
 
-  realtype treecode_e2p(const realtype mass,
+  realtype potential_e2p(const realtype mass,
     const realtype rz,
     const realtype iz,
     const realtype * __restrict__ const rxp,

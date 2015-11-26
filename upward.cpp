@@ -16,8 +16,8 @@
 #include <parallel/algorithm>
 #include <limits>
 
-#include "upward-kernels.h"
 #include "upward.h"
+#include "upward-kernels.h"
 
 #define LEAF_MAXCOUNT 96
 #define LMAX 15

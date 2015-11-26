@@ -12,8 +12,6 @@
 
 #pragma once
 
-typedef REAL realtype;
-
 #define _CONCATENATE_BODY(a, b) a ## b
 #define _CONCATENATE(a, b) _CONCATENATE_BODY(a, b)
 #define P2E_KERNEL _CONCATENATE(treecode_p2e_order, ORDER)

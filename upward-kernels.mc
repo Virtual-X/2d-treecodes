@@ -39,8 +39,8 @@ define(NACC, 32)
 define(`TMP', $1_$2)
 divert(0)
 #include <math.h>
-#include <immintrin.h>
-#include "upward-kernels.h"
+
+typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))

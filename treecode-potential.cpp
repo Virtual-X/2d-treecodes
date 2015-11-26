@@ -13,42 +13,49 @@
 #include <cassert>
 #include <cmath>
 
+#include "treecode.h"
 #include "potential-kernels.h"
 #include "upward.h"
 
-realtype thetasquared;
-realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
-
-void evaluate(realtype * const result, const realtype xt, const realtype yt, const Node & node)
+namespace EvaluatePotential
 {
-    const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
-
-    if (4 * node.r * node.r < thetasquared * r2)
-	*result = treecode_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1]);
-    else
+    realtype thetasquared;
+    
+    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
+    
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Node & node)
     {
-	if (node.leaf)
-	{
-	    const int s = node.s;
+	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
-	    *result = treecode_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
-	}
+	if (4 * node.r * node.r < thetasquared * r2)
+	    *result = potential_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1]);
 	else
 	{
-	    realtype s[4] = {0, 0, 0, 0};
-
-	    for(int c = 0; c < 4; ++c)
+	    if (node.leaf)
 	    {
-		Node * chd = node.children[c];
-		realtype * ptr = s + c;
+		const int s = node.s;
 
-		evaluate( ptr, xt, yt, *chd);
+		*result = potential_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
 	    }
+	    else
+	    {
+		realtype s[4] = {0, 0, 0, 0};
 
-	    *result = s[0] + s[1] + s[2] + s[3];
+		for(int c = 0; c < 4; ++c)
+		{
+		    Node * chd = node.children[c];
+		    realtype * ptr = s + c;
+
+		    evaluate( ptr, xt, yt, *chd);
+		}
+
+		*result = s[0] + s[1] + s[2] + s[3];
+	    }
 	}
     }
 }
+
+using namespace EvaluatePotential;
 
 extern "C"
 void treecode_potential(const realtype theta,
