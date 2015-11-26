@@ -104,12 +104,12 @@ void test_potential(realtype theta, double tol, FILE * f = NULL, bool verify = t
 
     realtype * targets = new realtype[NDST];
 
-    printf("\x1b[92mTesting POTENTIAL with %d sources and %d targets (theta %.3e)...\x1b[0m\n", NDST, NSRC, theta);
+    printf("Testing POTENTIAL with %d sources and %d targets (theta %.3e)...\n", NDST, NSRC, theta);
     const double tstart = omp_get_wtime();
     treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, targets);
     const double tend = omp_get_wtime();
 
-    printf("solved in %.2f ms\n", (tend - tstart) * 1e3);
+    printf("\x1b[92msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
     
     if (verify)
     {
@@ -239,7 +239,7 @@ void test_force(realtype theta, double tol, FILE * f = NULL, bool verify = true)
     treecode_force(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
     const double tend = omp_get_wtime();
 
-    printf("solved in %.2f ms\n", (tend - tstart) * 1e3);
+    printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
     
     if (verify)
     {
