@@ -20,41 +20,41 @@
 
 typedef REAL realtype;
 
-struct Node
-{
-    int x, y, l, s, e;
-    bool leaf;
-	
-    realtype w, wx, wy, mass, r;
-
-    Node * children[4];
-
-    realtype expansions[2][ORDER];
-	
-    realtype xcom() const { return wx / w; }
-    realtype ycom() const { return wy / w; }
-
-    Node() = default;
-
-    ~Node()
-	{
-	    if (!leaf)
-		for(int i = 0; i < 4; ++i)
-		{
-		    delete children[i];
-			
-		    children[i] = NULL;
-		}
-	}
-};
-
 namespace Tree
 {
+    struct Node
+    {
+	int x, y, l, s, e;
+	bool leaf;
+	
+	realtype w, wx, wy, mass, r;
+
+	Node * children[4];
+
+	realtype expansions[2][ORDER];
+	
+	realtype xcom() const { return wx / w; }
+	realtype ycom() const { return wy / w; }
+
+	Node() = default;
+
+	~Node()
+	    {
+		if (!leaf)
+		    for(int i = 0; i < 4; ++i)
+		    {
+			delete children[i];
+			
+			children[i] = NULL;
+		    }
+	    }
+    };
+
     extern realtype *xdata, *ydata, *vdata;
     extern Node * root;
     
     void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	 const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst);
+	       const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst);
     
     void dispose();
 };

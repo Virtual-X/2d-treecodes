@@ -23,7 +23,7 @@ namespace EvaluatePotential
     
     realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
     
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Node & node)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Tree::Node & node)
     {
 	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
@@ -43,7 +43,7 @@ namespace EvaluatePotential
 
 		for(int c = 0; c < 4; ++c)
 		{
-		    Node * chd = node.children[c];
+		    Tree::Node * chd = node.children[c];
 		    realtype * ptr = s + c;
 
 		    evaluate( ptr, xt, yt, *chd);

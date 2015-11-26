@@ -23,7 +23,7 @@ UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 OBJS = upward.o treecode-potential.o potential-kernels.o force-kernels.o $(UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
-	OBJS += $(UPWARDKERNELS_FORCE).o
+	OBJS += $(UPWARDKERNELS_FORCE).o 
 endif
 
 config ?= release
