@@ -38,11 +38,14 @@ ifeq "$(gprof)" "1"
 	TREECODEFLAGS += -pg
 endif
 
-test: main.cpp treecode.o potential-kernels.o $(UPWARDKERNELS).o treecode.h
-	$(CXX) $(CXXFLAGS)  main.cpp treecode.o potential-kernels.o $(UPWARDKERNELS).o -g -o test
-	ar rcs treecode.a treecode.o potential-kernels.o $(UPWARDKERNELS).o 
+test: main.cpp potential-kernels.o upward.o treecode.o $(UPWARDKERNELS).o treecode.h
+	$(CXX) $(CXXFLAGS)  main.cpp potential-kernels.o upward.o treecode.o $(UPWARDKERNELS).o -g -o test
+	ar rcs treecode.a treecode.o potential-kernels.o upward.o $(UPWARDKERNELS).o 
 
 treecode.o: treecode.cpp treecode.h Makefile
+	$(CXX) $(TREECODEFLAGS) -c $<
+
+upward.o: upward.cpp upward.h Makefile
 	$(CXX) $(TREECODEFLAGS) -c $<
 
 potential-kernels.o: potential-kernels.c
