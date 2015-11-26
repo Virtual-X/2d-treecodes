@@ -16,6 +16,8 @@
 #include <parallel/algorithm>
 #include <limits>
 
+#include "upward-kernels.h"
+#include "potential-kernels.h"
 #include "treecode.h"
 
 #define LEAF_MAXCOUNT 96
@@ -78,7 +80,7 @@ namespace TreeCodeDiego
 
 	if (node->leaf)
 	{
-	    treecode_p2e(&xdata[s], &ydata[s], &vdata[s], e - s,
+	    P2E_KERNEL(&xdata[s], &ydata[s], &vdata[s], e - s,
 			 x0, y0, h, &node->mass, &node->w, &node->wx, &node->wy, &node->r,
 			 node->expansions[0], node->expansions[1]);
 
@@ -158,7 +160,7 @@ namespace TreeCodeDiego
 	    rx -= node->xcom();
 	    ry -= node->ycom();
 
-	    treecode_e2e(srcmass, rx, ry, chldexp[0], chldexp[1], node->expansions[0], node->expansions[1]);
+	    E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], node->expansions[0], node->expansions[1]);
 	}
 
 #ifndef NDEBUG
