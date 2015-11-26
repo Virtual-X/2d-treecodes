@@ -30,7 +30,7 @@ namespace EvaluatePotential
 	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
 	if (4 * node.r * node.r < thetasquared * r2)
-	    *result = potential_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1]);
+	    *result = potential_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.rexpansions, node.iexpansions);
 	else
 	{
 	    if (node.leaf)

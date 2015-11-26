@@ -66,7 +66,10 @@ namespace Tree
     template<int XXXDONTCARE>
 	struct NodeImplementation : Node
     {
-	realtype expansions[2][ORDER];
+	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
+
+	alignedvec rexpansions;	
+	alignedvec iexpansions;
 
 	void allocate_children() override
 	{
@@ -81,7 +84,7 @@ namespace Tree
 	{
 	    P2E_KERNEL(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
-		       expansions[0], expansions[1]);
+		       rexpansions, iexpansions);
 	}
 
 	void e2e() override
@@ -96,19 +99,21 @@ namespace Tree
 		rx[c] = chd->xcom();
 		ry[c] = chd->ycom();
 
-		for(int i = 0; i < 2; ++i)
-		    for(int j = 0; j < ORDER; ++j)
-			chldexp[i][j][c] = chd->expansions[i][j];
+		for(int j = 0; j < ORDER; ++j)
+		    chldexp[0][j][c] = chd->rexpansions[j];
+
+		for(int j = 0; j < ORDER; ++j)
+		    chldexp[1][j][c] = chd->iexpansions[j];
 	    }
 
 	    rx -= xcom();
 	    ry -= ycom();
 
-	    E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], expansions[0], expansions[1]);
+	    E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], rexpansions, iexpansions);
 #ifndef NDEBUG
 	    {
 		for(int i = 0; i < ORDER; ++i)
-		    assert(!std::isnan((double)expansions[0][i]) && !std::isnan(expansions[1][i]));
+		    assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
 	    }
 #endif
 	}

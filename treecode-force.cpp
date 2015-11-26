@@ -30,7 +30,7 @@ namespace EvaluateForce
 	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
 	if (4 * node.r * node.r < thetasquared * r2)
-	    force_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.expansions[0], node.expansions[1], xresult, yresult);
+	    force_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.rexpansions, node.iexpansions, xresult, yresult);
 	else
 	{
 	    if (node.leaf)

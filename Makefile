@@ -31,15 +31,17 @@ config ?= release
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order)
 TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real) 
 
-ifeq "$(config)" "release"
-	TLPFLAGS += -O3 -DNDEBUG 
-else
-	TLPFLAGS += $(CXXFLAGS)
-endif
 
 KERNELSFLAGS =  -O4 -DNDEBUG  -ftree-vectorize \
 	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math \
 	-ftree-vectorizer-verbose=0
+
+ifeq "$(config)" "release"
+	TLPFLAGS += -O3 -DNDEBUG 
+else
+	TLPFLAGS += -g
+	KERNELSFLAGS += -g
+endif
 
 ifeq "$(gprof)" "1"
 	CXXFLAGS += -pg

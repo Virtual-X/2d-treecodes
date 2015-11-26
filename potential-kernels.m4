@@ -57,6 +57,8 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
     return sum / 2;
   }
 
+  typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
+
   realtype potential_e2p(const realtype mass,
     const realtype rz,
     const realtype iz,
@@ -65,22 +67,34 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
     {
       const realtype r2 = rz * rz + iz * iz;
 
-      const realtype rinvz = rz / r2;
-      const realtype iinvz = -iz / r2;
+      const realtype rinvz_1 = rz / r2;
+      const realtype iinvz_1 = -iz / r2;
 
-      const realtype rprod_0 = rinvz;
-      const realtype iprod_0 = iinvz;
+      LUNROLL(n, 2, eval(4), `
+      const realtype TMP(rinvz, n) = TMP(rinvz, eval(n - 1)) * rinvz_1 - TMP(iinvz, eval(n - 1)) * iinvz_1;
+      const realtype TMP(iinvz, n) = TMP(rinvz, eval(n - 1)) * iinvz_1 + TMP(iinvz, eval(n - 1)) * rinvz_1;')
 
-      realtype rs = mass * log(r2) / 2;
+      V4 rz4 = { TMP(rinvz, 4), TMP(rinvz, 4), TMP(rinvz, 4), TMP(rinvz, 4) };
+      V4 iz4 = { TMP(iinvz, 4), TMP(iinvz, 4), TMP(iinvz, 4), TMP(iinvz, 4) };
+      V4 rbase = { TMP(rinvz, 1), TMP(rinvz, 2), TMP(rinvz, 3), TMP(rinvz, 4) };
+      V4 ibase = { TMP(iinvz, 1), TMP(iinvz, 2), TMP(iinvz, 3), TMP(iinvz, 4) };
+      V4 rsum = {0, 0, 0, 0};
 
-      rs += rprod_0 * rxp[0] - iprod_0 * ixp[0];
+      LUNROLL(j, 0, eval(ORDER/4 - 1), `
+      {
+        V4 tmp0 = rbase * rz4 - ibase * iz4;
+        V4 tmp1 = rbase * iz4 + ibase * rz4;
 
-      LUNROLL(n, 1, eval(ORDER - 1), `
-      const realtype TMP(rprod, n) = rinvz * TMP(rprod, eval(n - 1)) - iinvz * TMP(iprod, eval(n - 1));
-      const realtype TMP(iprod, n) = iinvz * TMP(rprod, eval(n - 1)) + rinvz * TMP(iprod, eval(n - 1));
+        V4 rxp4 = { rxp[eval(4 * j)], rxp[eval(4 * j + 1)], rxp[eval(4 * j + 2)], rxp[eval(4 * j + 3)] };
+        V4 ixp4 = { ixp[eval(4 * j)], ixp[eval(4 * j + 1)], ixp[eval(4 * j + 2)], ixp[eval(4 * j + 3)] };
 
-      rs += TMP(rprod, n) * rxp[n] - TMP(iprod, n) * ixp[n];
+        rsum += rxp4 * rbase - ixp4 * ibase;
+        //isum += rxp4 * ibase + ixp4 * rbase;
+
+        rbase = tmp0;
+        ibase = tmp1;
+      }
       ')
 
-      return rs;
+      return  mass * log(r2) / 2 + rsum[0] + rsum[1] + rsum[2] + rsum[3];
     }

@@ -65,7 +65,7 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 		*yresult = ysum;
 	}
 
-	void force_e2p(const realtype mass,
+	void force_e2p_old(const realtype mass,
 		const realtype rz,
 		const realtype iz,
 		const realtype * __restrict__ const rxp,
@@ -77,6 +77,9 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 
 			const realtype rinvz = rz / r2;
 			const realtype iinvz = -iz / r2;
+
+			realtype rinvz4 = rinvz;
+			realtype iinvz4 = iinvz;
 
 			realtype xs = mass * rinvz;
 			realtype ys = mass * iinvz;
@@ -98,3 +101,53 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 			*xresult = xs;
 			*yresult = -ys;
 		}
+
+		typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
+
+		void force_e2p(const realtype mass,
+			const realtype rz,
+			const realtype iz,
+			const realtype * __restrict__ const rxp,
+			const realtype * __restrict__ const ixp,
+			realtype * const xresult,
+			realtype * const yresult)
+			{
+				const realtype r2 = rz * rz + iz * iz;
+
+				const realtype rinvz_1 = rz / r2;
+				const realtype iinvz_1 = -iz / r2;
+
+				LUNROLL(n, 2, eval(5), `
+				const realtype TMP(rinvz, n) = TMP(rinvz, eval(n - 1)) * rinvz_1 - TMP(iinvz, eval(n - 1)) * iinvz_1;
+				const realtype TMP(iinvz, n) = TMP(rinvz, eval(n - 1)) * iinvz_1 + TMP(iinvz, eval(n - 1)) * rinvz_1;')
+
+				V4 rz4 = { TMP(rinvz, 4), TMP(rinvz, 4), TMP(rinvz, 4), TMP(rinvz, 4) };
+				V4 iz4 = { TMP(iinvz, 4), TMP(iinvz, 4), TMP(iinvz, 4), TMP(iinvz, 4) };
+				V4 rbase = { TMP(rinvz, 2), TMP(rinvz, 3), TMP(rinvz, 4), TMP(rinvz, 5) };
+				V4 ibase = { TMP(iinvz, 2), TMP(iinvz, 3), TMP(iinvz, 4), TMP(iinvz, 5) };
+
+				V4 rsum = {0, 0, 0, 0};
+				V4 isum = {0, 0, 0, 0};
+				V4 k4 = {1, 2, 3, 4};
+
+				LUNROLL(j, 0, eval(ORDER/4 - 1), `
+				{
+					V4 tmp0 = rbase * rz4 - ibase * iz4;
+					V4 tmp1 = rbase * iz4 + ibase * rz4;
+
+					V4 rxp4 = { rxp[eval(4 * j)], rxp[eval(4 * j + 1)], rxp[eval(4 * j + 2)], rxp[eval(4 * j + 3)] };
+					V4 ixp4 = { ixp[eval(4 * j)], ixp[eval(4 * j + 1)], ixp[eval(4 * j + 2)], ixp[eval(4 * j + 3)] };
+
+					rsum -= (rxp4 * rbase - ixp4 * ibase) * k4;
+					isum -= (rxp4 * ibase + ixp4 * rbase) * k4;
+
+					rbase = tmp0;
+					ibase = tmp1;
+
+					k4 += 4;
+				}
+				')
+
+				*xresult = mass * rinvz_1 + rsum[0] + rsum[1] + rsum[2] + rsum[3];
+				*yresult = -(mass * iinvz_1 + isum[0] + isum[1] + isum[2] + isum[3]);
+			}
