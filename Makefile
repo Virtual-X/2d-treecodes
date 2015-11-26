@@ -20,7 +20,7 @@ treecode-force-order ?= 24
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
-OBJS = upward.o treecode-potential.o potential-kernels.o force-kernels.o $(UPWARDKERNELS_POTENTIAL).o
+OBJS = treecode-potential.o treecode-force.o upward.o potential-kernels.o force-kernels.o $(UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 	OBJS += $(UPWARDKERNELS_FORCE).o 
@@ -29,12 +29,12 @@ endif
 config ?= release
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order)
-TREECODEFLAGS =  -std=c++11 -march=native -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order)
+TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real) 
 
 ifeq "$(config)" "release"
-	TREECODEFLAGS += -O3 -DNDEBUG -ftree-vectorize
+	TLPFLAGS += -O3 -DNDEBUG 
 else
-	TREECODEFLAGS += $(CXXFLAGS)
+	TLPFLAGS += $(CXXFLAGS)
 endif
 
 KERNELSFLAGS =  -O4 -DNDEBUG  -ftree-vectorize \
@@ -43,20 +43,23 @@ KERNELSFLAGS =  -O4 -DNDEBUG  -ftree-vectorize \
 
 ifeq "$(gprof)" "1"
 	CXXFLAGS += -pg
-	TREECODEFLAGS += -pg
+	TLPFLAGS += -pg
 endif
 
-test: main.cpp $(OBJS) treecode.h
-	echo OBJS ARE $(OBJS)
-	$(CXX) $(CXXFLAGS) main.cpp $(OBJS) -g -o test
+test: main.cpp treecode.a
+	$(CXX) $(CXXFLAGS) $^ -g -o test
+
+treecode.a: $(OBJS) treecode.h
 	ar rcs treecode.a $(OBJS)
 
 treecode-potential.o: treecode-potential.cpp treecode.h Makefile
-	$(CXX) $(TREECODEFLAGS) -c $<
+	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
+
+treecode-force.o: treecode-force.cpp treecode.h Makefile
+	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-force-order) -c $<
 
 upward.o: upward.cpp upward.h Makefile
-	echo OBJS ARE $(OBJS)
-	$(CXX) $(TREECODEFLAGS) -c $<
+	$(CXX) $(TLPFLAGS) -c $<
 
 potential-kernels.o: potential-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^

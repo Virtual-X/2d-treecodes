@@ -30,31 +30,42 @@ namespace Tree
 	realtype w, wx, wy, mass, r;
 
 	Node * children[4];
-
-	realtype expansions[2][ORDER];
+	
+	void setup(int x, int y, int l, int s, int e, bool leaf)
+	    {
+		this->x = x;
+		this->y = y;
+		this->l = l;
+		this->s = s;
+		this->e = e;
+		this->leaf = leaf;
+	    }
 	
 	realtype xcom() const { return wx / w; }
 	realtype ycom() const { return wy / w; }
 
-	Node() = default;
+	Node() { for (int i = 0; i < 4; ++i) children[i] = nullptr; w = wx = wy = mass = r = 0; }
+		
+	
+	virtual void allocate_children() = 0;
+	
+	virtual void p2e(const realtype * __restrict__ const xsources,
+			 const realtype * __restrict__ const ysources,
+			 const realtype * __restrict__ const sources,
+			 const double x0, const double y0, const double h) = 0;
 
-	~Node()
+	virtual void e2e() = 0;
+
+	virtual ~Node()
 	    {
-		if (!leaf)
-		    for(int i = 0; i < 4; ++i)
-		    {
-			delete children[i];
-			
-			children[i] = NULL;
-		    }
+	
 	    }
     };
 
     extern realtype *xdata, *ydata, *vdata;
-    extern Node * root;
-    
+        
     void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	       const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst);
+	       const realtype * const xdst, const realtype * const ydst, const int ndst,  Node * const root);
     
     void dispose();
 };

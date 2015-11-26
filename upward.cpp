@@ -34,7 +34,7 @@ namespace Tree
 
     Node * root = NULL;
 
-    void _build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) 
+    void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask) 
     {
 	const double h = ext / (1 << l);
 	const double x0 = xmin + h * x, y0 = ymin + h * y;
@@ -46,19 +46,18 @@ namespace Tree
 	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
 #endif
 
-	Node * const node = new Node{x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX};
-	*_node = node;
-
+	node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
+	
 	if (node->leaf)
 	{
-	    P2E_KERNEL(&xdata[s], &ydata[s], &vdata[s], e - s,
-		       x0, y0, h, &node->mass, &node->w, &node->wx, &node->wy, &node->r,
-		       node->expansions[0], node->expansions[1]);
+	    node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
 
 	    assert(node->r < 1.5 * h);
 	}
 	else
 	{
+	    node->allocate_children();
+	    
 	    for(int c = 0; c < 4; ++c)
 	    {
 		const int shift = 2 * (LMAX - l - 1);
@@ -69,7 +68,7 @@ namespace Tree
 		const size_t indexmin = std::lower_bound(keys + s, keys + e, key1) - keys;
 		const size_t indexsup = std::upper_bound(keys + s, keys + e, key2) - keys;
 
-		Node ** chd = &node->children[c];
+		Node * chd = node->children[c];
 
 #pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (c < 3 && l < 8)
 		{
@@ -108,37 +107,16 @@ namespace Tree
 		realtype r = 0;
 
 		for(int i = s; i < e; ++i)
-		    r = max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
+		    r = std::max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
 
 		assert (sqrt(r) <= node->r);
 	    }
 #endif
-
-	    V4 srcmass, rx, ry, chldexp[2][ORDER];
-	    for(int c = 0; c < 4; ++c)
-	    {
-		Node * chd = node->children[c];
-
-		srcmass[c] = chd->mass;
-		rx[c] = chd->xcom();
-		ry[c] = chd->ycom();
-
-		for(int i = 0; i < 2; ++i)
-		    for(int j = 0; j < ORDER; ++j)
-			chldexp[i][j][c] = chd->expansions[i][j];
-	    }
-
-	    rx -= node->xcom();
-	    ry -= node->ycom();
-
-	    E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], node->expansions[0], node->expansions[1]);
+	    node->e2e();
 	}
 
 #ifndef NDEBUG
 	{
-	    for(int i = 0; i < ORDER; ++i)
-		assert(!::isnan((double)node->expansions[0][i]) && !::isnan(node->expansions[1][i]));
-
 	    assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
 	}
 #endif
@@ -146,7 +124,8 @@ namespace Tree
 }
 
 void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-		 const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
+		 const realtype * const xdst, const realtype * const ydst, const int ndst,
+		 Node * const root)
 {
     posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
     posix_memalign((void **)&xdata, 32, sizeof(*xdata) * nsrc);
@@ -193,9 +172,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     
     __gnu_parallel::sort(kv, kv + nsrc);
 
-    Node * myroot;
-    
-#pragma omp parallel shared(myroot)
+#pragma omp parallel
+    //shared(root)
     {
 
 #pragma omp for
@@ -218,15 +196,13 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
 #pragma omp single //with nowait it crashes
 	{
-	    _build(&myroot, 0, 0, 0, 0, nsrc, 0);
+	    _build(root, 0, 0, 0, 0, nsrc, 0);
 	}
 
 #pragma omp single
 	{
 	    free(keys);
-	    root = myroot;
 	}
-
     }
     
 }
