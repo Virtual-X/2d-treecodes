@@ -21,71 +21,10 @@
 
 namespace EvaluatePotential
 {
-    realtype thetasquared;
-    
-    struct NodePotential : Tree::Node
-    {
-	realtype expansions[2][ORDER];
-	
-	void allocate_children() override
-	    {
-		for(int i = 0; i < 4; ++i)
-		    children[i] = new NodePotential;
-	    }
-	
-	void p2e(const realtype * __restrict__ const xsources,
-		 const realtype * __restrict__ const ysources,
-		 const realtype * __restrict__ const vsources,
-		 const double x0, const double y0, const double h) override
-	    {
-		P2E_KERNEL(xsources, ysources, vsources, e - s,
-			   x0, y0, h, &mass, &w, &wx, &wy, &r,
-			   expansions[0], expansions[1]);
-	    }
+    struct NodePotential : Tree::NodeImplementation<ORDER> { };
 
-	void e2e() override
-	    {
-		V4 srcmass, rx, ry, chldexp[2][ORDER];
-		
-		for(int c = 0; c < 4; ++c)
-		{
-		    NodePotential * chd = (NodePotential *)children[c];
+    realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
-		    srcmass[c] = chd->mass;
-		    rx[c] = chd->xcom();
-		    ry[c] = chd->ycom();
-
-		    for(int i = 0; i < 2; ++i)
-			for(int j = 0; j < ORDER; ++j)
-			    chldexp[i][j][c] = chd->expansions[i][j];
-		}
-
-		rx -= xcom();
-		ry -= ycom();
-
-		E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], expansions[0], expansions[1]);
-#ifndef NDEBUG
-		{
-		    for(int i = 0; i < ORDER; ++i)
-			assert(!std::isnan((double)expansions[0][i]) && !std::isnan(expansions[1][i]));
-		}
-#endif
-	    }
-
-	~NodePotential() override
-	    {
-		for(int i = 0; i < 4; ++i)
-		    if (children[i])
-		    {
-			delete children[i];
-			    
-			children[i] = nullptr;
-		    }
-	    }
-    };
-
-    realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
-    
     void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & node)
     {
 	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
@@ -128,13 +67,13 @@ void treecode_potential(const realtype theta,
     thetasquared = theta * theta;
 
     NodePotential root;
-    
+
     Tree::build(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst, &root);
-    
+
     xdata = Tree::xdata;
     ydata = Tree::ydata;
     vdata = Tree::vdata;
-        
+
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i], root);

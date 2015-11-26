@@ -21,70 +21,9 @@
 
 namespace EvaluateForce
 {
-    realtype thetasquared;
-    
-    struct NodeForce : Tree::Node
-    {
-	realtype expansions[2][ORDER];
-	
-	void allocate_children() override
-	    {
-		for(int i = 0; i < 4; ++i)
-		    children[i] = new NodeForce;
-	    }
-	
-	void p2e(const realtype * __restrict__ const xsources,
-		 const realtype * __restrict__ const ysources,
-		 const realtype * __restrict__ const vsources,
-		 const double x0, const double y0, const double h) override
-	    {
-		P2E_KERNEL(xsources, ysources, vsources, e - s,
-			   x0, y0, h, &mass, &w, &wx, &wy, &r,
-			   expansions[0], expansions[1]);
-	    }
+    struct NodeForce : Tree::NodeImplementation<ORDER> { };
 
-	void e2e() override
-	    {
-		V4 srcmass, rx, ry, chldexp[2][ORDER];
-		
-		for(int c = 0; c < 4; ++c)
-		{
-		    NodeForce * chd = (NodeForce *)children[c];
-
-		    srcmass[c] = chd->mass;
-		    rx[c] = chd->xcom();
-		    ry[c] = chd->ycom();
-
-		    for(int i = 0; i < 2; ++i)
-			for(int j = 0; j < ORDER; ++j)
-			    chldexp[i][j][c] = chd->expansions[i][j];
-		}
-
-		rx -= xcom();
-		ry -= ycom();
-
-		E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], expansions[0], expansions[1]);
-#ifndef NDEBUG
-		{
-		    for(int i = 0; i < ORDER; ++i)
-			assert(!std::isnan((double)expansions[0][i]) && !std::isnan(expansions[1][i]));
-		}
-#endif
-	    }
-
-	~NodeForce() override
-	    {
-		for(int i = 0; i < 4; ++i)
-		    if (children[i])
-		    {
-			delete children[i];
-			    
-			children[i] = nullptr;
-		    }
-	    }
-    };
-
-    realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
+    realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
     
     void evaluate(realtype * const xresult, realtype * const yresult, const realtype xt, const realtype yt, const NodeForce & node)
     {

@@ -64,20 +64,20 @@ upward.o: upward.cpp upward.h Makefile
 potential-kernels.o: potential-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
-potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
-	m4 -D ORDER=$(treecode-potential-order) -D realtype=$(real) potential-kernels.m4 | indent > potential-kernels.c
-
 force-kernels.o: force-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
-
-force-kernels.c: force-kernels.m4 force-kernels.h Makefile
-	m4 -D ORDER=$(treecode-force-order) -D realtype=$(real) force-kernels.m4 | indent > force-kernels.c
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_FORCE).o: $(UPWARDKERNELS_FORCE).c 
 	$(CC) $(KERNELSFLAGS) -c $^
+
+potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
+	m4 -D ORDER=$(treecode-potential-order) -D realtype=$(real) potential-kernels.m4 | indent > potential-kernels.c
+
+force-kernels.c: force-kernels.m4 force-kernels.h Makefile
+	m4 -D ORDER=$(treecode-force-order) -D realtype=$(real) force-kernels.m4 | indent > force-kernels.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
 	m4 -D ORDER=$(treecode-potential-order) -D realtype=$(real) upward-kernels.m4 | indent > $(UPWARDKERNELS_POTENTIAL).c
