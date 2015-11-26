@@ -22,7 +22,7 @@
 #define LEAF_MAXCOUNT 96
 #define LMAX 15
 
-void Tree::_build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask)
+void Tree::_build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) const
 {
     const double h = ext / (1 << l);
     const double x0 = xmin + h * x, y0 = ymin + h * y;

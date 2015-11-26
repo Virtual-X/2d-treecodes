@@ -17,8 +17,9 @@
 #include "upward.h"
 
 realtype thetasquared;
+realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
 
-void evaluate(Tree& tree, realtype * const result, const realtype xt, const realtype yt, const Node & node)
+void evaluate(realtype * const result, const realtype xt, const realtype yt, const Node & node)
 {
     const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
 
@@ -30,7 +31,7 @@ void evaluate(Tree& tree, realtype * const result, const realtype xt, const real
 	{
 	    const int s = node.s;
 
-	    *result = treecode_p2p(&tree.xdata[s], &tree.ydata[s], &tree.vdata[s], node.e - s, xt, yt);
+	    *result = treecode_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
 	}
 	else
 	{
@@ -41,7 +42,7 @@ void evaluate(Tree& tree, realtype * const result, const realtype xt, const real
 		Node * chd = node.children[c];
 		realtype * ptr = s + c;
 
-		evaluate(tree, ptr, xt, yt, *chd);
+		evaluate( ptr, xt, yt, *chd);
 	    }
 
 	    *result = s[0] + s[1] + s[2] + s[3];
@@ -55,12 +56,25 @@ void treecode_potential(const realtype theta,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {
     thetasquared = theta * theta;
-    
+
+    const double tstart = omp_get_wtime();
     Tree tree(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst, vdst);
+    const double tend = omp_get_wtime();
+
+    printf("tree built in %.2f ms\n", (tend - tstart) * 1e3);
+    xdata = tree.xdata;
+    ydata = tree.ydata;
+    vdata = tree.vdata;
+    const double tstart2 = omp_get_wtime();
     
-    
-#pragma omp for schedule(static,1)
+#pragma omp parallel for
+    //schedule(static,1)
     for(int i = 0; i < ndst; ++i)
-	evaluate(tree, vdst + i, xdst[i], ydst[i], *tree.root);   
+	evaluate(vdst + i, xdst[i], ydst[i], *tree.root);
+    
+    
+    const double tend2 = omp_get_wtime();
+
+    printf("tree evaluated in %.2f ms\n", (tend2 - tstart2) * 1e3);
 }
 

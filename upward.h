@@ -56,7 +56,7 @@ struct Tree
 
     realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
 
-    void _build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask);
+    void _build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) const;
 
     Node * root = NULL;
     
