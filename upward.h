@@ -46,22 +46,13 @@ struct Node
 	}
 };
 
-struct Tree
+namespace Tree
 {
-    const realtype eps = 10 * std::numeric_limits<realtype>::epsilon();
-
-    realtype ext, xmin, ymin;
-
-    int * keys = NULL;
-
-    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
-
-    void _build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) const;
-
-    Node * root = NULL;
+    extern realtype *xdata, *ydata, *vdata;
+    extern Node * root;
     
-    Tree(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
+    void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 	 const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst);
     
-    ~Tree();
+    void dispose();
 };

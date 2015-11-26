@@ -58,19 +58,18 @@ void treecode_potential(const realtype theta,
     thetasquared = theta * theta;
 
     const double tstart = omp_get_wtime();
-    Tree tree(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst, vdst);
+    Tree::build(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst, vdst);
     const double tend = omp_get_wtime();
 
     printf("tree built in %.2f ms\n", (tend - tstart) * 1e3);
-    xdata = tree.xdata;
-    ydata = tree.ydata;
-    vdata = tree.vdata;
+    xdata = Tree::xdata;
+    ydata = Tree::ydata;
+    vdata = Tree::vdata;
     const double tstart2 = omp_get_wtime();
     
-#pragma omp parallel for
-    //schedule(static,1)
+#pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
-	evaluate(vdst + i, xdst[i], ydst[i], *tree.root);
+	evaluate(vdst + i, xdst[i], ydst[i], *Tree::root);
     
     
     const double tend2 = omp_get_wtime();

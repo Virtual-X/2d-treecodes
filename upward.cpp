@@ -22,7 +22,19 @@
 #define LEAF_MAXCOUNT 96
 #define LMAX 15
 
-void Tree::_build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) const
+namespace Tree
+{
+    const realtype eps = 10 * std::numeric_limits<realtype>::epsilon();
+
+    realtype ext, xmin, ymin;
+
+    int * keys = NULL;
+
+    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
+
+    Node * root = NULL;
+
+    void _build(Node ** _node, const int x, const int y, const int l, const int s, const int e, const int mask) 
 {
     const double h = ext / (1 << l);
     const double x0 = xmin + h * x, y0 = ymin + h * y;
@@ -131,8 +143,9 @@ void Tree::_build(Node ** _node, const int x, const int y, const int l, const in
     }
 #endif
 }
+}
 
-Tree::Tree(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
+void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 	   const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {
     posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
@@ -211,14 +224,14 @@ Tree::Tree(const realtype * const xsrc, const realtype * const ysrc, const realt
 #pragma omp single
 	{
 	    free(keys);
+	    root = myroot;
 	}
 
     }
-
-    root = myroot;
+    
 }
     
-Tree::~Tree()
+void Tree::dispose()
 {
     free(xdata);
     free(ydata);
