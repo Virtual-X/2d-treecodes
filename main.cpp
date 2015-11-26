@@ -327,6 +327,8 @@ int main(int argc, char ** argv)
 
     file2test("diegoBinaryN400");
     file2test("diegoBinaryN2000");
+    file2test("diegoVel/velocityPoissonFishLmax6");
+    
     //file2test("diegoBinaryN12000");
 
     for(int itest = 0; itest < 10; ++itest)
