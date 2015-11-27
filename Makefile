@@ -29,8 +29,15 @@ endif
 config ?= release
 
 CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order)
-TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real) 
+TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real)
 
+M4FLAGS = -D realtype=$(real)
+AVXSUPPORT = $(shell cat /proc/cpuinfo | egrep avx)
+ifeq ($(real),double)
+ifneq ($(AVXSUPPORT),"") 
+M4FLAGS += -D TUNED4AVXDP=1
+endif
+endif
 
 KERNELSFLAGS =  -O4 -DNDEBUG  -ftree-vectorize \
 	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math \
@@ -76,16 +83,16 @@ $(UPWARDKERNELS_FORCE).o: $(UPWARDKERNELS_FORCE).c
 	$(CC) $(KERNELSFLAGS) -c $^
 
 potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
-	m4 -D ORDER=$(treecode-potential-order) -D realtype=$(real) potential-kernels.m4 | indent > potential-kernels.c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) potential-kernels.m4 | indent > potential-kernels.c
 
 force-kernels.c: force-kernels.m4 force-kernels.h Makefile
-	m4 -D ORDER=$(treecode-force-order) -D realtype=$(real) force-kernels.m4 | indent > force-kernels.c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4 | indent > force-kernels.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
-	m4 -D ORDER=$(treecode-potential-order) -D realtype=$(real) upward-kernels.m4 | indent > $(UPWARDKERNELS_POTENTIAL).c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4 | indent > $(UPWARDKERNELS_POTENTIAL).c
 
 $(UPWARDKERNELS_FORCE).c: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
-	m4 -D ORDER=$(treecode-force-order) -D realtype=$(real) upward-kernels.m4 | indent > $(UPWARDKERNELS_FORCE).c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4 | indent > $(UPWARDKERNELS_FORCE).c
 
 clean:
 	rm -f test *.o *.a potential-kernels*.c upward-kernels*.c
