@@ -13,7 +13,7 @@
 include(unroll.m4)
 
 #include <math.h>
-
+define(NACC, 32)
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 

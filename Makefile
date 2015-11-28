@@ -60,6 +60,8 @@ test: main.cpp treecode.a
 
 treecode.a: $(OBJS) treecode.h
 	ar rcs treecode.a $(OBJS)
+	objdump -S force-kernels.o | cut -d $$'\t' -f3 | sed '/^$$/d' | egrep -n FORCE_P2P | awk '{s = $$1 - s} END {print("FORCE P2P:", s, " instructions");}'
+	objdump -S force-kernels.o | cut -d $$'\t' -f3 | sed '/^$$/d' | egrep -n FORCE_E2P | awk '{s = $$1 - s} END {print("FORCE E2P:", s, " instructions");}'
 
 treecode-potential.o: treecode-potential.cpp treecode.h Makefile
 	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
@@ -74,7 +76,7 @@ potential-kernels.o: potential-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
 force-kernels.o: force-kernels.c
-	$(CC) $(KERNELSFLAGS) -c $^
+	$(CC) $(KERNELSFLAGS) -Wa,-al=$(basename $^).s -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
