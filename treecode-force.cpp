@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <tuple>
+#include <algorithm>
 
 #include "treecode.h"
 #include "upward-kernels.h"
@@ -30,8 +31,9 @@ namespace EvaluateForce
     {
 	int64_t e2pcalls, e2pcycles, p2pcalls, p2pcycles;
 	int64_t startc, endc;
+	bool failed;
 
-	void setup() { e2pcalls = e2pcycles = p2pcalls = p2pcycles = 0; }
+	void setup() { e2pcalls = e2pcycles = p2pcalls = p2pcycles = 0; failed = false;}
 	double tot_cycles() { return (double)(endc - startc); }
 	std::tuple<double, double, double> e2p() {
 	    return std::make_tuple((double)(e2pcycles), (double)e2pcycles / (double)e2pcalls, (double) e2pcalls * 192 / e2pcycles);
@@ -40,48 +42,61 @@ namespace EvaluateForce
 
 #pragma omp threadprivate(perfmon)
 
-    void evaluate(realtype * const xresult, realtype * const yresult, const realtype xt, const realtype yt, const NodeForce & node)
+    void evaluate(realtype * const xresult, realtype * const yresult, const realtype xt, const realtype yt, const NodeForce & root)
     {
-	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
+	const NodeForce * stack[12 * 4 * 2];
+	int stackentry = 0, maxentry = 0;
 
-	if (4 * node.r * node.r < thetasquared * r2)
-	{
-	    int64_t startc = _rdtsc();
-	    force_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.rexpansions, node.iexpansions, xresult, yresult);
-	    int64_t endc = _rdtsc();
+	stack[0] = &root;
 
-	    perfmon.e2pcycles += endc - startc;
-	    ++perfmon.e2pcalls;
-	}
-	else
+	while(stackentry > -1)
 	{
-	    if (node.leaf)
+	    const NodeForce * const node = stack[stackentry--];
+	    
+	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
+	    
+	    if (4 * node->r * node->r < thetasquared * r2)
 	    {
-		const int s = node.s;
-
+		realtype tmp[2];
+		
 		int64_t startc = _rdtsc();
-		force_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt, xresult, yresult);
+		force_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions, tmp, tmp + 1);
 		int64_t endc = _rdtsc();
 
-		perfmon.p2pcycles += endc - startc;
-		++perfmon.p2pcalls;
+		*xresult += tmp[0];
+		*yresult += tmp[1];
+
+		perfmon.e2pcycles += endc - startc;
+		++perfmon.e2pcalls;
 	    }
 	    else
 	    {
-		realtype xs[4] = {0, 0, 0, 0}, ys[4] = {0, 0, 0, 0};
-
-		for(int c = 0; c < 4; ++c)
+		if (node->leaf)
 		{
-		    NodeForce * chd = (NodeForce *)node.children[c];
-		    realtype * xptr = xs + c, * yptr = ys + c;
+		    const int s = node->s;
 
-		    evaluate(xptr, yptr, xt, yt, *chd);
+		    realtype tmp[2];
+		    int64_t startc = _rdtsc();
+		    force_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt, tmp, tmp + 1);
+		    int64_t endc = _rdtsc();
+		    
+		    *xresult += tmp[0];
+		    *yresult += tmp[1];
+
+		    perfmon.p2pcycles += endc - startc;
+		    ++perfmon.p2pcalls;
 		}
+		else
+		{
+		    for(int c = 0; c < 4; ++c)
+			stack[++stackentry] = (NodeForce *)node->children[c];
 
-		*xresult = xs[0] + xs[1] + xs[2] + xs[3];
-		*yresult = ys[0] + ys[1] + ys[2] + ys[3];
+		    maxentry = std::max(maxentry, stackentry);
+		}
 	    }
 	}
+
+	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
     }
 
 
@@ -117,13 +132,24 @@ namespace EvaluateForce
 
 	    perf[omp_get_thread_num()] = perfmon;
 	}
-
+	
+	for(int i = 0; i < omp_get_max_threads(); ++i)
+	    if (perf[i].failed)
+	    {
+		printf("oops there was an overflow in the computation\n");
+		abort();
+	    }
+	
 	for(int i = 0; i < omp_get_max_threads(); ++i)
 	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
 
 	for(int i = 0; i < omp_get_max_threads(); ++i)
 	    printf("TID %d: E2P cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n", i, std::get<0>(perf[i].e2p()), 100. * perf[i].e2pcycles / perf[i].tot_cycles(), std::get<1>(perf[i].e2p()), std::get<2>(perf[i].e2p()));
-	/*
+
+	for(int i = 0; i < omp_get_max_threads(); ++i)
+	    printf("TID %d: traversal overhead: %.1f %% \n", i, 100. * (1 - (double)(perf[i].e2pcycles + perf[i].p2pcycles)/perf[i].tot_cycles()));
+
+/*
 	    printf("TID: %d, c:%3.e  #e2p: %d, e2p c: %.2e, IPC %.2f p2pcalls: %d IPC: %.2f\n",
 		   omp_get_thread_num(), (double)(endc - startc), (double)perfmon.e2pcycle
 		   perfmon.e2pcalls, 1. / perfmon.e2pcalls * (double)perfmon.e2pcycles, perfmon.e2pcalls * 192 / (double)perfmon.e2pcycles,
