@@ -19,12 +19,12 @@
 #include "upward.h"
 #include "upward-kernels.h"
 
-#define LEAF_MAXCOUNT 96
 #define LMAX 15
 
 namespace Tree
 {
     const realtype eps = 10 * std::numeric_limits<realtype>::epsilon();
+    int LEAF_MAXCOUNT;
 
     realtype ext, xmin, ymin;
 
@@ -34,7 +34,7 @@ namespace Tree
 
     Node * root = NULL;
 
-    void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask) 
+    void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
     {
 	const double h = ext / (1 << l);
 	const double x0 = xmin + h * x, y0 = ymin + h * y;
@@ -47,7 +47,7 @@ namespace Tree
 #endif
 
 	node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
-	
+
 	if (node->leaf)
 	{
 	    node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
@@ -57,7 +57,7 @@ namespace Tree
 	else
 	{
 	    node->allocate_children();
-	    
+
 	    for(int c = 0; c < 4; ++c)
 	    {
 		const int shift = 2 * (LMAX - l - 1);
@@ -125,8 +125,10 @@ namespace Tree
 
 void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 		 const realtype * const xdst, const realtype * const ydst, const int ndst,
-		 Node * const root)
+		 Node * const root, const int LEAF_MAXCOUNT)
 {
+    Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
+
     posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
     posix_memalign((void **)&xdata, 32, sizeof(*xdata) * nsrc);
     posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
@@ -169,7 +171,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	kv[i].first = key;
 	kv[i].second = i;
     }
-    
+
     __gnu_parallel::sort(kv, kv + nsrc);
 
 #pragma omp parallel
@@ -204,9 +206,9 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	    free(keys);
 	}
     }
-    
+
 }
-    
+
 void Tree::dispose()
 {
     free(xdata);
@@ -215,4 +217,3 @@ void Tree::dispose()
 
     delete root;
 }
-

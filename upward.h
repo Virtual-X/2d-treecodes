@@ -134,7 +134,7 @@ namespace Tree
     extern realtype *xdata, *ydata, *vdata;
 
     void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	       const realtype * const xdst, const realtype * const ydst, const int ndst,  Node * const root);
+	       const realtype * const xdst, const realtype * const ydst, const int ndst,  Node * const root, const int LEAF_MAXCOUNT);
 
     void dispose();
 };
