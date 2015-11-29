@@ -80,14 +80,16 @@ namespace EvaluateForce
 
     void evaluate(realtype * const xresult, realtype * const yresult,
 		  const realtype xt, const realtype yt,
-		  const NodeForce & root,
-		  const realtype thetasquared)
+		  const NodeForce & root, const realtype thetasquared)
     {
 	const NodeForce * stack[15 * 4 * 2];
 
 	int stackentry = 0, maxentry = 0;
 
 	stack[0] = &root;
+
+	*xresult = 0;
+	*yresult = 0;
 
 	while(stackentry > -1)
 	{
@@ -210,5 +212,4 @@ namespace EvaluateForce
 	const double t2 = omp_get_wtime();
 	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
     }
-
 }

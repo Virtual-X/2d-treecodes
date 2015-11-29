@@ -25,33 +25,39 @@ namespace EvaluatePotential
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & node)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & root)
     {
-	const realtype r2 = pow(xt - node.xcom(), 2) + pow(yt - node.ycom(), 2);
+	const NodePotential * stack[15 * 4 * 2];
 
-	if (4 * node.r * node.r < thetasquared * r2)
-	    *result = potential_e2p(node.mass, xt - node.xcom(), yt - node.ycom(), node.rexpansions, node.iexpansions);
-	else
+	int stackentry = 0, maxentry = 0;
+
+	stack[0] = &root;
+	*result = 0;
+	while(stackentry > -1)
 	{
-	    if (node.leaf)
-	    {
-		const int s = node.s;
+	    const NodePotential * const node = stack[stackentry--];
 
-		*result = potential_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
-	    }
+	    realtype tmp[2];
+
+	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
+
+	    if (4 * node->r * node->r < thetasquared * r2)
+		*result += potential_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions);
 	    else
 	    {
-		realtype s[4] = {0, 0, 0, 0};
-
-		for(int c = 0; c < 4; ++c)
+		if (node->leaf)
 		{
-		    NodePotential * chd = (NodePotential *)node.children[c];
-		    realtype * ptr = s + c;
+		    const int s = node->s;
 
-		    evaluate(ptr, xt, yt, *chd);
+		    *result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
 		}
+		else
+		{
+		    for(int c = 0; c < 4; ++c)
+			stack[++stackentry] = (NodePotential *)node->children[c];
 
-		*result = s[0] + s[1] + s[2] + s[3];
+		    maxentry = std::max(maxentry, stackentry);
+		}
 	    }
 	}
     }
