@@ -298,7 +298,7 @@ int main(int argc, char ** argv)
 	    fclose(fin);
 	};
 
-      file2test("testDiego/diegoBinaryN400");
+        file2test("testDiego/diegoBinaryN400");
     file2test("testDiego/diegoBinaryN2000");
 
       //if (!verify)
