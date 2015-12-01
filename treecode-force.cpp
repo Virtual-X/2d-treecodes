@@ -21,7 +21,7 @@
 #include "force-kernels.h"
 #include "upward.h"
 
-//#define _INSTRUMENTATION_
+#define _INSTRUMENTATION_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
@@ -59,12 +59,12 @@ namespace EvaluateForce
 
 	double tot_cycles() { return (double)(endc - startc); }
 
-	std::tuple<double, double, double, double> e2p()
+	std::tuple<double, double, double, double> e2p(const int instructions)
 	    {
 		return std::make_tuple((double)(e2pcycles),
 				       (double)(e2pcycles) / tot_cycles(),
 				       (double)(e2pcycles) / e2pcalls,
-				       (double)(e2pcalls * 192) / e2pcycles);
+				       (double)(e2pcalls * instructions) / e2pcycles);
 	    }
 
 	std::tuple<double, double, double, double> p2p()
@@ -204,7 +204,7 @@ namespace EvaluateForce
 
 #ifdef _INSTRUMENTATION_
 			perfmon.e2pcycles += endc - startc;
-			perfmon.e2pcalls += TILESIZE * TILESIZE;
+			perfmon.e2pcalls += 1;
 #endif
 		    }
 		    else
@@ -261,7 +261,7 @@ namespace EvaluateForce
 #endif
     }
 
-    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1)
+    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, const int e2pinstructions)
     {
 #ifdef _INSTRUMENTATION_
 	for(int i = 0; i < N; ++i)
@@ -276,7 +276,7 @@ namespace EvaluateForce
 
 	for(int i = 0; i < N; ++i)
 	{
-	    auto p = perf[i].e2p();
+	    auto p = perf[i].e2p(e2pinstructions);
 
 	    printf("TID %d: E2P cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
 		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
@@ -336,7 +336,7 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 196);
     }
 
     extern "C"
@@ -381,6 +381,6 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 2577);
     }
 }

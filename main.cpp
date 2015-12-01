@@ -290,7 +290,7 @@ int main(int argc, char ** argv)
 
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
-//	    test(theta, tol, fin, true, verify);
+	    test(theta, tol, fin, true, verify);
 
 	    fseek(fin, 0, SEEK_SET);
 
@@ -298,12 +298,12 @@ int main(int argc, char ** argv)
 	    fclose(fin);
 	};
 
-    //  file2test("testDiego/diegoBinaryN400");
-    //file2test("testDiego/diegoBinaryN2000");
+      file2test("testDiego/diegoBinaryN400");
+    file2test("testDiego/diegoBinaryN2000");
 
       //if (!verify)
     {
-//	file2test("testDiego/diegoBinaryN12000");
+	file2test("testDiego/diegoBinaryN12000");
 	file2test("diegoVel/velocityPoissonFishLmax6");
 	file2test("diegoVel/velocityPoissonCylUnif2048");
 	file2test("diegoVel/velocityPoissonFishLmax8Early");
