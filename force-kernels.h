@@ -35,6 +35,15 @@ extern "C"
 		   const realtype * __restrict__ const ixp,
 		   realtype * const xresult,
 		   realtype * const yresult);
+
+    void force_e2p_tiled(const realtype mass,
+			 const realtype rx,
+			 const realtype ry,
+			 const realtype h,
+			 const realtype * __restrict__ const rxp,
+			 const realtype * __restrict__ const ixp,
+			 realtype * const xresult,
+			 realtype * const yresult);
     
 #ifdef __cplusplus
 }

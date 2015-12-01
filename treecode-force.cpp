@@ -197,17 +197,8 @@ namespace EvaluateForce
 		    {
 			int64_t startc = MYRDTSC;
 
-			for(int iy = 0; iy < TILESIZE; ++iy)
-			    for(int ix = 0; ix < TILESIZE; ++ix)
-			    {
-				realtype tmp[2];
-
-				force_e2p(node->mass, x0 + (tx + ix) * h - xcom, y0 + (ty + iy) * h - ycom,
-					  node->rexpansions, node->iexpansions, tmp, tmp + 1);
-
-				xresult[iy][ix] += tmp[0];
-				yresult[iy][ix] += tmp[1];
-			    }
+			force_e2p_tiled(node->mass, x0 + tx * h - xcom, y0 + ty * h - ycom, h,
+					node->rexpansions, node->iexpansions, &xresult[0][0], &yresult[0][0]);
 
 			int64_t endc = MYRDTSC;
 
