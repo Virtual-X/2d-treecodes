@@ -74,7 +74,7 @@ void treecode_potential(const realtype theta,
 
     NodePotential root;
 
-    Tree::build(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst, &root, 64);
+    Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 64);
 
     xdata = Tree::xdata;
     ydata = Tree::ydata;

@@ -16,6 +16,7 @@ CC = gcc
 real ?= double
 treecode-potential-order ?= 12
 treecode-force-order ?= 24
+mrag-blocksize ?= 32
 
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
@@ -28,8 +29,8 @@ endif
 
 config ?= release
 
-CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order)
-TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real)
+CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
+TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
 
 M4FLAGS = -D realtype=$(real)
 AVXSUPPORT = $(shell cat /proc/cpuinfo | egrep avx)
@@ -105,6 +106,6 @@ $(UPWARDKERNELS_FORCE).c: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4 | indent > $(UPWARDKERNELS_FORCE).c
 
 clean:
-	rm -f test *.o *.a potential-kernels*.c upward-kernels*.c
+	rm -f test *.o *.a potential-kernels.c force-kernels.c upward-kernels*.c 
 
 .PHONY = clean

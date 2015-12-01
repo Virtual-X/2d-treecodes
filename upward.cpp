@@ -124,7 +124,6 @@ namespace Tree
 }
 
 void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-		 const realtype * const xdst, const realtype * const ydst, const int ndst,
 		 Node * const root, const int LEAF_MAXCOUNT)
 {
     Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;

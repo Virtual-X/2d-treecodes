@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <vector>
 
 #include "treecode.h"
 
@@ -120,15 +121,67 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	}
     }
 
+    realtype * x0s = nullptr, *y0s = nullptr, *hs = nullptr;
+
+    int NBLOCKS = 0;
+    const int BS2 = BLOCKSIZE * BLOCKSIZE;
+    const bool mrag = NDST % BS2 == 0;
+    if (mrag)
+    {
+	NBLOCKS = NDST / BS2;
+	printf("ndst: %d i have found %d blocks\n", NDST, NBLOCKS);
+	assert(NDST % BS2 == 0);
+
+	x0s = new realtype[NBLOCKS];
+	y0s = new realtype[NBLOCKS];
+	hs = new realtype[NBLOCKS];
+
+	for(int i = 0; i < NBLOCKS; ++i)
+	{
+	    x0s[i] = xdst[i * BS2];
+	    y0s[i] = ydst[i * BS2];
+	    hs[i] = xdst[i * BS2 + 1] - xdst[i * BS2];
+	    /*printf("h: %f test: %f %f %f %f\n",
+		   hs[i],
+		   xdst[i * BS2 + 1] - xdst[i * BS2],
+		   ydst[i * BS2 + BLOCKSIZE] - ydst[i * BS2],
+		   xdst[i * BS2 + BLOCKSIZE + 1] - xdst[i * BS2 + BLOCKSIZE],
+		   ydst[i * BS2 + BLOCKSIZE + 1] - ydst[i * BS2 + 1]);*/
+	}
+    }
+
     const realtype eps = std::numeric_limits<realtype>::epsilon() * 10;
+
+    realtype * xtargets = new realtype[NDST];
+    realtype * ytargets = new realtype[NDST];
+
+    printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
+    const double tstart = omp_get_wtime();
+    if (potential)
+	treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
+    else
+	if (mrag)
+	{
+	    printf("MRAG LAYOUT\n");
+	    treecode_force_mrag(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
+	}
+	else
+	    treecode_force(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
+    const double tend = omp_get_wtime();
+
+    printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
 
 #if 0 //while waiting clarifications from Sid, i overwrite his reference data with mine
     if (!f)
 #endif
 	if (verify)
+	{
+	    const int OFFSET = 34;
+	    const int JUMP = 250;
+
 	    if (potential)
 #pragma omp parallel for
-		for(int i = 0; i < NDST; ++i)
+		for(int i = OFFSET; i < NDST; i += JUMP)
 		{
 		    const realtype xd = xdst[i];
 		    const realtype yd = ydst[i];
@@ -147,7 +200,7 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 		}
 	    else
 #pragma omp parallel for
-		for(int i = 0; i < NDST; ++i)
+		for(int i = OFFSET; i < NDST; i += JUMP)
 		{
 		    const realtype xd = xdst[i];
 		    const realtype yd = ydst[i];
@@ -167,25 +220,30 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 		    yref[i] = ys;
 		}
 
-    realtype * xtargets = new realtype[NDST];
-    realtype * ytargets = new realtype[NDST];
+	    if (verify)
+	    {
+		std::vector<realtype> a, b, c, d;
 
-    printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
-    const double tstart = omp_get_wtime();
-    if (potential)
-	treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
-    else
-	treecode_force(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
-    const double tend = omp_get_wtime();
+		for(int i = OFFSET; i < NDST; i += JUMP)
+		{
+		    a.push_back(xref[i]);
+		    b.push_back(xtargets[i]);
+		    c.push_back(yref[i]);
+		    d.push_back(ytargets[i]);
+		}
 
-    printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
+		check(&a[0], &b[0], a.size());
 
-    if (verify)
+		if (!potential)
+		    check(&c[0], &d[0], c.size());
+	    }
+	}
+
+    if (mrag)
     {
-	check(xref, xtargets, NDST);
-
-	if (!potential)
-	    check(yref, ytargets, NDST);
+	delete [] x0s;
+	delete [] y0s;
+	delete [] hs;
     }
 
     delete [] xdst;
@@ -243,7 +301,7 @@ int main(int argc, char ** argv)
     file2test("testDiego/diegoBinaryN400");
     file2test("testDiego/diegoBinaryN2000");
 
-    if (!verify)
+      //if (!verify)
     {
 	file2test("testDiego/diegoBinaryN12000");
 	file2test("diegoVel/velocityPoissonFishLmax6");
@@ -251,11 +309,11 @@ int main(int argc, char ** argv)
 	file2test("diegoVel/velocityPoissonFishLmax8Early");
 	file2test("diegoVel/velocityPoissonFishLmax8Late");
     }
-    else
+    /*else
 	for(int itest = 0; itest < 10; ++itest)
 	{
 	    printf("test nr %d\n", itest);
 	    test(theta, tol, NULL, true, verify);
 	    test(theta, tol * 100, NULL, false, verify);
-	}
+	    }*/
 }

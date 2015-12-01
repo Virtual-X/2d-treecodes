@@ -21,7 +21,7 @@
 #include "force-kernels.h"
 #include "upward.h"
 
-#define _INSTRUMENTATION_
+//#define _INSTRUMENTATION_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
@@ -147,11 +147,167 @@ namespace EvaluateForce
 		}
 	    }
 	}
-	
+
 #ifdef _INSTRUMENTATION_
 	perfmon.maxstacksize = maxentry + 1;
 	++perfmon.evaluations;
 	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
+#endif
+    }
+
+#define TILESIZE 4
+
+    void evaluate(realtype * const xresultbase, realtype * const yresultbase,
+		  const realtype x0, const realtype y0, const realtype h,
+		  const NodeForce & root, const realtype thetasquared)
+    {
+	int maxentry = 0;
+
+	const NodeForce * stack[15 * 4 * 2];
+
+	for(int ty = 0; ty < BLOCKSIZE; ty += TILESIZE)
+	    for(int tx = 0; tx < BLOCKSIZE; tx += TILESIZE)
+	    {
+		realtype xresult[TILESIZE][TILESIZE], yresult[TILESIZE][TILESIZE];
+
+		for(int iy = 0; iy < TILESIZE; ++iy)
+		    for(int ix = 0; ix < TILESIZE; ++ix)
+			xresult[iy][ix] = 0;
+
+		for(int iy = 0; iy < TILESIZE; ++iy)
+		    for(int ix = 0; ix < TILESIZE; ++ix)
+			yresult[iy][ix] = 0;
+
+		int stackentry = 0;
+		stack[0] = &root;
+
+		while(stackentry > -1)
+		{
+		    const NodeForce * const node = stack[stackentry--];
+
+		    const realtype xcom = node->xcom();
+		    const realtype ycom = node->ycom();
+
+		    const double xt = std::max(x0 + tx * h, std::min(x0 + (tx + TILESIZE - 1) * h, xcom));
+		    const double yt = std::max(y0 + ty * h, std::min(y0 + (ty + TILESIZE - 1) * h, ycom));
+
+		    const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
+
+		    if (4 * node->r * node->r < thetasquared * r2)
+		    {
+			int64_t startc = MYRDTSC;
+
+			for(int iy = 0; iy < TILESIZE; ++iy)
+			    for(int ix = 0; ix < TILESIZE; ++ix)
+			    {
+				realtype tmp[2];
+
+				force_e2p(node->mass, x0 + (tx + ix) * h - xcom, y0 + (ty + iy) * h - ycom,
+					  node->rexpansions, node->iexpansions, tmp, tmp + 1);
+
+				xresult[iy][ix] += tmp[0];
+				yresult[iy][ix] += tmp[1];
+			    }
+
+			int64_t endc = MYRDTSC;
+
+#ifdef _INSTRUMENTATION_
+			perfmon.e2pcycles += endc - startc;
+			perfmon.e2pcalls += TILESIZE * TILESIZE;
+#endif
+		    }
+		    else
+		    {
+			if (node->leaf)
+			{
+			    const int s = node->s;
+
+			    int64_t startc = MYRDTSC;
+
+			    for(int iy = 0; iy < TILESIZE; ++iy)
+				for(int ix = 0; ix < TILESIZE; ++ix)
+				{
+				    realtype tmp[2];
+
+				    force_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+					      x0 + (tx + ix) * h, y0 + (ty + iy) * h, tmp, tmp + 1);
+
+				    xresult[iy][ix] += tmp[0];
+				    yresult[iy][ix] += tmp[1];
+				}
+
+			    int64_t endc = MYRDTSC;
+
+#ifdef _INSTRUMENTATION_
+			    perfmon.p2pcycles += endc - startc;
+			    perfmon.p2pinteractions += (node->e - s) * TILESIZE * TILESIZE;
+			    ++perfmon.p2pcalls;
+#endif
+			}
+			else
+			{
+			    for(int c = 0; c < 4; ++c)
+				stack[++stackentry] = (NodeForce *)node->children[c];
+
+			    maxentry = std::max(maxentry, stackentry);
+			}
+		    }
+		}
+
+		for(int iy = 0; iy < TILESIZE; ++iy)
+		    for(int ix = 0; ix < TILESIZE; ++ix)
+			xresultbase[tx + ix + BLOCKSIZE * (ty + iy)] = xresult[iy][ix];
+
+		for(int iy = 0; iy < TILESIZE; ++iy)
+		    for(int ix = 0; ix < TILESIZE; ++ix)
+			yresultbase[tx + ix + BLOCKSIZE * (ty + iy)] = yresult[iy][ix];
+	    }
+
+#ifdef _INSTRUMENTATION_
+	perfmon.maxstacksize = maxentry + 1;
+	perfmon.evaluations += TILESIZE * TILESIZE;
+	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
+#endif
+    }
+
+    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1)
+    {
+#ifdef _INSTRUMENTATION_
+	for(int i = 0; i < N; ++i)
+	    if (perf[i].failed)
+	    {
+		printf("oops there was an overflow in the computation\n");
+		abort();
+	    }
+
+	for(int i = 0; i < N; ++i)
+	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
+
+	for(int i = 0; i < N; ++i)
+	{
+	    auto p = perf[i].e2p();
+
+	    printf("TID %d: E2P cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
+		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
+	}
+
+	for(int i = 0; i < N; ++i)
+	{
+	    auto p = perf[i].traversal();
+
+	    printf("TID %d: traversal overhead: %.1f %%, max stacksize: %d \n", i, 100. * std::get<1>(p), std::get<2>(p));
+	}
+
+	for(int i = 0; i < N; ++i)
+	{
+	    auto p = perf[i].p2p();
+
+	    printf("TID %d: P2P importance: %.1f %% cycles-per-interactions: %.1f, cycles-per-call: %.1f\n",
+		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
+	}
+
+	const double t2 = omp_get_wtime();
+	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
 #endif
     }
 
@@ -165,8 +321,8 @@ namespace EvaluateForce
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, xdst, ydst, ndst,  &root, 128);
-    	const double t1 = omp_get_wtime();
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128);
+	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;
 	ydata = Tree::ydata;
@@ -189,42 +345,51 @@ namespace EvaluateForce
 #endif
 	}
 
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1);
+    }
+
+    extern "C"
+    void treecode_force_mrag(const realtype theta,
+			     const realtype * const xsrc,
+			     const realtype * const ysrc,
+			     const realtype * const vsrc,
+			     const int nsrc,
+			     const realtype * const x0s,
+			     const realtype * const y0s,
+			     const realtype * const hs,
+			     const int nblocks,
+			     realtype * const xdst,
+			     realtype * const ydst)
+    {
+	const realtype thetasquared = theta * theta;
+
+	NodeForce root;
+
+	const double t0 = omp_get_wtime();
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128);
+	const double t1 = omp_get_wtime();
+
+	xdata = Tree::xdata;
+	ydata = Tree::ydata;
+	vdata = Tree::vdata;
+
+	PerfMon perf[omp_get_max_threads()];
+
+#pragma omp parallel
+	{
+	    perfmon.setup();
+	    perfmon.startc = MYRDTSC;
+
+#pragma omp for schedule(dynamic,1)
+	    for(int i = 0; i < nblocks; ++i)
+		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], root, thetasquared);
+
+	    perfmon.endc = MYRDTSC;
 #ifdef _INSTRUMENTATION_
-	for(int i = 0; i < omp_get_max_threads(); ++i)
-	    if (perf[i].failed)
-	    {
-		printf("oops there was an overflow in the computation\n");
-		abort();
-	    }
-
-	for(int i = 0; i < omp_get_max_threads(); ++i)
-	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
-
-	for(int i = 0; i < omp_get_max_threads(); ++i)
-	{
-	    auto p = perf[i].e2p();
-
-	    printf("TID %d: E2P cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
-		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
-	}
-
-	for(int i = 0; i < omp_get_max_threads(); ++i)
-	{
-	    auto p = perf[i].traversal();
-
-	    printf("TID %d: traversal overhead: %.1f %%, max stacksize: %d \n", i, 100. * std::get<1>(p), std::get<2>(p));
-	}
-
-	for(int i = 0; i < omp_get_max_threads(); ++i)
-	{
-	    auto p = perf[i].p2p();
-
-	    printf("TID %d: P2P importance: %.1f %% cycles-per-interactions: %.1f, cycles-per-call: %.1f\n",
-		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
-	}
-
-	const double t2 = omp_get_wtime();
-	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
+	    perf[omp_get_thread_num()] = perfmon;
 #endif
+	}
+
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1);
     }
 }

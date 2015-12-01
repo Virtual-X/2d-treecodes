@@ -27,7 +27,7 @@ extern "C"
 			    const realtype * const ytargets,
 			    const int ntargets,
 			    realtype * const targetvalues);
-    
+
     void treecode_force(const realtype theta,
 			const realtype * const xsources,
 			const realtype * const ysources,
@@ -38,6 +38,19 @@ extern "C"
 			const int ntargets,
 			realtype * const xresult,
 			realtype * const yresult);
+
+    void treecode_force_mrag(const realtype theta,
+			     const realtype * const xsources,
+			     const realtype * const ysources,
+			     const realtype * const sourcevalues,
+			     const int nsources,
+			     const realtype * const x0s,
+			     const realtype * const y0s,
+			     const realtype * const hs,
+			     const int nblocks,
+			     realtype * const xresults,
+			     realtype * const yresults);
+
 #ifdef __cplusplus
 }
 #endif
