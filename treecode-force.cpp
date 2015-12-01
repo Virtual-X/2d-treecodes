@@ -21,6 +21,14 @@
 #include "force-kernels.h"
 #include "upward.h"
 
+#define _INSTRUMENTATION_
+
+#ifndef _INSTRUMENTATION_
+#define MYRDTSC 0
+#else
+#define MYRDTSC _rdtsc()
+#endif
+
 namespace EvaluateForce
 {
     struct NodeForce : Tree::NodeImplementation<ORDER> { };
@@ -101,15 +109,16 @@ namespace EvaluateForce
 
 	    if (4 * node->r * node->r < thetasquared * r2)
 	    {
-		int64_t startc = _rdtsc();
+		int64_t startc = MYRDTSC;
 		force_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions, tmp, tmp + 1);
-		int64_t endc = _rdtsc();
+		int64_t endc = MYRDTSC;
 
 		*xresult += tmp[0];
 		*yresult += tmp[1];
-
+#ifdef _INSTRUMENTATION_
 		perfmon.e2pcycles += endc - startc;
 		++perfmon.e2pcalls;
+#endif
 	    }
 	    else
 	    {
@@ -117,16 +126,17 @@ namespace EvaluateForce
 		{
 		    const int s = node->s;
 
-		    int64_t startc = _rdtsc();
+		    int64_t startc = MYRDTSC;
 		    force_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt, tmp, tmp + 1);
-		    int64_t endc = _rdtsc();
+		    int64_t endc = MYRDTSC;
 
 		    *xresult += tmp[0];
 		    *yresult += tmp[1];
-
+#ifdef _INSTRUMENTATION_
 		    perfmon.p2pcycles += endc - startc;
 		    perfmon.p2pinteractions += node->e - s;
 		    ++perfmon.p2pcalls;
+#endif
 		}
 		else
 		{
@@ -137,10 +147,12 @@ namespace EvaluateForce
 		}
 	    }
 	}
-
+	
+#ifdef _INSTRUMENTATION_
 	perfmon.maxstacksize = maxentry + 1;
 	++perfmon.evaluations;
 	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
+#endif
     }
 
     extern "C"
@@ -165,17 +177,19 @@ namespace EvaluateForce
 #pragma omp parallel
 	{
 	    perfmon.setup();
-	    perfmon.startc = _rdtsc();
+	    perfmon.startc = MYRDTSC;
 
 #pragma omp for schedule(static,1)
 	    for(int i = 0; i < ndst; ++i)
 		evaluate(xresult + i, yresult + i, xdst[i], ydst[i], root, thetasquared);
 
-	    perfmon.endc = _rdtsc();
-
+	    perfmon.endc = MYRDTSC;
+#ifdef _INSTRUMENTATION_
 	    perf[omp_get_thread_num()] = perfmon;
+#endif
 	}
 
+#ifdef _INSTRUMENTATION_
 	for(int i = 0; i < omp_get_max_threads(); ++i)
 	    if (perf[i].failed)
 	    {
@@ -211,5 +225,6 @@ namespace EvaluateForce
 
 	const double t2 = omp_get_wtime();
 	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
+#endif
     }
 }

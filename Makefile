@@ -39,9 +39,8 @@ M4FLAGS += -D TUNED4AVXDP=1
 endif
 endif
 
-KERNELSFLAGS =  -O4 -DNDEBUG  -ftree-vectorize \
-	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math \
-	-ftree-vectorizer-verbose=0
+KERNELSFLAGS = -O4 -DNDEBUG  -ftree-vectorize \
+	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math
 
 ifeq "$(config)" "release"
 	TLPFLAGS += -O3 -DNDEBUG 
@@ -55,13 +54,22 @@ ifeq "$(gprof)" "1"
 	TLPFLAGS += -pg
 endif
 
+define INSTRUCTIONCOUNT
+	@echo "INSTRUCTION COUNT $1:" \
+	$(shell OPT=$$(objdump -S $2 |  \
+		egrep -n -i "(END_$1|<$1>)" | tr "\n" " " | \
+		awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}') ; \
+		objdump -S $2 | sed -n $${OPT} | cut -d $$'\t' -f3 | sed '/^$$/d' | wc -l );
+endef
+
 test: main.cpp treecode.a
 	$(CXX) $(CXXFLAGS) $^ -g -o test
 
 treecode.a: $(OBJS) treecode.h
 	ar rcs treecode.a $(OBJS)
-	objdump -S force-kernels.o | cut -d $$'\t' -f3 | sed '/^$$/d' | egrep -n FORCE_P2P | awk '{s = $$1 - s} END {print("FORCE P2P:", s, " instructions");}'
-	objdump -S force-kernels.o | cut -d $$'\t' -f3 | sed '/^$$/d' | egrep -n FORCE_E2P | awk '{s = $$1 - s} END {print("FORCE E2P:", s, " instructions");}'
+	$(call INSTRUCTIONCOUNT,FORCE_E2P,force-kernels.o)
+	$(call INSTRUCTIONCOUNT,FORCE_P2P,force-kernels.o)
+
 
 treecode-potential.o: treecode-potential.cpp treecode.h Makefile
 	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
@@ -76,7 +84,7 @@ potential-kernels.o: potential-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
 force-kernels.o: force-kernels.c
-	$(CC) $(KERNELSFLAGS) -Wa,-al=$(basename $^).s -c $^
+	$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^

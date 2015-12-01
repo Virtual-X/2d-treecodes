@@ -26,10 +26,9 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 	realtype * const xresult,
 	realtype * const yresult)
 	{
-		__asm__("L_START_FORCE_P2P:");
-
 		const V4 xt4 = {xt, xt, xt, xt};
 		const V4 yt4 = {yt, yt, yt, yt};
+		const V4 EPS4 = {EPS, EPS, EPS, EPS};
 
 		V4 LUNROLL(`i', 0, NACC, `ifelse(i, 0,, `,')
 		TMP(xs,i) = {0, 0, 0, 0},
@@ -53,7 +52,7 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 			const V4 TMP(xr, j) = xt4 - TMP(xsrc, j);
 			const V4 TMP(yr, j) = yt4 - TMP(ysrc, j);
 
-			const V4 TMP(factor, j) = TMP(vsrc, j) / (TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS) ;')
+			const V4 TMP(factor, j) = TMP(vsrc, j) / (TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS4) ;')
 
 			LUNROLL(j, 0, eval(NACC - 1), `
 			TMP(xs, j) += TMP(xr, j) * TMP(factor, j);
@@ -98,7 +97,7 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 
 		const __m256d xt4 = _mm256_set1_pd(xt);
 		const __m256d yt4 = _mm256_set1_pd(yt);
-
+const __m256d EPS4 = _mm256_set1_pd(EPS);
 		__m256d LUNROLL(`i', 0, NACC, `ifelse(i, 0,, `,')
 		TMP(xs,i) =_mm256_setzero_pd(),
 		TMP(ys,i) =_mm256_setzero_pd()') ;
@@ -121,7 +120,7 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 			const __m256d TMP(xr, j) = xt4 - TMP(xsrc, j);
 			const __m256d TMP(yr, j) = yt4 - TMP(ysrc, j);
 
-			const __m256d TMP(factor, j) = TMP(vsrc, j) / (TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS) ;')
+			const __m256d TMP(factor, j) = TMP(vsrc, j) / (TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS4) ;')
 
 			LUNROLL(j, 0, eval(NACC - 1), `
 			TMP(xs, j) += TMP(xr, j) * TMP(factor, j);
@@ -192,7 +191,7 @@ divert(ifelse(TUNED4AVXDP, 1, -1, 0))
 				const V4 TMP(rsum, j) = (TMP(rxp4, j) * TMP(rbase, j) - TMP(ixp4, j) * TMP(ibase, j)) * TMP(k4, j) ifelse(j, 0, ,+ TMP(rsum, eval(j - 1)));
 				const V4 TMP(isum, j) = (TMP(rxp4, j) * TMP(ibase, j) + TMP(ixp4, j) * TMP(rbase, j)) * TMP(k4, j) ifelse(j, 0, ,+ TMP(isum, eval(j - 1)));
 
-				const V4 TMP(k4, eval(j+1)) = TMP(k4, j) + 4;
+				const V4 TMP(k4, eval(j+1)) = TMP(k4, j) + (V4){4, 4, 4, 4};
 			')dnl
 
 			*xresult = mass * rinvz_1 - (TMP(rsum, eval(ORDER/4 - 1))[0] + TMP(rsum, eval(ORDER/4 - 1))[1] + TMP(rsum, eval(ORDER/4 - 1))[2] + TMP(rsum, eval(ORDER/4 - 1))[3]);
@@ -210,9 +209,8 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 		realtype * const xresult,
 		realtype * const yresult)
 		{
-			__asm__("L_START_FORCE_E2P:");
 			const realtype r2 = rz * rz + iz * iz;
-
+			
 			const realtype rinvz_1 = rz / r2;
 			const realtype iinvz_1 = -iz / r2;
 
@@ -221,7 +219,7 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 			const realtype TMP(iinvz, n) = TMP(rinvz, eval(n - 1)) * iinvz_1 + TMP(iinvz, eval(n - 1)) * rinvz_1;')dnl
 
 			const __m256d rz4 = _mm256_set1_pd(TMP(rinvz, 4));
-			const __m256d iz4 = _mm256_set1_pd(TMP(iinvz, 4));
+			const __m256d iz4 = _mm256_set1_pd(TMP(iinvz, 4)); 
 
 			const __m256d rbase_0 = _mm256_set_pd(TMP(rinvz, 5), TMP(rinvz, 4), TMP(rinvz, 3), TMP(rinvz, 2));
 			const __m256d ibase_0 = _mm256_set_pd(TMP(iinvz, 5), TMP(iinvz, 4), TMP(iinvz, 3), TMP(iinvz, 2));
@@ -238,7 +236,7 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 				const __m256d TMP(rsum, j) = (TMP(rxp4, j) * TMP(rbase, j) - TMP(ixp4, j) * TMP(ibase, j)) * TMP(k4, j) ifelse(j, 0, ,+ TMP(rsum, eval(j - 1)));
 				const __m256d TMP(isum, j) = (TMP(rxp4, j) * TMP(ibase, j) + TMP(ixp4, j) * TMP(rbase, j)) * TMP(k4, j) ifelse(j, 0, ,+ TMP(isum, eval(j - 1)));
 
-				const __m256d TMP(k4, eval(j+1)) = TMP(k4, j) + _mm256_set1_pd(4);
+				const __m256d TMP(k4, eval(j+1)) = TMP(k4, j) + _mm256_set1_pd(4); //_mm256_set_pd(eval(4 * j + 8), eval(4 * j + 7), eval(4 * j + 6), eval(4 * j + 5)); //
 			')dnl
 
 			*xresult = mass * rinvz_1 - (TMP(rsum, eval(ORDER/4 - 1))[0] + TMP(rsum, eval(ORDER/4 - 1))[1] + TMP(rsum, eval(ORDER/4 - 1))[2] + TMP(rsum, eval(ORDER/4 - 1))[3]);

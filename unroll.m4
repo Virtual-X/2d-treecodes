@@ -13,7 +13,7 @@ define(`_forrloop',
        `$4`'ifelse($1, `$3', ,
 		   `define(`$1', decr($1))_forrloop(`$1', `$2', `$3', `$4')')')
 
-define(BINOMIAL, `syscmd(python binomial.py $1 $2)')
+define(`BINOMIAL', `esyscmd(python binomial.py $1 $2)')
 
 USAGE LUNROLL
 $1 iteration variable
