@@ -29,14 +29,14 @@ endif
 
 config ?= release
 
-CXXFLAGS = -std=c++11 -g -D_GLIBCXX_DEBUG -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
+CXXFLAGS = -std=c++11  -fopenmp -DREAL=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
 TLPFLAGS = -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
 
 M4FLAGS = -D realtype=$(real)
 AVXSUPPORT = $(shell cat /proc/cpuinfo | egrep avx)
 ifeq ($(real),double)
 ifneq ($(AVXSUPPORT),"") 
-M4FLAGS += -D TUNED4AVXDP=1
+#M4FLAGS += -D TUNED4AVXDP=1
 endif
 endif
 

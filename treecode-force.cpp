@@ -332,7 +332,7 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 196);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 493);
     }
 
     extern "C"
@@ -377,6 +377,6 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 1972);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 6403);
     }
 }
