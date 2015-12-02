@@ -156,6 +156,7 @@ namespace EvaluateForce
     }
 
 #define TILESIZE 4
+#define BRICKSIZE 4
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
@@ -165,17 +166,17 @@ namespace EvaluateForce
 
 	const NodeForce * stack[15 * 4 * 2];
 
-	for(int ty = 0; ty < BLOCKSIZE; ty += TILESIZE)
-	    for(int tx = 0; tx < BLOCKSIZE; tx += TILESIZE)
+	for(int by = 0; by < BLOCKSIZE; by += BRICKSIZE)
+	    for(int bx = 0; bx < BLOCKSIZE; bx += BRICKSIZE)
 	    {
-		realtype xresult[TILESIZE][TILESIZE], yresult[TILESIZE][TILESIZE];
+		realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 
-		for(int iy = 0; iy < TILESIZE; ++iy)
-		    for(int ix = 0; ix < TILESIZE; ++ix)
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
 			xresult[iy][ix] = 0;
 
-		for(int iy = 0; iy < TILESIZE; ++iy)
-		    for(int ix = 0; ix < TILESIZE; ++ix)
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
 			yresult[iy][ix] = 0;
 
 		int stackentry = 0;
@@ -188,8 +189,8 @@ namespace EvaluateForce
 		    const realtype xcom = node->xcom();
 		    const realtype ycom = node->ycom();
 
-		    const double xt = std::max(x0 + tx * h, std::min(x0 + (tx + TILESIZE - 1) * h, xcom));
-		    const double yt = std::max(y0 + ty * h, std::min(y0 + (ty + TILESIZE - 1) * h, ycom));
+		    const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
+		    const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
 
 		    const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
 
@@ -197,8 +198,10 @@ namespace EvaluateForce
 		    {
 			int64_t startc = MYRDTSC;
 
-			force_e2p_tiled(node->mass, x0 + tx * h - xcom, y0 + ty * h - ycom, h,
-					node->rexpansions, node->iexpansions, &xresult[0][0], &yresult[0][0]);
+			for(int ty = 0; ty < BRICKSIZE; ty += 4)
+			    for(int tx = 0; tx < BRICKSIZE; tx += 4)
+				force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
+						node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 
 			int64_t endc = MYRDTSC;
 
@@ -215,14 +218,16 @@ namespace EvaluateForce
 
 			    int64_t startc = MYRDTSC;
 
-			    force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-					    x0 + tx * h, y0 + ty * h, h, &xresult[0][0], &yresult[0][0]);
+			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				for(int tx = 0; tx < BRICKSIZE; tx += 4)
+				    force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+						    x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 
 			    int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
 			    perfmon.p2pcycles += endc - startc;
-			    perfmon.p2pinteractions += (node->e - s) * TILESIZE * TILESIZE;
+			    perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
 			    ++perfmon.p2pcalls;
 #endif
 			}
@@ -236,18 +241,18 @@ namespace EvaluateForce
 		    }
 		}
 
-		for(int iy = 0; iy < TILESIZE; ++iy)
-		    for(int ix = 0; ix < TILESIZE; ++ix)
-			xresultbase[tx + ix + BLOCKSIZE * (ty + iy)] = xresult[iy][ix];
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			xresultbase[bx + ix + BLOCKSIZE * (by + iy)] = xresult[iy][ix];
 
-		for(int iy = 0; iy < TILESIZE; ++iy)
-		    for(int ix = 0; ix < TILESIZE; ++ix)
-			yresultbase[tx + ix + BLOCKSIZE * (ty + iy)] = yresult[iy][ix];
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			yresultbase[bx + ix + BLOCKSIZE * (by + iy)] = yresult[iy][ix];
 	    }
 
 #ifdef _INSTRUMENTATION_
 	perfmon.maxstacksize = maxentry + 1;
-	perfmon.evaluations += TILESIZE * TILESIZE;
+	perfmon.evaluations += BRICKSIZE * BRICKSIZE;
 	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
 #endif
     }

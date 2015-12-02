@@ -23,7 +23,8 @@ divert(ifelse(TUNED4AVXDP, 1, -1, 0))
 			 const realtype _yt,
 			 const realtype h,
 			 realtype * const xresult,
-			 realtype * const yresult)
+			 realtype * const yresult,
+			 const int stride)
 	{
 		const V4 xt = { _xt, _xt + h, _xt + 2 * h, _xt + 3 * h};
 		const V4 eps = {EPS, EPS, EPS, EPS };
@@ -77,8 +78,8 @@ divert(ifelse(TUNED4AVXDP, 1, -1, 0))
 		}
 
 		LUNROLL(iy, 0, 3, `
-			    LUNROLL(ix, 0, 3, `xresult[eval(4 * iy) + ix] += TMP(xs, iy)[ix];')
-    			    LUNROLL(ix, 0, 3, `yresult[eval(4 * iy) + ix] += TMP(ys, iy)[ix];')')
+			    LUNROLL(ix, 0, 3, `xresult[stride * iy + ix] += TMP(xs, iy)[ix];')
+    			    LUNROLL(ix, 0, 3, `yresult[stride * iy + ix] += TMP(ys, iy)[ix];')')
 	}
 
 divert(0)
@@ -93,7 +94,8 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 			 const realtype _yt,
 			 const realtype h,
 			 realtype * const xresult,
-			 realtype * const yresult)
+			 realtype * const yresult,
+			 const int stride)
 	{
 		const __m256d xt = _mm256_set1_pd(_xt) + _mm256_set_pd(3,2,1,0) * _mm256_set1_pd(h);
 		const __m256d eps = _mm256_set1_pd(EPS);
@@ -110,7 +112,7 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 		for(int j = 0; j < nnice; j += 4)
 		{
 			LUNROLL(pass, 0, 3, `
-			{ 
+			{
 				const __m256d ycurr = _mm256_set1_pd(ysrc[j + pass]);
 				const __m256d vcurr = _mm256_set1_pd(vsrc[j + pass]);
 
@@ -146,10 +148,10 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 		}
 
 		LUNROLL(iy, 0, 3, `
-			_mm256_storeu_pd(xresult + eval(4 * iy),
-					_mm256_loadu_pd(xresult + eval(4 * iy)) + TMP(xs, iy));
-			_mm256_storeu_pd(yresult + eval(4 * iy),
-					_mm256_loadu_pd(yresult + eval(4 * iy)) + TMP(ys, iy));
+			_mm256_storeu_pd(xresult + stride * iy,
+					_mm256_loadu_pd(xresult + stride * iy) + TMP(xs, iy));
+			_mm256_storeu_pd(yresult + stride * iy,
+					_mm256_loadu_pd(yresult + stride * iy) + TMP(ys, iy));
 			')
 
 	}
@@ -164,7 +166,8 @@ divert(ifelse(TUNED4AVXDP, 1, -1, 0))
 		const realtype * __restrict__ const rxp,
 		const realtype * __restrict__ const ixp,
 		realtype * const xresult,
-		realtype * const yresult)
+		realtype * const yresult,
+		const int stride)
 		{
 			const V4 mass4 = {mass, mass, mass, mass};
 			const V4 xdispl = {0, h, 2 * h, 3 * h};
@@ -212,8 +215,8 @@ divert(ifelse(TUNED4AVXDP, 1, -1, 0))
 			}')
 
 			LUNROLL(iy, 0, 3, `
-			LUNROLL(ix, 0, 3, `xresult[eval(4 * iy) + ix] += TMP(xs, iy)[ix];')
- 			LUNROLL(ix, 0, 3, `yresult[eval(4 * iy) + ix] -= TMP(ys, iy)[ix];')
+			LUNROLL(ix, 0, 3, `xresult[stride * iy + ix] += TMP(xs, iy)[ix];')
+ 			LUNROLL(ix, 0, 3, `yresult[stride * iy + ix] -= TMP(ys, iy)[ix];')
 			')
 
 			__asm__("L_END_FORCE_E2P_TILED:");
@@ -230,7 +233,8 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 		const realtype * __restrict__ const rxp,
 		const realtype * __restrict__ const ixp,
 		realtype * const xresult,
-		realtype * const yresult)
+		realtype * const yresult,
+		const int stride)
 		{
 			const __m256d mass4 = _mm256_set1_pd(mass);
 			const __m256d xdispl = _mm256_set_pd(3,2,1,0) * _mm256_set1_pd(h);
@@ -278,10 +282,10 @@ divert(ifelse(TUNED4AVXDP, 1, 0, -1))
 			}')
 
 			LUNROLL(iy, 0, 3, `
-			_mm256_storeu_pd(xresult + eval(4 * iy),
-					_mm256_loadu_pd(xresult + eval(4 * iy)) + TMP(xs, iy));
-			_mm256_storeu_pd(yresult + eval(4 * iy),
-					_mm256_loadu_pd(yresult + eval(4 * iy)) - TMP(ys, iy));
+			_mm256_storeu_pd(xresult + stride * iy,
+					_mm256_loadu_pd(xresult + stride * iy) + TMP(xs, iy));
+			_mm256_storeu_pd(yresult + stride * iy,
+					_mm256_loadu_pd(yresult + stride * iy) - TMP(ys, iy));
 			')
 
 			__asm__("L_END_FORCE_E2P_TILED:");

@@ -36,7 +36,7 @@ extern "C"
 			 const realtype yt,
 			 const realtype h,
 			 realtype * const xresult,
-			 realtype * const yresult);
+			 realtype * const yresult, const int stride);
 
     void force_e2p(const realtype mass,
 		   const realtype rx,
@@ -53,7 +53,7 @@ extern "C"
 			 const realtype * __restrict__ const rxp,
 			 const realtype * __restrict__ const ixp,
 			 realtype * const xresult,
-			 realtype * const yresult);
+			 realtype * const yresult, const int stride);
     
 #ifdef __cplusplus
 }
