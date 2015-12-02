@@ -215,17 +215,8 @@ namespace EvaluateForce
 
 			    int64_t startc = MYRDTSC;
 
-			    for(int iy = 0; iy < TILESIZE; ++iy)
-				for(int ix = 0; ix < TILESIZE; ++ix)
-				{
-				    realtype tmp[2];
-
-				    force_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-					      x0 + (tx + ix) * h, y0 + (ty + iy) * h, tmp, tmp + 1);
-
-				    xresult[iy][ix] += tmp[0];
-				    yresult[iy][ix] += tmp[1];
-				}
+			    force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+					    x0 + tx * h, y0 + ty * h, h, &xresult[0][0], &yresult[0][0]);
 
 			    int64_t endc = MYRDTSC;
 
@@ -381,6 +372,6 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 2577);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 1972);
     }
 }
