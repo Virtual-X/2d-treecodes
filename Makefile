@@ -94,16 +94,16 @@ $(UPWARDKERNELS_FORCE).o: $(UPWARDKERNELS_FORCE).c
 	$(CC) $(KERNELSFLAGS) -c $^
 
 potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) potential-kernels.m4 | indent > potential-kernels.c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) potential-kernels.m4  > potential-kernels.c
 
 force-kernels.c: force-kernels.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4 | indent > force-kernels.c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4  > force-kernels.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4 | indent > $(UPWARDKERNELS_POTENTIAL).c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4  > $(UPWARDKERNELS_POTENTIAL).c
 
 $(UPWARDKERNELS_FORCE).c: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4 | indent > $(UPWARDKERNELS_FORCE).c
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4  > $(UPWARDKERNELS_FORCE).c
 
 clean:
 	rm -f test *.o *.a potential-kernels.c force-kernels.c upward-kernels*.c 
