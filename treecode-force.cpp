@@ -156,7 +156,7 @@ namespace EvaluateForce
     }
 
 #define TILESIZE 4
-#define BRICKSIZE 4
+#define BRICKSIZE 8
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
@@ -207,7 +207,7 @@ namespace EvaluateForce
 
 #ifdef _INSTRUMENTATION_
 			perfmon.e2pcycles += endc - startc;
-			perfmon.e2pcalls += 1;
+			perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
 #endif
 		    }
 		    else
