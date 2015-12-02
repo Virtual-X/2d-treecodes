@@ -176,8 +176,8 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 #endif
 	if (verify)
 	{
-	    const int OFFSET = 34;
-	    const int JUMP = 250;
+	    const int OFFSET = 14;
+	    const int JUMP = 211;
 
 	    if (potential)
 #pragma omp parallel for
@@ -298,7 +298,7 @@ int main(int argc, char ** argv)
 	    fclose(fin);
 	};
 
-    file2test("testDiego/diegoBinaryN400");
+        file2test("testDiego/diegoBinaryN400");
     file2test("testDiego/diegoBinaryN2000");
 
       //if (!verify)

@@ -28,6 +28,16 @@ extern "C"
 		   realtype * const xresult,
 		   realtype * const yresult);
 
+    void force_p2p_tiled(const realtype * __restrict__ const xsources,
+			 const realtype * __restrict__ const ysources,
+			 const realtype * __restrict__ const sources,
+			 const int nsources,
+			 const realtype xt,
+			 const realtype yt,
+			 const realtype h,
+			 realtype * const xresult,
+			 realtype * const yresult, const int stride);
+
     void force_e2p(const realtype mass,
 		   const realtype rx,
 		   const realtype ry,
@@ -35,6 +45,15 @@ extern "C"
 		   const realtype * __restrict__ const ixp,
 		   realtype * const xresult,
 		   realtype * const yresult);
+
+    void force_e2p_tiled(const realtype mass,
+			 const realtype rx,
+			 const realtype ry,
+			 const realtype h,
+			 const realtype * __restrict__ const rxp,
+			 const realtype * __restrict__ const ixp,
+			 realtype * const xresult,
+			 realtype * const yresult, const int stride);
     
 #ifdef __cplusplus
 }

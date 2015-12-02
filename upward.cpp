@@ -23,7 +23,6 @@
 
 namespace Tree
 {
-    const realtype eps = 10 * std::numeric_limits<realtype>::epsilon();
     int LEAF_MAXCOUNT;
 
     realtype ext, xmin, ymin;
@@ -138,6 +137,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
     const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
     const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
+
+    const realtype eps = 100 * std::numeric_limits<realtype>::epsilon();
 
     ext = std::max(ext0, ext1) * (1 + 2 * eps);
     xmin -= eps * ext;

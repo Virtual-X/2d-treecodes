@@ -21,7 +21,7 @@ mrag-blocksize ?= 32
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
-OBJS = treecode-potential.o treecode-force.o upward.o potential-kernels.o force-kernels.o $(UPWARDKERNELS_POTENTIAL).o
+OBJS = treecode-potential.o treecode-force.o upward.o potential-kernels.o force-kernels.o force-kernels-tiled.o $(UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 	OBJS += $(UPWARDKERNELS_FORCE).o 
@@ -56,7 +56,7 @@ ifeq "$(gprof)" "1"
 endif
 
 define INSTRUCTIONCOUNT
-	@echo "INSTRUCTION COUNT $1:" \
+	@echo "INSTRUCTION COUNT $2/$1:" \
 	$(shell OPT=$$(objdump -S $2 |  \
 		egrep -n -i "(END_$1|<$1>)" | tr "\n" " " | \
 		awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}') ; \
@@ -69,8 +69,7 @@ test: main.cpp treecode.a
 treecode.a: $(OBJS) treecode.h
 	ar rcs treecode.a $(OBJS)
 	$(call INSTRUCTIONCOUNT,FORCE_E2P,force-kernels.o)
-	$(call INSTRUCTIONCOUNT,FORCE_P2P,force-kernels.o)
-
+	$(call INSTRUCTIONCOUNT,FORCE_E2P_TILED,force-kernels-tiled.o)
 
 treecode-potential.o: treecode-potential.cpp treecode.h Makefile
 	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
@@ -87,6 +86,9 @@ potential-kernels.o: potential-kernels.c
 force-kernels.o: force-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
+force-kernels-tiled.o: force-kernels-tiled.c
+	$(CC) $(KERNELSFLAGS) -c $^
+
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
 
@@ -98,6 +100,9 @@ potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
 
 force-kernels.c: force-kernels.m4 force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4  > force-kernels.c
+
+force-kernels-tiled.c: force-kernels-tiled.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels-tiled.m4 | indent > force-kernels-tiled.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4  > $(UPWARDKERNELS_POTENTIAL).c
