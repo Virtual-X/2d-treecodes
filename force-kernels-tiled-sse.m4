@@ -18,13 +18,16 @@ inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
 inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
 inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
 inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
-inline __m128d operator += (__m128d a, __m128d b){ return a = _mm_add_pd(a, b); }
-inline __m128d operator -= (__m128d a, __m128d b){ return a = _mm_sub_pd(a, b); }
+inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
+inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
 #endif
 
 #ifdef __cplusplus
 extern "C"
 #endif
+
+define(INNERLOOPSIZE, 4)
+
 	void force_p2p_tiled(const realtype * __restrict__ const xsrc,
 			 const realtype * __restrict__ const ysrc,
 			 const realtype * __restrict__ const vsrc,
@@ -51,17 +54,18 @@ extern "C"
 		__m128d TMP(ysB, iy) =_mm_setzero_pd();
 		')
 
-		const int nnice = 4 * (nsources / 4);
+		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);
 
-		for(int j = 0; j < nnice; j += 4)
+		for(int j = 0; j < nnice; j += INNERLOOPSIZE)
 		{
-			LUNROLL(pass, 0, 3, `
+			LUNROLL(pass, 0, eval(INNERLOOPSIZE - 1), `
 			{
+				const __m128d xcurr = _mm_set1_pd(xsrc[j + pass]);
 				const __m128d ycurr = _mm_set1_pd(ysrc[j + pass]);
 				const __m128d vcurr = _mm_set1_pd(vsrc[j + pass]);
 
-				const __m128d xrA = xtA - _mm_set1_pd(xsrc[j + pass]);
-				const __m128d xrB = xtB - _mm_set1_pd(xsrc[j + pass]);
+				const __m128d xrA = xtA - xcurr;
+				const __m128d xrB = xtB - xcurr;
 
 				const __m128d xr2A = xrA * xrA;
 				const __m128d xr2B = xrB * xrB;
@@ -101,7 +105,7 @@ extern "C"
 			    TMP(ysA, iy) += TMP(yr, iy) * TMP(factorA, iy);
 			    TMP(ysB, iy) += TMP(yr, iy) * TMP(factorB, iy);')
 		}
-
+//printf("CAZZ nnice: %d\n", nnice);
 		LUNROLL(iy, 0, 3, `
 			_mm_storeu_pd(xresult + stride * iy, _mm_loadu_pd(xresult + stride * iy) + TMP(xsA, iy));
 			_mm_storeu_pd(xresult + 2 + stride * iy, _mm_loadu_pd(xresult + 2 + stride * iy) + TMP(xsB, iy));
