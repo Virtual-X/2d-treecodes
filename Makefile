@@ -101,8 +101,8 @@ potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
 force-kernels.c: force-kernels.m4 force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4  > force-kernels.c
 
-force-kernels-tiled.c: force-kernels-tiled.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels-tiled.m4 | indent > force-kernels-tiled.c
+force-kernels-tiled.c: force-kernels-tiled-sse.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels-tiled-sse.m4 | indent > force-kernels-tiled.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4  > $(UPWARDKERNELS_POTENTIAL).c
