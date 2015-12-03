@@ -12,8 +12,16 @@
 
 include(unroll.m4)
 #define EPS (10 * __DBL_EPSILON__)
-
 #include <emmintrin.h>
+#if defined(__INTEL_COMPILER)
+inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
+inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
+inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
+inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
+inline __m128d operator += (__m128d a, __m128d b){ return a = _mm_add_pd(a, b); }
+inline __m128d operator -= (__m128d a, __m128d b){ return a = _mm_sub_pd(a, b); }
+#endif
+
 
 	void force_p2p_tiled(const realtype * __restrict__ const xsrc,
 			 const realtype * __restrict__ const ysrc,
