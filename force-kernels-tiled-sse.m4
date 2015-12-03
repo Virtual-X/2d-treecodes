@@ -22,7 +22,9 @@ inline __m128d operator += (__m128d a, __m128d b){ return a = _mm_add_pd(a, b); 
 inline __m128d operator -= (__m128d a, __m128d b){ return a = _mm_sub_pd(a, b); }
 #endif
 
-
+#ifdef __cplusplus
+extern "C"
+#endif
 	void force_p2p_tiled(const realtype * __restrict__ const xsrc,
 			 const realtype * __restrict__ const ysrc,
 			 const realtype * __restrict__ const vsrc,
@@ -110,6 +112,9 @@ inline __m128d operator -= (__m128d a, __m128d b){ return a = _mm_sub_pd(a, b); 
 	}
 
 
+#ifdef __cplusplus
+extern "C"
+#endif
 	void force_e2p_tiled(
 		const realtype mass,
 		const realtype scalar_rz,
@@ -148,8 +153,8 @@ inline __m128d operator -= (__m128d a, __m128d b){ return a = _mm_sub_pd(a, b); 
 			')
 
 			LUNROLL(iy, 0, 3, `
-			const __m128d TMP(iinvzA,iy) = -TMP(iz, iy) / TMP(r2A, iy);
-			const __m128d TMP(iinvzB,iy) = -TMP(iz, iy) / TMP(r2B, iy);
+			const __m128d TMP(iinvzA,iy) = _mm_setzero_pd() -TMP(iz, iy) / TMP(r2A, iy);
+			const __m128d TMP(iinvzB,iy) = _mm_setzero_pd() -TMP(iz, iy) / TMP(r2B, iy);
 			')
 
 			LUNROLL(iy, 0, 3, `

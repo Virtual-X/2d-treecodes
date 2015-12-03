@@ -12,6 +12,7 @@
 
 CXX ?= g++
 CC = gcc
+ICPC = /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/bin/intel64/icpc
 
 real ?= double
 treecode-potential-order ?= 12
@@ -88,6 +89,7 @@ force-kernels.o: force-kernels.c
 
 force-kernels-tiled.o: force-kernels-tiled.c
 	$(CC) $(KERNELSFLAGS) -c $^
+	#$(ICPC) -O3 -fno-alias -march=native -mtune=native -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
@@ -111,6 +113,6 @@ $(UPWARDKERNELS_FORCE).c: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4  > $(UPWARDKERNELS_FORCE).c
 
 clean:
-	rm -f test *.o *.a potential-kernels.c force-kernels.c upward-kernels*.c 
+	rm -f test *.o *.a potential-kernels.c force-kernels-tiled.c force-kernels.c upward-kernels*.c 
 
 .PHONY = clean
