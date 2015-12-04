@@ -13,6 +13,7 @@
 CC = gcc
 ICPC = /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/bin/intel64/icpc
 
+backend ?= sse
 real ?= double
 treecode-potential-order ?= 12
 treecode-force-order ?= 24
@@ -27,23 +28,14 @@ ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 endif
 
 M4FLAGS = -D realtype=$(real)
-AVXSUPPORT = $(shell cat /proc/cpuinfo | egrep avx)
+
+FORCEKERNELSM4 = force-kernels-tiled-V4.m4
 ifeq ($(real),double)
-ifneq ($(AVXSUPPORT),"") 
-#M4FLAGS += -D TUNED4AVXDP=1
-endif
+FORCEKERNELSM4 = force-kernels-tiled-$(backend).m4
 endif
 
-KERNELSFLAGS = -O4 -DNDEBUG  -ftree-vectorize \
+KERNELSFLAGS = -O4 -DNDEBUG  -ftree-vectorize -Wno-psabi \
 	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math
-
-define INSTRUCTIONCOUNT
-	@echo "INSTRUCTION COUNT $2/$1:" \
-	$(shell OPT=$$(objdump -S $2 |  \
-		egrep -n -i "(END_$1|<$1>)" | tr "\n" " " | \
-		awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}') ; \
-		objdump -S $2 | sed -n $${OPT} | cut -d $$'\t' -f3 | sed '/^$$/d' | wc -l );
-endef
 
 kernels: $(OBJS)
 

@@ -26,11 +26,7 @@ ifeq "$(gprof)" "1"
 endif
 
 define INSTRUCTIONCOUNT
-	@echo "INSTRUCTION COUNT $2/$1:" \
-	$(shell OPT=$$(objdump -S ILP+DLP/$2 |  \
-		egrep -n -i "(END_$1|<$1>)" | tr "\n" " " | \
-		awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}') ; \
-		objdump -S $2 | sed -n $${OPT} | cut -d $$'\t' -f3 | sed '/^$$/d' | wc -l );
+	$(shell OPT=$$(objdump -S $2 |egrep -n -i "(END_$1|<$1>)" | tr "\n" " " |awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}');RESULT=$$(objdump -S $2 | sed -n $${OPT} | cut -d $$'\t' -f3 | sed '/^$$/d' | wc -l); echo $$RESULT | tr -d " \t\n\r")
 endef
 
 test: main.cpp treecode.a
@@ -38,21 +34,24 @@ test: main.cpp treecode.a
 
 treecode.a: $(OBJS) TLP/treecode.h kernels drivers header
 	ar rcs treecode.a TLP/*.o ILP+DLP/*.o
-	$(call INSTRUCTIONCOUNT,FORCE_E2P,force-kernels.o)
-	$(call INSTRUCTIONCOUNT,FORCE_E2P_TILED,force-kernels-tiled.o)
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
 
+drivers: kernels
+	make -C TLP drivers \
+	E2P_TILED_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ILP+DLP/force-kernels-tiled.o) \
+	E2P_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P ILP+DLP/force-kernels.o)
+
 kernels:
 	make -C ILP+DLP kernels
-
-drivers: 
-	make -C TLP drivers
 
 clean:
 	rm -f test treecode.a treecode.h
 	make -C TLP clean
 	make -C ILP+DLP clean
 
-.PHONY = clean kernels drivers header
+.PHONY = clean header drivers kernels
+
+
+	#@echo "INSTRUCTION COUNT $2/$1:" 

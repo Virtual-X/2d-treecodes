@@ -24,7 +24,7 @@ OBJS = treecode-potential.o treecode-force.o upward.o
 
 config ?= release
 
-TLPFLAGS = -I../ILP+DLP/ -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
+TLPFLAGS = -I../ILP+DLP/ -Wno-psabi -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
 
 ifeq "$(config)" "release"
 	TLPFLAGS += -O3 -DNDEBUG 
@@ -43,7 +43,7 @@ treecode-potential.o: treecode-potential.cpp treecode.h Makefile
 	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
 
 treecode-force.o: treecode-force.cpp treecode.h Makefile
-	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-force-order) -c $<
+	$(CXX) $(TLPFLAGS) -DE2P_TILED_IC=$(E2P_TILED_IC) -DE2P_IC=$(E2P_IC) -DORDER=$(treecode-force-order) -c $<
 
 upward.o: upward.cpp upward.h Makefile
 	$(CXX) $(TLPFLAGS) -c $<
