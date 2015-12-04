@@ -25,15 +25,11 @@ ifeq "$(gprof)" "1"
 	TLPFLAGS += -pg
 endif
 
-define INSTRUCTIONCOUNT
-	$(shell OPT=$$(objdump -S $2 |egrep -n -i "(END_$1|<$1>)" | tr "\n" " " |awk 'BEGIN{ FS=":"} {printf( "%d,%dp", $$1+1,$$3-1);}');RESULT=$$(objdump -S $2 | sed -n $${OPT} | cut -d $$'\t' -f3 | sed '/^$$/d' | wc -l); echo $$RESULT | tr -d " \t\n\r")
-endef
-
-test: main.cpp treecode.a
+test: main.cpp libtreecode.a
 	$(CXX) $(CXXFLAGS) $^ -g -o test
 
-treecode.a: $(OBJS) TLP/treecode.h kernels drivers header
-	ar rcs treecode.a TLP/*.o ILP+DLP/*.o
+libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
+	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
@@ -47,11 +43,8 @@ kernels:
 	make -C ILP+DLP kernels
 
 clean:
-	rm -f test treecode.a treecode.h
+	rm -f test libtreecode.a treecode.h
 	make -C TLP clean
 	make -C ILP+DLP clean
 
 .PHONY = clean header drivers kernels
-
-
-	#@echo "INSTRUCTION COUNT $2/$1:" 
