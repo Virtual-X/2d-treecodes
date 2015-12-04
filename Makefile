@@ -17,6 +17,7 @@ treecode-potential-order ?= 12
 treecode-force-order ?= 24
 mrag-blocksize ?= 32
 config ?= release
+backend ?= avx
 
 CXXFLAGS = -std=c++11  -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
 
@@ -40,7 +41,7 @@ drivers: kernels
 	E2P_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P ILP+DLP/force-kernels.o)
 
 kernels:
-	make -C ILP+DLP kernels
+	make -C ILP+DLP kernels backend=$(backend)
 
 clean:
 	rm -f test libtreecode.a treecode.h

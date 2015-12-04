@@ -348,7 +348,6 @@ namespace EvaluateForce
 			     realtype * const xdst,
 			     realtype * const ydst)
     {
-      printf("CIAO SID!\n");
 	const realtype thetasquared = theta * theta;
 
 	NodeForce root;

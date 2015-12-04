@@ -13,7 +13,7 @@
 CC = gcc
 ICPC = /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/bin/intel64/icpc
 
-backend ?= sse
+backend ?= avx
 real ?= double
 treecode-potential-order ?= 12
 treecode-force-order ?= 24
@@ -46,7 +46,7 @@ force-kernels.o: force-kernels.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
 force-kernels-tiled.o: force-kernels-tiled.c
-	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
+	$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
@@ -60,8 +60,8 @@ potential-kernels.c: potential-kernels.m4 potential-kernels.h unroll.m4 Makefile
 force-kernels.c: force-kernels.m4 force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4  > force-kernels.c
 
-force-kernels-tiled.c: force-kernels-tiled-sse.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels-tiled-sse.m4 | indent > force-kernels-tiled.c
+force-kernels-tiled.c: $(FORCEKERNELSM4) force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $(FORCEKERNELSM4) | indent > force-kernels-tiled.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4  > $(UPWARDKERNELS_POTENTIAL).c
