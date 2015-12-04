@@ -43,18 +43,16 @@ define(INNERLOOPSIZE, 4)
 		const __m128d xtB = _mm_set1_pd(_xt) + _mm_set_pd(3,2) * _mm_set1_pd(h);
 		const __m128d eps = _mm_set1_pd(EPS);
 
-		LUNROLL(iy, 0, 3, `
-			    const realtype TMP(syt, iy) = _yt + iy * h;
-			    const __m128d TMP(yt, iy) = _mm_set1_pd(TMP(syt, iy)); ')
+		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);	
 
 		LUNROLL(iy, 0, 3, `
+		const realtype TMP(syt, iy) = _yt + iy * h;
+		const __m128d TMP(yt, iy) = _mm_set1_pd(TMP(syt, iy)); 
+
 		__m128d TMP(xsA, iy) =_mm_setzero_pd();
 		__m128d TMP(xsB, iy) =_mm_setzero_pd();
 		__m128d TMP(ysA, iy) =_mm_setzero_pd();
 		__m128d TMP(ysB, iy) =_mm_setzero_pd();
-		')
-
-		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);
 
 		for(int j = 0; j < nnice; j += INNERLOOPSIZE)
 		{
@@ -70,16 +68,14 @@ define(INNERLOOPSIZE, 4)
 				const __m128d xr2A = xrA * xrA;
 				const __m128d xr2B = xrB * xrB;
 
-				LUNROLL(iy, 0, 3, `
-				    const __m128d TMP(yr, iy) = TMP(yt, iy) - ycurr;
-				    const __m128d TMP(factorA, iy) = vcurr / (xr2A + TMP(yr, iy) * TMP(yr, iy) + eps);
-				    const __m128d TMP(factorB, iy) = vcurr / (xr2B + TMP(yr, iy) * TMP(yr, iy) + eps);')
+				const __m128d TMP(yr, iy) = TMP(yt, iy) - ycurr;
+				const __m128d TMP(factorA, iy) = vcurr / (xr2A + TMP(yr, iy) * TMP(yr, iy) + eps);
+				const __m128d TMP(factorB, iy) = vcurr / (xr2B + TMP(yr, iy) * TMP(yr, iy) + eps);
 
-				LUNROLL(iy, 0, 3, `
-				    TMP(xsA, iy) += xrA * TMP(factorA, iy);
-				    TMP(xsB, iy) += xrB * TMP(factorB, iy);
-				    TMP(ysA, iy) += TMP(yr, iy) * TMP(factorA, iy);
-				    TMP(ysB, iy) += TMP(yr, iy) * TMP(factorB, iy);')
+				TMP(xsA, iy) += xrA * TMP(factorA, iy);
+				TMP(xsB, iy) += xrB * TMP(factorB, iy);
+				TMP(ysA, iy) += TMP(yr, iy) * TMP(factorA, iy);
+				TMP(ysB, iy) += TMP(yr, iy) * TMP(factorB, iy);
 			}')
 		}
 
@@ -94,25 +90,21 @@ define(INNERLOOPSIZE, 4)
 			const __m128d xr2A = xrA * xrA;
 			const __m128d xr2B = xrB * xrB;
 
-			LUNROLL(iy, 0, 3, `
-			    const __m128d TMP(yr, iy) = TMP(yt, iy) - ycurr;
-			    const __m128d TMP(factorA, iy) = vcurr / (xr2A + TMP(yr, iy) * TMP(yr, iy) + eps);
-			    const __m128d TMP(factorB, iy) = vcurr / (xr2B + TMP(yr, iy) * TMP(yr, iy) + eps);')
+			const __m128d TMP(yr, iy) = TMP(yt, iy) - ycurr;
+			const __m128d TMP(factorA, iy) = vcurr / (xr2A + TMP(yr, iy) * TMP(yr, iy) + eps);
+			const __m128d TMP(factorB, iy) = vcurr / (xr2B + TMP(yr, iy) * TMP(yr, iy) + eps);
 
-			LUNROLL(iy, 0, 3, `
-			    TMP(xsA, iy) += xrA * TMP(factorA, iy);
-			    TMP(xsB, iy) += xrB * TMP(factorB, iy);
-			    TMP(ysA, iy) += TMP(yr, iy) * TMP(factorA, iy);
-			    TMP(ysB, iy) += TMP(yr, iy) * TMP(factorB, iy);')
+			TMP(xsA, iy) += xrA * TMP(factorA, iy);
+			TMP(xsB, iy) += xrB * TMP(factorB, iy);
+			TMP(ysA, iy) += TMP(yr, iy) * TMP(factorA, iy);
+			TMP(ysB, iy) += TMP(yr, iy) * TMP(factorB, iy);
 		}
-//printf("CAZZ nnice: %d\n", nnice);
-		LUNROLL(iy, 0, 3, `
-			_mm_storeu_pd(xresult + stride * iy, _mm_loadu_pd(xresult + stride * iy) + TMP(xsA, iy));
-			_mm_storeu_pd(xresult + 2 + stride * iy, _mm_loadu_pd(xresult + 2 + stride * iy) + TMP(xsB, iy));
-			_mm_storeu_pd(yresult + stride * iy,	_mm_loadu_pd(yresult + stride * iy) + TMP(ysA, iy));
-			_mm_storeu_pd(yresult + 2 +stride * iy, _mm_loadu_pd(yresult + 2 + stride * iy) + TMP(ysB, iy));
-			')
 
+		_mm_storeu_pd(xresult + stride * iy, _mm_loadu_pd(xresult + stride * iy) + TMP(xsA, iy));
+		_mm_storeu_pd(xresult + 2 + stride * iy, _mm_loadu_pd(xresult + 2 + stride * iy) + TMP(xsB, iy));
+		_mm_storeu_pd(yresult + stride * iy,	_mm_loadu_pd(yresult + stride * iy) + TMP(ysA, iy));
+		_mm_storeu_pd(yresult + 2 +stride * iy, _mm_loadu_pd(yresult + 2 + stride * iy) + TMP(ysB, iy));
+		')
 	}
 
 
@@ -141,88 +133,63 @@ extern "C"
 			const __m128d rz2A = rzA * rzA;
 			const __m128d rz2B = rzB * rzB;
 
-			LUNROLL(iy, 0, 3, `const realtype TMP(siz,iy) = scalar_iz + iy * h;')
-
-			LUNROLL(iy, 0, 3, `const __m128d TMP(iz, iy) = _mm_set1_pd(TMP(siz,iy));')
-
 			LUNROLL(iy, 0, 3, `
+			const realtype TMP(siz,iy) = scalar_iz + iy * h;
+
+			const __m128d TMP(iz, iy) = _mm_set1_pd(TMP(siz,iy));
+
 			const __m128d TMP(iz2, iy) = TMP(iz,iy) * TMP(iz, iy);
 			const __m128d TMP(r2A, iy) = rz2A + TMP(iz2, iy);
 			const __m128d TMP(r2B, iy) = rz2B + TMP(iz2, iy);
-			')
 
-			LUNROLL(iy, 0, 3, `
 			const __m128d TMP(rinvzA,iy) = rzA / TMP(r2A, iy);
 			const __m128d TMP(rinvzB,iy) = rzB / TMP(r2B, iy);
-			')
 
-			LUNROLL(iy, 0, 3, `
 			const __m128d TMP(iinvzA,iy) = _mm_setzero_pd() -TMP(iz, iy) / TMP(r2A, iy);
 			const __m128d TMP(iinvzB,iy) = _mm_setzero_pd() -TMP(iz, iy) / TMP(r2B, iy);
-			')
 
-			LUNROLL(iy, 0, 3, `
 			__m128d TMP(xsA, iy) = mass2 * TMP(rinvzA, iy);
 			__m128d TMP(xsB, iy) = mass2 * TMP(rinvzB, iy); 
-			')
 
- 			LUNROLL(iy, 0, 3, `
 			__m128d TMP(ysA, iy) = mass2 * TMP(iinvzA, iy);
 			__m128d TMP(ysB, iy) = mass2 * TMP(iinvzB, iy);
-			')
 
-			LUNROLL(iy, 0, 3, `
 			__m128d TMP(rprodA, iy) = TMP(rinvzA, iy);
 			__m128d TMP(rprodB, iy) = TMP(rinvzB, iy);
-			')
 
- 			LUNROLL(iy, 0, 3, `
 			__m128d TMP(iprodA, iy) = TMP(iinvzA, iy);
 			__m128d TMP(iprodB, iy) = TMP(iinvzB, iy); 
-			')
 
 			LUNROLL(n, 0, eval(ORDER - 1), `
 			{
-			   LUNROLL(iy, 0, 3, `
 			   const __m128d TMP(rtmpA, iy) = TMP(rinvzA, iy) * TMP(rprodA, iy) - TMP(iinvzA, iy) * TMP(iprodA, iy);
 			   const __m128d TMP(rtmpB, iy) = TMP(rinvzB, iy) * TMP(rprodB, iy) - TMP(iinvzB, iy) * TMP(iprodB, iy);
-			   ')
 
- 			   LUNROLL(iy, 0, 3, `
 			   const __m128d TMP(itmpA, iy) = TMP(iinvzA, iy) * TMP(rprodA, iy) + TMP(rinvzA, iy) * TMP(iprodA, iy);
 			   const __m128d TMP(itmpB, iy) = TMP(iinvzB, iy) * TMP(rprodB, iy) + TMP(rinvzB, iy) * TMP(iprodB, iy);
-			   ')
 
-			   LUNROLL(iy, 0, 3, `
 			   TMP(rprodA, iy) = TMP(rtmpA, iy);
 			   TMP(rprodB, iy) = TMP(rtmpB, iy);
-			   ')
 
-			   LUNROLL(iy, 0, 3, `
 			   TMP(iprodA, iy) = TMP(itmpA, iy);
 			   TMP(iprodB, iy) = TMP(itmpB, iy);
-			   ')
-
+			   
 			   const __m128d rxp4 = _mm_set1_pd(rxp[n]);
 			   const __m128d ixp4 = _mm_set1_pd(ixp[n]);
 
 			   ifelse(1,eval(n + 1),,`const __m128d pre4 = _mm_set1_pd(eval(n+1));')
 			   pushdef(`FACTOR', ifelse(1,eval(n + 1), ,pre4 *))
 
-			   LUNROLL(iy, 0, 3, `
 			   TMP(xsA, iy) -= FACTOR (TMP(rprodA, iy) * rxp4 - TMP(iprodA, iy) * ixp4);
 			   TMP(xsB, iy) -= FACTOR (TMP(rprodB, iy) * rxp4 - TMP(iprodB, iy) * ixp4);
-			   ')
 
- 			   LUNROLL(iy, 0, 3, `
 			   TMP(ysA, iy) -= FACTOR (TMP(rprodA, iy) * ixp4 + TMP(iprodA, iy) * rxp4);
 			   TMP(ysB, iy) -= FACTOR (TMP(rprodB, iy) * ixp4 + TMP(iprodB, iy) * rxp4);
-			   ')
 
 			   popdef(`FACTOR')
 			}')
 
-			LUNROLL(iy, 0, 3, `
+
 			_mm_storeu_pd(xresult + stride * iy, _mm_loadu_pd(xresult + stride * iy) + TMP(xsA, iy));
 			_mm_storeu_pd(xresult + 2 + stride * iy, _mm_loadu_pd(xresult + 2 + stride * iy) + TMP(xsB, iy));
 			_mm_storeu_pd(yresult + stride * iy, _mm_loadu_pd(yresult + stride * iy) - TMP(ysA, iy));

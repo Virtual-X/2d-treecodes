@@ -378,6 +378,6 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 5973);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 2444); 
     }
 }
