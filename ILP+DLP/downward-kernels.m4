@@ -34,7 +34,7 @@ void downward_e2l(const realtype * __restrict__ const rxp,
   {
     const realtype r2z0 = x0 * x0 + y0 * y0;
     const realtype rlogmz0 = log(r2z0) / 2;
-    const realtype ilogmz0 = atan2(y0, x0) + M_PI;
+    const realtype ilogmz0 = atan2(y0, x0) - M_PI;
 
     const realtype rinvz_1 = +x0 / r2z0;
     const realtype iinvz_1 = -y0 / r2z0;
