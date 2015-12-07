@@ -10,9 +10,7 @@
 # before getting a written permission from the author of this file.
 #
 
-CC = gcc
-ICPC = /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/bin/intel64/icpc
-
+CC = gcc -std=c99
 backend ?= avx
 real ?= double
 treecode-potential-order ?= 12
@@ -34,8 +32,8 @@ ifeq ($(real),double)
 FORCEKERNELSM4 = force-kernels-tiled-$(backend).m4
 endif
 
-KERNELSFLAGS = -O4 -DNDEBUG  -ftree-vectorize -Wno-psabi \
-	-std=c99 -march=native -mtune=native -fassociative-math -ffast-math
+KERNELSFLAGS = -O4 -DNDEBUG -ftree-vectorize -Wno-psabi \
+	 -march=native -mtune=native -fassociative-math -ffast-math
 
 kernels: $(OBJS)
 

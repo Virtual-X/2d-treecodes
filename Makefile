@@ -11,6 +11,7 @@
 #
 
 CXX ?= g++
+CC = gcc -std=c99
 
 real ?= double
 treecode-potential-order ?= 12
@@ -36,12 +37,12 @@ header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
 
 drivers: kernels
-	make -C TLP drivers \
+	make -C TLP drivers CXX="$(CXX)" \
 	E2P_TILED_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ILP+DLP/force-kernels-tiled.o) \
 	E2P_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P ILP+DLP/force-kernels.o)
 
 kernels:
-	make -C ILP+DLP kernels backend=$(backend)
+	make -C ILP+DLP kernels backend="$(backend)" CC="$(CC)"
 
 clean:
 	rm -f test libtreecode.a treecode.h
