@@ -14,8 +14,8 @@
 
 #define _CONCATENATE_BODY(a, b) a ## b
 #define _CONCATENATE(a, b) _CONCATENATE_BODY(a, b)
-#define P2E_KERNEL _CONCATENATE(treecode_p2e_order, ORDER)
-#define E2E_KERNEL _CONCATENATE(treecode_e2e_order, ORDER)
+#define P2E_KERNEL _CONCATENATE(upward_p2e_order, ORDER)
+#define E2E_KERNEL _CONCATENATE(upward_e2e_order, ORDER)
 
 #ifdef __cplusplus
 extern "C"

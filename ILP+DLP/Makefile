@@ -19,7 +19,7 @@ treecode-force-order ?= 24
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
-OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o $(UPWARDKERNELS_POTENTIAL).o
+OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 	OBJS += $(UPWARDKERNELS_FORCE).o 
@@ -46,6 +46,9 @@ force-kernels.o: force-kernels.c
 force-kernels-tiled.o: force-kernels-tiled.c
 	$(CC) $(KERNELSFLAGS) -c $^
 
+downward-kernels.o: downward-kernels.c 
+	$(CC) $(KERNELSFLAGS) -c $^
+
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
 
@@ -60,6 +63,9 @@ force-kernels.c: force-kernels.m4 force-kernels.h Makefile
 
 force-kernels-tiled.c: $(FORCEKERNELSM4) force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $(FORCEKERNELSM4) | indent > force-kernels-tiled.c
+
+downward-kernels.c:  downward-kernels.m4 downward-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) downward-kernels.m4 | indent > downward-kernels.c
 
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels.m4  > $(UPWARDKERNELS_POTENTIAL).c

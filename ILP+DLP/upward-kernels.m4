@@ -19,8 +19,8 @@ typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-define(P2E_KERNEL, treecode_p2e_order$1)
-define(E2E_KERNEL, treecode_e2e_order$1)
+define(P2E_KERNEL, upward_p2e_order$1)
+define(E2E_KERNEL, upward_e2e_order$1)
 
 void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
   const realtype * __restrict__ const ysources,

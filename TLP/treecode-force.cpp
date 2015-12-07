@@ -18,8 +18,10 @@
 
 #include "treecode.h"
 #include "upward-kernels.h"
+#include "downward-kernels.h"
 #include "force-kernels.h"
 #include "upward.h"
+
 
 #define _INSTRUMENTATION_
 
@@ -156,20 +158,30 @@ namespace EvaluateForce
     }
 
 #define TILESIZE 4
-#define BRICKSIZE 4
+#define BRICKSIZE 8
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
-		  const NodeForce & root, const realtype thetasquared)
+		  const NodeForce & root, const realtype theta)
     {
+	//const bool localexp = true;
 	int maxentry = 0;
-
+	
 	const NodeForce * stack[15 * 4 * 2];
 
+	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
+	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
+
+	const realtype rbrick = 1.4142135623730951 * h * (BRICKSIZE - 1) * 0.5;
+	
 	for(int by = 0; by < BLOCKSIZE; by += BRICKSIZE)
 	    for(int bx = 0; bx < BLOCKSIZE; bx += BRICKSIZE)
 	    {
-		realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
+		const realtype x0brick = x0 + h * (bx + 0.5 * (BRICKSIZE - 1));
+		const realtype y0brick = y0 + h * (by + 0.5 * (BRICKSIZE - 1));
+			
+		for(int i = 0; i <= ORDER; ++i)
+		    rlocal[i] = ilocal[i] = 0;
 
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
 		    for(int ix = 0; ix < BRICKSIZE; ++ix)
@@ -189,57 +201,75 @@ namespace EvaluateForce
 		    const realtype xcom = node->xcom();
 		    const realtype ycom = node->ycom();
 
-		    const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
-		    const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
-
-		    const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
-
-		    if (4 * node->r * node->r < thetasquared * r2)
-		    {
-			int64_t startc = MYRDTSC;
-
-			for(int ty = 0; ty < BRICKSIZE; ty += 4)
-			    for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
-						node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-
-			int64_t endc = MYRDTSC;
-
-#ifdef _INSTRUMENTATION_
-			perfmon.e2pcycles += endc - startc;
-			perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
-#endif
-		    }
+		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
+		    const realtype R = std::max(node->r, rbrick);
+		    
+		    const bool localexpansion_converges = distance / R - 1 > 1 + theta;
+		    
+		    if (localexpansion_converges)
+			downward_e2l(node->rexpansions, node->iexpansions, xcom - x0brick, ycom - y0brick, h, node->mass, rlocal, ilocal);
 		    else
 		    {
-			if (node->leaf)
-			{
-			    const int s = node->s;
-
-			    int64_t startc = MYRDTSC;
-
-			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
-				for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				    force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-						    x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-
-			    int64_t endc = MYRDTSC;
+			//printf("NOT!\n");
+			 const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
+			 const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
+			 
+			 const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
+		    
+			 if (4 * node->r * node->r < theta * theta * r2)
+			 {
+			     int64_t startc = MYRDTSC;
+			     
+			     for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				 for(int tx = 0; tx < BRICKSIZE; tx += 4)
+				     force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
+						     node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+			     
+			     int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
-			    perfmon.p2pcycles += endc - startc;
-			    perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
-			    ++perfmon.p2pcalls;
+			     perfmon.e2pcycles += endc - startc;
+			     perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
 #endif
-			}
-			else
-			{
-			    for(int c = 0; c < 4; ++c)
-				stack[++stackentry] = (NodeForce *)node->children[c];
-
-			    maxentry = std::max(maxentry, stackentry);
-			}
+			 }
+			 else
+			 {
+			     if (node->leaf)
+			     {
+				 const int s = node->s;
+				 
+				 int64_t startc = MYRDTSC;
+				 
+				 for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				     for(int tx = 0; tx < BRICKSIZE; tx += 4)
+					 force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+							 x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+				 
+				 int64_t endc = MYRDTSC;
+				 
+#ifdef _INSTRUMENTATION_
+				 perfmon.p2pcycles += endc - startc;
+				 perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
+				 ++perfmon.p2pcalls;
+#endif
+			     }
+			     else
+			     {
+				 for(int c = 0; c < 4; ++c)
+				     stack[++stackentry] = (NodeForce *)node->children[c];
+				 
+				 maxentry = std::max(maxentry, stackentry);
+			     }
+			 }
 		    }
 		}
+
+		for(int ty = 0; ty < BRICKSIZE; ty += 4)
+		    for(int tx = 0; tx < BRICKSIZE; tx += 4)
+			downward_l2p_tiled(h * (tx - 0.5 * (BRICKSIZE - 1)),
+					   h * (ty - 0.5 * (BRICKSIZE - 1)),
+					   h, rlocal, ilocal,
+					   &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
 		    for(int ix = 0; ix < BRICKSIZE; ++ix)
@@ -348,8 +378,6 @@ namespace EvaluateForce
 			     realtype * const xdst,
 			     realtype * const ydst)
     {
-	const realtype thetasquared = theta * theta;
-
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
@@ -369,7 +397,7 @@ namespace EvaluateForce
 
 #pragma omp for schedule(dynamic,1)
 	    for(int i = 0; i < nblocks; ++i)
-		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], root, thetasquared);
+		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], root, theta);
 
 	    perfmon.endc = MYRDTSC;
 #ifdef _INSTRUMENTATION_
