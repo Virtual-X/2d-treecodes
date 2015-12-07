@@ -125,9 +125,11 @@ namespace Tree
 void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 		 Node * const root, const int LEAF_MAXCOUNT)
 {
-    //const int maxthreads = omp_get_max_threads();
-    //omp_set_dynamic(0);
-    //omp_set_num_threads(12);
+  const int isdynamic = omp_get_dynamic();
+    const int maxthreads = omp_get_max_threads();
+    omp_set_dynamic(0);
+    omp_set_num_threads(12);
+
 
     Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
 
@@ -211,7 +213,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	}
     }
 
-    //omp_set_num_threads(maxthreads);
+    omp_set_num_threads(maxthreads);
+    //omp_set_dynamic(isdynamic);
 }
 
 void Tree::dispose()
