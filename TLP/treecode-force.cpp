@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-#define _INSTRUMENTATION_
+//#define _INSTRUMENTATION_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
@@ -202,65 +202,64 @@ namespace EvaluateForce
 		    const realtype ycom = node->ycom();
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
-		    const realtype R = std::max(node->r, rbrick);
 		    
-		    const bool localexpansion_converges = distance / R - 1 > 1 + theta;
+		    const bool localexpansion_converges = distance / node->r - 1 > 0.5 + theta && rbrick <= node->r;
 		    
 		    if (localexpansion_converges)
-			downward_e2l(node->rexpansions, node->iexpansions, xcom - x0brick, ycom - y0brick, h, node->mass, rlocal, ilocal);
+			downward_e2l(xcom - x0brick, ycom - y0brick, h, node->mass,
+				     node->rexpansions, node->iexpansions, rlocal, ilocal);
 		    else
 		    {
-			//printf("NOT!\n");
-			 const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
-			 const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
+			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
+			const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
 			 
-			 const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
+			const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
 		    
-			 if (4 * node->r * node->r < theta * theta * r2)
-			 {
-			     int64_t startc = MYRDTSC;
+			if (4 * node->r * node->r < theta * theta * r2)
+			{
+			    int64_t startc = MYRDTSC;
 			     
-			     for(int ty = 0; ty < BRICKSIZE; ty += 4)
-				 for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				     force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
-						     node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				for(int tx = 0; tx < BRICKSIZE; tx += 4)
+				    force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
+						    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 			     
-			     int64_t endc = MYRDTSC;
+			    int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
-			     perfmon.e2pcycles += endc - startc;
-			     perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
+			    perfmon.e2pcycles += endc - startc;
+			    perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
 #endif
-			 }
-			 else
-			 {
-			     if (node->leaf)
-			     {
-				 const int s = node->s;
+			}
+			else
+			{
+			    if (node->leaf)
+			    {
+				const int s = node->s;
 				 
-				 int64_t startc = MYRDTSC;
+				int64_t startc = MYRDTSC;
 				 
-				 for(int ty = 0; ty < BRICKSIZE; ty += 4)
-				     for(int tx = 0; tx < BRICKSIZE; tx += 4)
-					 force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-							 x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+				for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
+					force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 				 
-				 int64_t endc = MYRDTSC;
+				int64_t endc = MYRDTSC;
 				 
 #ifdef _INSTRUMENTATION_
-				 perfmon.p2pcycles += endc - startc;
-				 perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
-				 ++perfmon.p2pcalls;
+				perfmon.p2pcycles += endc - startc;
+				perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
+				++perfmon.p2pcalls;
 #endif
-			     }
-			     else
-			     {
-				 for(int c = 0; c < 4; ++c)
-				     stack[++stackentry] = (NodeForce *)node->children[c];
+			    }
+			    else
+			    {
+				for(int c = 0; c < 4; ++c)
+				    stack[++stackentry] = (NodeForce *)node->children[c];
 				 
-				 maxentry = std::max(maxentry, stackentry);
-			     }
-			 }
+				maxentry = std::max(maxentry, stackentry);
+			    }
+			}
 		    }
 		}
 
