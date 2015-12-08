@@ -16,7 +16,7 @@ include(unroll.m4)
 define(mysign, `ifelse(eval((-1)**($1)), -1,-,+)')
 divert(0)
 dnl
-
+typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 #include <math.h>
 
 #ifndef M_PI
@@ -67,10 +67,12 @@ void downward_e2l(
         mysign(k) BINOMIAL(eval(l + k - 1), eval(k - 1)) * TMP(icoeff, k)');
 
         const realtype TMP(prefac, l) = - mass / l;
-        rlocal[l] += TMP(prefac, l) * TMP(rinvz, l) + TMP(rtmp, l) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
-        ilocal[l] += TMP(prefac, l) * TMP(iinvz, l) + TMP(rtmp, l) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
+        rlocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
+        ilocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
       }
       ')
+
+      __asm__("L_END_DOWNWARD_E2L:");
     }
 
 #ifdef __cplusplus
@@ -84,28 +86,31 @@ extern "C"
       realtype * const xresult,
       realtype * const yresult, const int stride)
       {
-        for(int iy = 0; iy < 4; ++iy)
-        for(int ix = 0; ix < 4; ++ix)
-        {
-          const realtype rz_1 = rxbase + ix * h;
-          const realtype iz_1 = rybase + iy * h;
+	LUNROLL(iy, 0, 3,`
+	{
+          const V4 rz_1 = { LUNROLL(ix, 0, 3, `rxbase + ix * h,')};
+          const V4 iz_1 = { LUNROLL(ix, 0, 3, `rybase + iy * h,')};
 
-          const realtype TMP(rresult, 1) = rlocal[1];
-          const realtype TMP(iresult, 1) = ilocal[1];
+          const V4 TMP(rresult, 1) = { LUNROLL(ix, 0, 3, `rlocal[1], ')};
+          const V4 TMP(iresult, 1) = { LUNROLL(ix, 0, 3, `ilocal[1], ')};
 
           LUNROLL(l, 2, eval(ORDER),`
-          const realtype TMP(rz, l) = TMP(rz, eval(l - 1)) * rz_1 - TMP(iz, eval(l - 1)) * iz_1;
+          const V4 TMP(rz, l) = TMP(rz, eval(l - 1)) * rz_1 - TMP(iz, eval(l - 1)) * iz_1;
 
-          const realtype TMP(iz, l) = TMP(rz, eval(l - 1)) * iz_1 + TMP(iz, eval(l - 1)) * rz_1;
+          const V4 TMP(iz, l) = TMP(rz, eval(l - 1)) * iz_1 + TMP(iz, eval(l - 1)) * rz_1;
 
-          const realtype TMP(rresult, l) = TMP(rresult, eval(l - 1)) +
+          const V4 TMP(rresult, l) = TMP(rresult, eval(l - 1)) +
           l * (rlocal[l] * TMP(rz, eval(l - 1)) - ilocal[l] * TMP(iz, eval(l - 1)));
           
-          const realtype TMP(iresult, l) = TMP(iresult, eval(l - 1)) +
+          const V4 TMP(iresult, l) = TMP(iresult, eval(l - 1)) +
           l * (rlocal[l] * TMP(iz, eval(l - 1)) + ilocal[l] * TMP(rz, eval(l - 1)));
           ')
 
-          xresult[ix + stride * iy] += TMP(rresult, ORDER);
-          yresult[ix + stride * iy] -= TMP(iresult, ORDER);
-        }
+          LUNROLL(ix, 0, 3,`
+	  xresult[ix + stride * iy] += TMP(rresult, ORDER)[ix];
+          yresult[ix + stride * iy] -= TMP(iresult, ORDER)[ix];')
+	  
+        }')
+	
+	__asm__("L_END_DOWNWARD_L2P_TILED:");
       }
