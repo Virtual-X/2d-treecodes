@@ -20,7 +20,29 @@ inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
 inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
 inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
 inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
+
+inline __m128 operator+(__m128 a, __m128 b){ return _mm_add_ps(a, b); }
+inline __m128 operator*(__m128 a, __m128 b){ return _mm_mul_ps(a, b); }
+inline __m128 operator-(__m128 a,  __m128 b){ return _mm_sub_ps(a, b); }
+inline __m128 operator/(__m128 a,  __m128 b){ return _mm_div_ps(a, b); }
+inline __m128 operator += (__m128& a, __m128 b){ return a = _mm_add_ps(a, b); }
+inline __m128 operator -= (__m128& a, __m128 b){ return a = _mm_sub_ps(a, b); }
 #endif
+
+inline __m128 _DIV_(const __m128 a, const __m128 b)
+{
+	//from the "Software Optimization Guide for AMD Family 10h and 12h Processors"
+	__m128 x0, x1, x2, x3, y;
+	x0 = _mm_rcp_ps (b); 
+	x1 = _mm_mul_ps (a, x0); 
+	x2 = _mm_mul_ps (b, x0); 
+	x3 = _mm_sub_ps (_mm_set1_ps (2.0F), x2);
+	__m128 valid = _mm_cmpnle_ps(b, _mm_set_ps1(0));
+	return _mm_and_ps(_mm_mul_ps (x1, x3), valid) ;
+
+//#return _mm_div_ps(a, b);
+}
+
 
 #ifdef __cplusplus
 extern "C"
@@ -104,6 +126,74 @@ define(INNERLOOPSIZE, 4)
 		_mm_storeu_pd(xresult + 2 + stride * iy, _mm_loadu_pd(xresult + 2 + stride * iy) + TMP(xsB, iy));
 		_mm_storeu_pd(yresult + stride * iy,	_mm_loadu_pd(yresult + stride * iy) + TMP(ysA, iy));
 		_mm_storeu_pd(yresult + 2 +stride * iy, _mm_loadu_pd(yresult + 2 + stride * iy) + TMP(ysB, iy));
+		')
+	}
+
+
+#ifdef __cplusplus
+extern "C"
+#endif
+	void force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
+	     		 const float * __restrict__ const ysrc,
+			 const float * __restrict__ const vsrc,
+			 const int nsources,
+			 const float _xt,
+			 const float _yt,
+			 const float h,
+			 float * const xresult,
+			 float * const yresult,
+			 const int stride)
+	{
+		const __m128 xt = _mm_set1_ps(_xt) + _mm_set_ps(3, 2, 1, 0) * _mm_set1_ps(h);
+
+		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);	
+
+		LUNROLL(iy, 0, 3, `
+		const float TMP(syt, iy) = _yt + iy * h;
+		const __m128 TMP(yt, iy) = _mm_set1_ps(TMP(syt, iy)); 
+
+		__m128 TMP(xs, iy) =_mm_setzero_ps();
+		__m128 TMP(ys, iy) =_mm_setzero_ps();
+
+ 		for(int j = 0; j < nnice; j += INNERLOOPSIZE)
+ 		{
+ 			LUNROLL(pass, 0, eval(INNERLOOPSIZE - 1), `
+ 			{
+ 				const __m128 xcurr = _mm_set1_ps(xsrc[j + pass]);
+ 				const __m128 ycurr = _mm_set1_ps(ysrc[j + pass]);
+ 				const __m128 vcurr = _mm_set1_ps(vsrc[j + pass]);
+ 
+ 				const __m128 xr = xt - xcurr;
+ 
+ 				const __m128 xr2 = xr * xr;
+ 
+ 				const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;
+ 				const __m128 TMP(factor, iy) =  _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));
+ 
+ 				TMP(xs, iy) += xr * TMP(factor, iy);
+ 				TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);
+ 			}')
+ 		}
+
+		for(int j = nnice; j < nsources; ++j)
+		{
+			const __m128 ycurr = _mm_set1_ps(ysrc[j]);
+			const __m128 vcurr = _mm_set1_ps(vsrc[j]);
+
+			const __m128 xr = xt - _mm_set1_ps(xsrc[j]);
+
+			const __m128 xr2 = xr * xr;
+
+			const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;
+			const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));
+
+			TMP(xs, iy) += xr * TMP(factor, iy);
+			TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);
+		}
+
+	
+		_mm_storeu_ps(xresult + stride * iy, _mm_loadu_ps(xresult + stride * iy) + TMP(xs, iy));
+		_mm_storeu_ps(yresult + stride * iy, _mm_loadu_ps(yresult + stride * iy) + TMP(ys, iy));
 		')
 	}
 

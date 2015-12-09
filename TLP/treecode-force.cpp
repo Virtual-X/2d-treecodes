@@ -24,6 +24,7 @@
 
 
 //#define _INSTRUMENTATION_
+#define _MIXPREC_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
@@ -36,6 +37,7 @@ namespace EvaluateForce
     struct NodeForce : Tree::NodeImplementation<ORDER> { };
 
     realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
+    float *xdata_fp32 = nullptr, *ydata_fp32 = nullptr, *vdata_fp32 = nullptr;
 
     struct PerfMon
     {
@@ -209,6 +211,11 @@ namespace EvaluateForce
 	const NodeForce * stack[15 * 4 * 2];
 
 	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
+
+#ifdef _MIXPREC_
+	float xresult_fp32[BRICKSIZE][BRICKSIZE], yresult_fp32[BRICKSIZE][BRICKSIZE];
+#endif
+
 	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
 
 	E2LWork<32> e2lwork(rlocal, ilocal);
@@ -231,6 +238,16 @@ namespace EvaluateForce
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
 		    for(int ix = 0; ix < BRICKSIZE; ++ix)
 			yresult[iy][ix] = 0;
+
+#ifdef _MIXPREC_
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		  for(int ix = 0; ix < BRICKSIZE; ++ix)
+		    xresult_fp32[iy][ix] = 0;
+		
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		  for(int ix = 0; ix < BRICKSIZE; ++ix)
+		    yresult_fp32[iy][ix] = 0;
+#endif
 
 		int stackentry = 0;
 		stack[0] = &root;
@@ -281,8 +298,17 @@ namespace EvaluateForce
 
 				for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
+				      {
+#ifdef _MIXPREC_
+					force_p2p_tiled_mixprec(&xdata_fp32[s], &ydata_fp32[s], &vdata_fp32[s], node->e - s,
+								(float)(x0 + (bx + tx) * h), (float)(y0 + (by + ty) * h), (float)h, 
+								&xresult_fp32[ty][tx], &yresult_fp32[ty][tx], BRICKSIZE);
+#else
 					force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, 
+							&xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+#endif
+				      }
 
 				int64_t endc = MYRDTSC;
 
@@ -311,6 +337,15 @@ namespace EvaluateForce
 					   h * (ty - 0.5 * (BRICKSIZE - 1)),
 					   h, rlocal, ilocal,
 					   &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+#ifdef _MIXPREC_
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		  for(int ix = 0; ix < BRICKSIZE; ++ix)
+		    xresult[iy][ix] += xresult_fp32[iy][ix];
+		
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		  for(int ix = 0; ix < BRICKSIZE; ++ix)
+		    yresult[iy][ix] += yresult_fp32[iy][ix];	
+#endif
 
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
 		    for(int ix = 0; ix < BRICKSIZE; ++ix)
@@ -429,6 +464,19 @@ namespace EvaluateForce
 	ydata = Tree::ydata;
 	vdata = Tree::vdata;
 
+#ifdef _MIXPREC_
+	posix_memalign((void **)&xdata_fp32, 32, sizeof(float) * nsrc);
+	posix_memalign((void **)&ydata_fp32, 32, sizeof(float) * nsrc);
+	posix_memalign((void **)&vdata_fp32, 32, sizeof(float) * nsrc);
+
+	#pragma omp parallel for
+	for(int i = 0; i < nsrc; ++i)
+	  {
+	    xdata_fp32[i] = (float)xdata[i];
+	    ydata_fp32[i] = (float)ydata[i];
+	    vdata_fp32[i] = (float)vdata[i];
+	  }
+#endif
 	PerfMon perf[omp_get_max_threads()];
 
 #pragma omp parallel
@@ -445,6 +493,12 @@ namespace EvaluateForce
 	    perf[omp_get_thread_num()] = perfmon;
 #endif
 	}
+	
+#ifdef _MIXPREC_
+	free(xdata_fp32);
+	free(ydata_fp32);
+	free(vdata_fp32);
+#endif
 
 	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2P_TILED_IC);
     }

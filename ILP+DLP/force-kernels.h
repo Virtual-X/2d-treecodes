@@ -38,6 +38,17 @@ extern "C"
 			 realtype * const xresult,
 			 realtype * const yresult, const int stride);
 
+  void force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
+			       const float * __restrict__ const ysrc,
+			       const float * __restrict__ const vsrc,
+			       const int nsources,
+			       const float _xt,
+			       const float _yt,
+			       const float h,
+			       float * const xresult,
+			       float * const yresult,
+			       const int stride);
+
     void force_e2p(const realtype mass,
 		   const realtype rx,
 		   const realtype ry,
