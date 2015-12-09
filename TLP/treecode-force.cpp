@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-//#define _INSTRUMENTATION_
+#define _INSTRUMENTATION_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
@@ -211,7 +211,7 @@ namespace EvaluateForce
 	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
 
-	E2LWork<4> e2lwork(rlocal, ilocal);
+	E2LWork<32> e2lwork(rlocal, ilocal);
 
 	const realtype rbrick = 1.4142135623730951 * h * (BRICKSIZE - 1) * 0.5;
 
