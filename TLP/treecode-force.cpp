@@ -157,6 +157,45 @@ namespace EvaluateForce
 #endif
     }
 
+    template<int size>
+    struct E2LWork
+    {
+	int count = 0;
+	realtype * const rdst,  * const idst;
+
+	realtype x0s[size], y0s[size], masses[size];
+	const realtype * rxps[size], *ixps[size];
+
+
+	E2LWork(realtype * const rlocal, realtype * const ilocal):
+	    count(0), rdst(rlocal), idst(ilocal) { }
+
+	void _flush()
+	    {
+		downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+		count = 0;
+	    }
+
+	void push(const realtype x0, const realtype y0, const realtype mass,
+		  const realtype * const rxp, const realtype * const ixp)
+	    {
+		x0s[count] = x0;
+		y0s[count] = y0;
+		masses[count] = mass;
+		rxps[count] = rxp;
+		ixps[count] = ixp;
+
+		if (++count >= size)
+		    _flush();
+	    }
+
+	void finalize()
+	    {
+		if (count)
+		    _flush();
+	    }
+    };
+
 #define TILESIZE 4
 #define BRICKSIZE 16
 
@@ -166,20 +205,22 @@ namespace EvaluateForce
     {
 	//const bool localexp = true;
 	int maxentry = 0;
-	
+
 	const NodeForce * stack[15 * 4 * 2];
 
 	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
 
+	E2LWork<4> e2lwork(rlocal, ilocal);
+
 	const realtype rbrick = 1.4142135623730951 * h * (BRICKSIZE - 1) * 0.5;
-	
+
 	for(int by = 0; by < BLOCKSIZE; by += BRICKSIZE)
 	    for(int bx = 0; bx < BLOCKSIZE; bx += BRICKSIZE)
 	    {
 		const realtype x0brick = x0 + h * (bx + 0.5 * (BRICKSIZE - 1));
 		const realtype y0brick = y0 + h * (by + 0.5 * (BRICKSIZE - 1));
-			
+
 		for(int i = 0; i <= ORDER; ++i)
 		    rlocal[i] = ilocal[i] = 0;
 
@@ -202,28 +243,27 @@ namespace EvaluateForce
 		    const realtype ycom = node->ycom();
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
-		    
+
 		    const bool localexpansion_converges = distance / node->r - 1 > 0.5 + theta && rbrick <= node->r;
-		    
+
 		    if (localexpansion_converges)
-			downward_e2l(xcom - x0brick, ycom - y0brick, h, node->mass,
-				     node->rexpansions, node->iexpansions, rlocal, ilocal);
+			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);
 		    else
 		    {
 			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
 			const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
-			 
+
 			const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
-		    
+
 			if (4 * node->r * node->r < theta * theta * r2)
 			{
 			    int64_t startc = MYRDTSC;
-			     
+
 			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				for(int tx = 0; tx < BRICKSIZE; tx += 4)
 				    force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
 						    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-			     
+
 			    int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
@@ -236,16 +276,16 @@ namespace EvaluateForce
 			    if (node->leaf)
 			    {
 				const int s = node->s;
-				 
+
 				int64_t startc = MYRDTSC;
-				 
+
 				for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
 					force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
 							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-				 
+
 				int64_t endc = MYRDTSC;
-				 
+
 #ifdef _INSTRUMENTATION_
 				perfmon.p2pcycles += endc - startc;
 				perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
@@ -256,12 +296,14 @@ namespace EvaluateForce
 			    {
 				for(int c = 0; c < 4; ++c)
 				    stack[++stackentry] = (NodeForce *)node->children[c];
-				 
+
 				maxentry = std::max(maxentry, stackentry);
 			    }
 			}
 		    }
 		}
+
+		e2lwork.finalize();
 
 		for(int ty = 0; ty < BRICKSIZE; ty += 4)
 		    for(int tx = 0; tx < BRICKSIZE; tx += 4)
@@ -404,6 +446,6 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2P_TILED_IC); 
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2P_TILED_IC);
     }
 }

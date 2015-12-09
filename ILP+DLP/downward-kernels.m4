@@ -27,52 +27,60 @@ typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 extern "C"
 #endif
 void downward_e2l(
-  const realtype x0,
-  const realtype y0,
-  const realtype h,
-  const realtype mass,
-  const realtype * __restrict__ const rxp,
-  const realtype * __restrict__ const ixp,
-  realtype * __restrict__ const rlocal,
-  realtype * __restrict__ const ilocal)
+     const realtype * x0s,
+     const realtype * y0s,
+     const realtype * masses,
+     const realtype ** __restrict__ const vrexpansions,
+     const realtype ** __restrict__ const viexpansions,
+     const int nexpansions,
+     realtype * __restrict__ const rlocal,
+     realtype * __restrict__ const ilocal)
   {
-    const realtype r2z0 = x0 * x0 + y0 * y0;
-    const realtype rlogmz0 = log(r2z0) / 2;
-    const realtype ilogmz0 = atan2(y0, x0) - M_PI;
+	for(int iexpansion = 0; iexpansion < nexpansions; ++iexpansion)
+  	{
+		const realtype x0 = x0s[iexpansion];
+		const realtype y0 = y0s[iexpansion];
+		const realtype mass = masses[iexpansion];
+		const realtype * __restrict__ const rxp = vrexpansions[iexpansion];
+		const realtype * __restrict__ const ixp = viexpansions[iexpansion];
 
-    const realtype rinvz_1 = +x0 / r2z0;
-    const realtype iinvz_1 = -y0 / r2z0;
+		const realtype r2z0 = x0 * x0 + y0 * y0;
+    		const realtype rlogmz0 = log(r2z0) / 2;
+    		const realtype ilogmz0 = atan2(y0, x0) - M_PI;
 
-    dnl
-    LUNROLL(j, 1, eval(ORDER),`
-    ifelse(j, 1, , `
-      const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
-      const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
+    		const realtype rinvz_1 = +x0 / r2z0;
+    		const realtype iinvz_1 = -y0 / r2z0;
 
-      const realtype TMP(rcoeff, j) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);
-      const realtype TMP(icoeff, j) = rxp[eval(j - 1)] * TMP(iinvz, j) + ixp[eval(j - 1)] * TMP(rinvz, j);
-      ')
+    		dnl
+    		LUNROLL(j, 1, eval(ORDER),`
+    		ifelse(j, 1, , `
+      		  const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
+      		  const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
 
-      {
-        rlocal[0] += mass * rlogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(rcoeff, k)  ');
-        ilocal[0] += mass * ilogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(icoeff, k)  ');
-      }
+      		  const realtype TMP(rcoeff, j) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);
+      		  const realtype TMP(icoeff, j) = rxp[eval(j - 1)] * TMP(iinvz, j) + ixp[eval(j - 1)] * TMP(rinvz, j);
+      		')
 
-      LUNROLL(l, 1, eval(ORDER),`
-      {
-        const realtype TMP(rtmp, l) = LUNROLL(k, 1, eval(ORDER),`
-        mysign(k) BINOMIAL(eval(l + k - 1), eval(k - 1)) * TMP(rcoeff, k)');
+		{
+			rlocal[0] += mass * rlogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(rcoeff, k)  ');
+        		ilocal[0] += mass * ilogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(icoeff, k)  ');
+      		}
 
-        const realtype TMP(itmp, l) = LUNROLL(k, 1, eval(ORDER),`
-        mysign(k) BINOMIAL(eval(l + k - 1), eval(k - 1)) * TMP(icoeff, k)');
+      		LUNROLL(l, 1, eval(ORDER),`
+      		{
+			const realtype TMP(rtmp, l) = LUNROLL(k, 1, eval(ORDER),`
+        		mysign(k) BINOMIAL(eval(l + k - 1), eval(k - 1)) * TMP(rcoeff, k)');
 
-        const realtype TMP(prefac, l) = - mass / l;
-        rlocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
-        ilocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
-      }
-      ')
+        		const realtype TMP(itmp, l) = LUNROLL(k, 1, eval(ORDER),`
+        		mysign(k) BINOMIAL(eval(l + k - 1), eval(k - 1)) * TMP(icoeff, k)');
 
-      __asm__("L_END_DOWNWARD_E2L:");
+        		const realtype TMP(prefac, l) = - mass / l;
+        		rlocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
+        		ilocal[l] += (TMP(prefac, l) + TMP(rtmp, l)) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
+      		}')
+	}
+
+      	__asm__("L_END_DOWNWARD_E2L:");
     }
 
 #ifdef __cplusplus
@@ -101,7 +109,7 @@ extern "C"
 
           const V4 TMP(rresult, l) = TMP(rresult, eval(l - 1)) +
           l * (rlocal[l] * TMP(rz, eval(l - 1)) - ilocal[l] * TMP(iz, eval(l - 1)));
-          
+
           const V4 TMP(iresult, l) = TMP(iresult, eval(l - 1)) +
           l * (rlocal[l] * TMP(iz, eval(l - 1)) + ilocal[l] * TMP(rz, eval(l - 1)));
           ')
@@ -109,8 +117,8 @@ extern "C"
           LUNROLL(ix, 0, 3,`
 	  xresult[ix + stride * iy] += TMP(rresult, ORDER)[ix];
           yresult[ix + stride * iy] -= TMP(iresult, ORDER)[ix];')
-	  
+
         }')
-	
+
 	__asm__("L_END_DOWNWARD_L2P_TILED:");
       }

@@ -17,12 +17,12 @@ extern "C"
 {
 #endif
 
-    void downward_e2l(const realtype x0,
-		      const realtype y0,
-		      const realtype h,
-		      const realtype mass,
-		      const realtype * __restrict__ const rexpansions,
-		      const realtype * __restrict__ const iexpansions,
+    void downward_e2l(const realtype * x0s,
+		      const realtype * y0s,
+		      const realtype * masses,
+		      const realtype ** __restrict__ const vrexpansions,
+		      const realtype ** __restrict__ const viexpansions,
+		      const int nexpansions,
 		      realtype * __restrict__ const rlocal,
 		      realtype * __restrict__ const ilocal);
 
