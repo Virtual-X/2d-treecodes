@@ -18,7 +18,7 @@ treecode-potential-order ?= 12
 treecode-force-order ?= 24
 mrag-blocksize ?= 32
 config ?= release
-backend ?= avx
+backend ?= sse
 
 CXXFLAGS = -std=c++11  -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
 
@@ -28,10 +28,25 @@ ifeq "$(gprof)" "1"
 endif
 
 test: main.cpp libtreecode.a
-	$(CXX) $(CXXFLAGS) $^ /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libsvml.a /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libirc.a  -g -o test
+	$(CXX) $(CXXFLAGS) $^   -g -o test
 
-libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
-	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o
+libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header svml
+	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o \
+	svml/svml_d_atan22_iface_la.o \
+	svml/svml_d_log2_iface_la.o \
+	svml/svml_d_feature_flag_.o \
+	svml/cpu_feature_disp.o \
+	svml/svml_d_atan22_core_exla.o \
+	svml/svml_d_atan22_core_h9la.o \
+	svml/svml_d_log2_core_h9la.o \
+	svml/svml_d_log2_core_exla.o \
+	svml/svml_d_log2_core_e7la.o
+
+svml: 
+	$(shell mkdir svml ; cd svml; \
+	ar -x /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libsvml.a; \
+	ar -x /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libirc.a; \
+	cd ..)
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h

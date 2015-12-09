@@ -199,7 +199,7 @@ namespace EvaluateForce
     };
 
 #define TILESIZE 4
-#define BRICKSIZE 16
+#define BRICKSIZE 8
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,

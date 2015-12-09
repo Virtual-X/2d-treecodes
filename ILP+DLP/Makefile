@@ -11,7 +11,7 @@
 #
 
 CC = gcc -std=c99
-backend ?= avx
+backend ?= sse
 real ?= double
 treecode-potential-order ?= 12
 treecode-force-order ?= 24

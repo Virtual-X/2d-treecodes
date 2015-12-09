@@ -31,16 +31,12 @@ inline __m128 operator -= (__m128& a, __m128 b){ return a = _mm_sub_ps(a, b); }
 
 inline __m128 _DIV_(const __m128 a, const __m128 b)
 {
-	//from the "Software Optimization Guide for AMD Family 10h and 12h Processors"
-	__m128 x0, x1, x2, x3, y;
-	x0 = _mm_rcp_ps (b); 
-	x1 = _mm_mul_ps (a, x0); 
-	x2 = _mm_mul_ps (b, x0); 
-	x3 = _mm_sub_ps (_mm_set1_ps (2.0F), x2);
-	__m128 valid = _mm_cmpnle_ps(b, _mm_set_ps1(0));
+	const __m128 x0 = _mm_rcp_ps (b); 
+	const __m128 x1 = _mm_mul_ps (a, x0); 
+	const __m128 x2 = _mm_mul_ps (b, x0); 
+	const __m128 x3 = _mm_sub_ps (_mm_set1_ps (2.0F), x2);
+	const __m128 valid = _mm_cmpnle_ps(b, _mm_set_ps1(0));
 	return _mm_and_ps(_mm_mul_ps (x1, x3), valid) ;
-
-//#return _mm_div_ps(a, b);
 }
 
 
@@ -130,6 +126,8 @@ define(INNERLOOPSIZE, 4)
 	}
 
 
+define(INNERLOOPSIZE, 8)
+
 #ifdef __cplusplus
 extern "C"
 #endif
@@ -153,7 +151,7 @@ extern "C"
 		const __m128 TMP(yt, iy) = _mm_set1_ps(TMP(syt, iy)); 
 
 		__m128 TMP(xs, iy) =_mm_setzero_ps();
-		__m128 TMP(ys, iy) =_mm_setzero_ps();
+		__m128 TMP(ys, iy) =_mm_setzero_ps();')
 
  		for(int j = 0; j < nnice; j += INNERLOOPSIZE)
  		{
@@ -166,13 +164,13 @@ extern "C"
  				const __m128 xr = xt - xcurr;
  
  				const __m128 xr2 = xr * xr;
- 
- 				const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;
- 				const __m128 TMP(factor, iy) =  _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));
- 
- 				TMP(xs, iy) += xr * TMP(factor, iy);
- 				TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);
- 			}')
+		
+				LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
+				LUNROLL(iy, 0, 3, `const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));')
+
+				LUNROLL(iy, 0, 3, `TMP(xs, iy) += xr * TMP(factor, iy);')
+				LUNROLL(iy, 0, 3, `TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);')
+			}')
  		}
 
 		for(int j = nnice; j < nsources; ++j)
@@ -183,15 +181,15 @@ extern "C"
 			const __m128 xr = xt - _mm_set1_ps(xsrc[j]);
 
 			const __m128 xr2 = xr * xr;
+			
+			LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
+			LUNROLL(iy, 0, 3, `const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));')
 
-			const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;
-			const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));
-
-			TMP(xs, iy) += xr * TMP(factor, iy);
-			TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);
+			LUNROLL(iy, 0, 3, `TMP(xs, iy) += xr * TMP(factor, iy);')
+			LUNROLL(iy, 0, 3, `TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);')
 		}
 
-	
+		LUNROLL(iy, 0, 3, `
 		_mm_storeu_ps(xresult + stride * iy, _mm_loadu_ps(xresult + stride * iy) + TMP(xs, iy));
 		_mm_storeu_ps(yresult + stride * iy, _mm_loadu_ps(yresult + stride * iy) + TMP(ys, iy));
 		')
