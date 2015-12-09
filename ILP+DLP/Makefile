@@ -48,8 +48,8 @@ force-kernels-tiled.o: force-kernels-tiled.c
 	#$(CC) $(KERNELSFLAGS) -c $^
 
 downward-kernels.o: downward-kernels.c 
-	module load intel ; icc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
-	#$(CC) $(KERNELSFLAGS) -c $^
+	#module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
+	$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	$(CC) $(KERNELSFLAGS) -c $^
