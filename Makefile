@@ -28,7 +28,7 @@ ifeq "$(gprof)" "1"
 endif
 
 test: main.cpp libtreecode.a
-	$(CXX) $(CXXFLAGS) $^ -g -o test
+	$(CXX) $(CXXFLAGS) $^ /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libsvml.a /cluster/apps/intel/composer_xe_2015.0.090/composer_xe_2015.0.090/compiler/lib/intel64/libirc.a  -g -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
 	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o

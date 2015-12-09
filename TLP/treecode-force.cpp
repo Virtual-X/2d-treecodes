@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-#define _INSTRUMENTATION_
+//#define _INSTRUMENTATION_
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
