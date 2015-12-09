@@ -78,8 +78,9 @@ void downward_e2l(const realtype * __restrict__ const rxp,
 			     realtype * const xresult,
 			     realtype * const yresult, const int stride)
 	{
-		for(int iy = 0; iy < 4; ++iy)
-		for(int ix = 0; ix < 4; ++ix)
+int ix, iy;
+		for(iy = 0; iy < 4; ++iy)
+		for(ix = 0; ix < 4; ++ix)
 		{
 			const realtype rz_1 = rxbase + ix * h;
 			const realtype iz_1 = rybase + iy * h;
