@@ -24,7 +24,7 @@
 
 
 //#define _INSTRUMENTATION_
-#if ODER <= 12
+#if ORDER <= 12
 #define _MIXPREC_
 #endif
 

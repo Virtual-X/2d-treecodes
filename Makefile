@@ -28,16 +28,13 @@ ifeq "$(gprof)" "1"
 endif
 
 test: main.cpp libtreecode.a
-	$(CXX) $(CXXFLAGS) $^   -g -o test
+	$(CXX) $(CXXFLAGS) -g $^ -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header svml
 	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o \
-	svml/svml_d_atan22_iface_la.o \
 	svml/svml_d_log2_iface_la.o \
 	svml/svml_d_feature_flag_.o \
 	svml/cpu_feature_disp.o \
-	svml/svml_d_atan22_core_exla.o \
-	svml/svml_d_atan22_core_h9la.o \
 	svml/svml_d_log2_core_h9la.o \
 	svml/svml_d_log2_core_exla.o \
 	svml/svml_d_log2_core_e7la.o

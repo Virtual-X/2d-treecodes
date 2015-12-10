@@ -56,7 +56,7 @@ void check(const double * ref, const double * res, const int N)
     printf("       l-1 errors: %.03e (absolute) %.03e (relative)\n", l1, l1_rel);
 }
 
-void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bool verify = true)
+void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bool verify = true, bool mragfile = false)
 {
     int NSRC = 1e5 * (0.1 + drand48());
 
@@ -75,16 +75,29 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
     }
     else
 	for(int i = 0; i < NSRC; ++i)
-	{
+	  {
 	    xsrc[i] = (drand48() - 0.25) * 10;
 	    ysrc[i] = (drand48() - 0.75) * 20;
 	    sources[i] = drand48() * 55;
-	}
+	  }
 
     int NDST = 3000 * (0.1 + drand48());
 
     if (f)
-	fread(&NDST, sizeof(int), 1, f);
+      fread(&NDST, sizeof(int), 1, f);
+
+    int NBLOCKS = 0;
+    const int BS2 = BLOCKSIZE * BLOCKSIZE;
+    realtype * x0s = nullptr, *y0s = nullptr, *hs = nullptr;
+
+    if (mragfile)
+      {
+	NBLOCKS = NDST;
+	NDST = NBLOCKS * BS2;
+	x0s = new realtype[NBLOCKS];
+	y0s = new realtype[NBLOCKS];
+	hs = new realtype[NBLOCKS];
+      }
 
     realtype * xdst = new realtype[NDST];
     realtype * ydst = new realtype[NDST];
@@ -92,26 +105,44 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
     realtype * yref = new realtype[NDST];
 
     if (f)
-    {
-	fread(xdst, sizeof(realtype), NDST, f);
-	fread(ydst, sizeof(realtype), NDST, f);
-	fread(xref, sizeof(realtype), NDST, f);
+      {
+	if (mragfile)
+	  {
+	    printf("mrag file!\n");
+	    fread(x0s, sizeof(realtype), NBLOCKS, f);
+	    fread(y0s, sizeof(realtype), NBLOCKS, f);
+	    fread(hs, sizeof(realtype), NBLOCKS, f);
+
+	    for(int b =0; b < NBLOCKS; b++)
+	      for(int iy = 0; iy < BLOCKSIZE; ++iy)
+		for(int ix = 0; ix < BLOCKSIZE; ++ix)
+		  {
+		    xdst[ix + BLOCKSIZE * iy + BS2 * b] = x0s[b] + ix * hs[b];
+		    ydst[ix + BLOCKSIZE * iy + BS2 * b] = y0s[b] + iy * hs[b];
+		  }
+	  }
+	else //if (!mragfile)
+	  {
+	    fread(xdst, sizeof(realtype), NDST, f);
+	    fread(ydst, sizeof(realtype), NDST, f);
+	    fread(xref, sizeof(realtype), NDST, f);
+	  }
 
 	if (!potential)
-	{
+	  {
 	    fread(yref, sizeof(realtype), NDST, f);
-
+	  
 	    for(int i = 0; i < NDST; ++i)
-	    {
+	      {
 		const realtype tmp0 = xref[i] * (2 * M_PI);
 		const realtype tmp1 = yref[i] * (2 * M_PI);
-
+	      
 		xref[i] = -tmp1;
 		yref[i] = tmp0;
 		;//xref[i] /= 2.0 * M_PI;
-	    }
-	}
-    }
+	      }
+	  }
+      }
     else
     {
 	for(int i = 0; i < NDST; ++i)
@@ -121,13 +152,10 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	}
     }
 
-    realtype * x0s = nullptr, *y0s = nullptr, *hs = nullptr;
-
-    int NBLOCKS = 0;
-    const int BS2 = BLOCKSIZE * BLOCKSIZE;
-    const bool mrag = NDST % BS2 == 0;
-    if (mrag)
-    {
+    const bool mrag = mragfile || NDST % BS2 == 0;
+  
+    if (mrag && !mragfile)
+      {
 	NBLOCKS = NDST / BS2;
 	printf("ndst: %d i have found %d blocks\n", NDST, NBLOCKS);
 	assert(NDST % BS2 == 0);
@@ -137,18 +165,18 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	hs = new realtype[NBLOCKS];
 
 	for(int i = 0; i < NBLOCKS; ++i)
-	{
+	  {
 	    x0s[i] = xdst[i * BS2];
 	    y0s[i] = ydst[i * BS2];
 	    hs[i] = xdst[i * BS2 + 1] - xdst[i * BS2];
 	    /*printf("h: %f test: %f %f %f %f\n",
-		   hs[i],
-		   xdst[i * BS2 + 1] - xdst[i * BS2],
-		   ydst[i * BS2 + BLOCKSIZE] - ydst[i * BS2],
-		   xdst[i * BS2 + BLOCKSIZE + 1] - xdst[i * BS2 + BLOCKSIZE],
-		   ydst[i * BS2 + BLOCKSIZE + 1] - ydst[i * BS2 + 1]);*/
-	}
-    }
+	      hs[i],
+	      xdst[i * BS2 + 1] - xdst[i * BS2],
+	      ydst[i * BS2 + BLOCKSIZE] - ydst[i * BS2],
+	      xdst[i * BS2 + BLOCKSIZE + 1] - xdst[i * BS2 + BLOCKSIZE],
+	      ydst[i * BS2 + BLOCKSIZE + 1] - ydst[i * BS2 + 1]);*/
+	  }
+      }
 
     const realtype eps = std::numeric_limits<realtype>::epsilon() * 10;
 
@@ -278,7 +306,9 @@ int main(int argc, char ** argv)
     if (argc > 3)
 	verify = strcmp(argv[3], "profile") != 0;
 
-    auto file2test = [&] (const char * filename)
+    enum TestType { V_TEST=1, P_TEST=2, PV_TEST=3};
+
+    auto file2test = [&] (const char * filename, bool mragfile = false, TestType testt = PV_TEST)
 	{
 	    if (access(filename, R_OK) == -1)
 	    {
@@ -290,24 +320,31 @@ int main(int argc, char ** argv)
 
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
-	    //  test(theta, tol, fin, true, verify);
+	    if (!mragfile && (testt | P_TEST))
+	      test(theta, tol, fin, true, verify);
 
 	    fseek(fin, 0, SEEK_SET);
 
-	    test(theta, tol * 100, fin, false, verify);
+	    //if (testt | V_TEST)
+	    //  test(theta, tol * 100, fin, false, verify, mragfile);
 	    fclose(fin);
 	};
 
-    // file2test("testDiego/diegoBinaryN400");
-    //file2test("testDiego/diegoBinaryN2000");
+    file2test("testDiego/diegoBinaryN400", false, P_TEST);
+    file2test("testDiego/diegoBinaryN2000", false, P_TEST);
+    file2test("testDiego/diegoBinaryN12000", false, P_TEST);
 
       //if (!verify)
     {
 //	file2test("testDiego/diegoBinaryN12000");
-	file2test("diegoVel/velocityPoissonFishLmax6");
+/*	file2test("diegoVel/velocityPoissonFishLmax6");
 	file2test("diegoVel/velocityPoissonCylUnif2048");
 	file2test("diegoVel/velocityPoissonFishLmax8Early");
 	file2test("diegoVel/velocityPoissonFishLmax8Late");
+*/
+      //File2te("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
+      //      file2test("testSid/diegoSolverCylUniform", true, V_TEST);
+
     }
     /*else
 	for(int itest = 0; itest < 10; ++itest)
