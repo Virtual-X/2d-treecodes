@@ -54,8 +54,9 @@ void downward_e2l(
 		LUNROLL(j, 0, 3, `const realtype * __restrict__ const TMP(ixp, j) = viexpansions[ie + j];')
 
 		const __m128d r2z0 = x0 * x0 + y0 * y0;
-    		const __m128d rlogmz0 = _mm_log_pd(r2z0) * _mm_set1_pd(0.5);
-    		const __m128d ilogmz0 = _mm_atan2_pd(y0, x0) - _mm_set1_pd(M_PI);
+    		//not needed as long as we evaluate grad(pot)
+		//const __m128d rlogmz0 = _mm_log_pd(r2z0) * _mm_set1_pd(0.5);
+    		//const __m128d ilogmz0 = _mm_atan2_pd(y0, x0) - _mm_set1_pd(M_PI);
 
     		const __m128d rinvz_1 = x0 / r2z0;
     		const __m128d iinvz_1 = _mm_setzero_pd() - y0 / r2z0;
@@ -75,6 +76,7 @@ void downward_e2l(
       		  const __m128d TMP(icoeff, j) = TMP(curr_rxp, j) * TMP(iinvz, j) + TMP(curr_ixp, j) * TMP(rinvz, j);
       		')
 
+		/*not needed as long as we evaluate grad(pot)
 		{
 			__m128d rpartial = mass * rlogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(rcoeff, k)  ');
         		__m128d ipartial = mass * ilogmz0 LUNROLL(k, 1, eval(ORDER),` mysign(k) TMP(icoeff, k)  ');
@@ -92,6 +94,7 @@ void downward_e2l(
 			rlocal[0] += tmp0;
        			ilocal[0] += tmp1;
       		}
+		*/
 
       		LUNROLL(l, 1, eval(ORDER),`
       		{

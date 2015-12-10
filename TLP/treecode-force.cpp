@@ -23,8 +23,10 @@
 #include "upward.h"
 
 
-#define _INSTRUMENTATION_
+//#define _INSTRUMENTATION_
+#if ODER <= 12
 #define _MIXPREC_
+#endif
 
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
