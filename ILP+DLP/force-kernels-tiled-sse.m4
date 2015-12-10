@@ -29,23 +29,10 @@ inline __m128 operator += (__m128& a, __m128 b){ return a = _mm_add_ps(a, b); }
 inline __m128 operator -= (__m128& a, __m128 b){ return a = _mm_sub_ps(a, b); }
 #endif
 
-inline __m128 _DIV_(const __m128 a, const __m128 b)
-{
-	const __m128 x0 = _mm_rcp_ps (b); 
-	const __m128 x1 = _mm_mul_ps (a, x0); 
-	const __m128 x2 = _mm_mul_ps (b, x0); 
-	const __m128 x3 = _mm_sub_ps (_mm_set1_ps (2.0F), x2);
-	const __m128 valid = _mm_cmpnle_ps(b, _mm_set_ps1(0));
-	return _mm_and_ps(_mm_mul_ps (x1, x3), valid) ;
-}
-
-
+define(`INNERLOOPSIZE', 4)
 #ifdef __cplusplus
 extern "C"
 #endif
-
-define(INNERLOOPSIZE, 4)
-
 	void force_p2p_tiled(const realtype * __restrict__ const xsrc,
 			 const realtype * __restrict__ const ysrc,
 			 const realtype * __restrict__ const vsrc,
@@ -126,7 +113,7 @@ define(INNERLOOPSIZE, 4)
 	}
 
 
-define(INNERLOOPSIZE, 8)
+define(`INNERLOOPSIZE', 4)
 
 #ifdef __cplusplus
 extern "C"
@@ -166,7 +153,12 @@ extern "C"
  				const __m128 xr2 = xr * xr;
 		
 				LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
-				LUNROLL(iy, 0, 3, `const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));')
+
+				LUNROLL(iy, 0, 3, `const __m128 TMP(denom, iy) = xr2 + TMP(yr, iy) * TMP(yr, iy);')
+				LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')			
+				LUNROLL(iy, 0, 3, `
+				const __m128 TMP(valid, iy) = _mm_cmpnle_ps(TMP(denom, iy), _mm_setzero_ps());
+				const __m128 TMP(factor, iy) = _mm_and_ps(_mm_mul_ps (vcurr * TMP(rcp, iy),  _mm_set1_ps (2.0f) -  TMP(denom, iy) * TMP(rcp, iy)), TMP(valid, iy));')
 
 				LUNROLL(iy, 0, 3, `TMP(xs, iy) += xr * TMP(factor, iy);')
 				LUNROLL(iy, 0, 3, `TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);')
@@ -183,7 +175,11 @@ extern "C"
 			const __m128 xr2 = xr * xr;
 			
 			LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
-			LUNROLL(iy, 0, 3, `const __m128 TMP(factor, iy) = _DIV_(vcurr, (xr2 + TMP(yr, iy) * TMP(yr, iy)));')
+			LUNROLL(iy, 0, 3, `const __m128 TMP(denom, iy) = xr2 + TMP(yr, iy) * TMP(yr, iy);')
+			LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')			
+			LUNROLL(iy, 0, 3, `
+			const __m128 TMP(valid, iy) = _mm_cmpnle_ps(TMP(denom, iy), _mm_setzero_ps());
+			const __m128 TMP(factor, iy) = _mm_and_ps(_mm_mul_ps (vcurr * TMP(rcp, iy),  _mm_set1_ps (2.0f) -  TMP(denom, iy) * TMP(rcp, iy)), TMP(valid, iy));')
 
 			LUNROLL(iy, 0, 3, `TMP(xs, iy) += xr * TMP(factor, iy);')
 			LUNROLL(iy, 0, 3, `TMP(ys, iy) += TMP(yr, iy) * TMP(factor, iy);')
