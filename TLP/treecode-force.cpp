@@ -263,7 +263,7 @@ namespace EvaluateForce
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
 
-		    const bool localexpansion_converges = distance / node->r - 1 > 0.5 + theta && rbrick <= node->r;
+		    const bool localexpansion_converges = distance / node->r - 1 > 0.5 + 1/theta && rbrick <= node->r;
 
 		    if (localexpansion_converges)
 			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);

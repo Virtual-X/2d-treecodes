@@ -40,32 +40,26 @@ kernels: $(OBJS)
 potential-kernels.o: potential-kernels.c
 	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
 
-#$(CC) $(KERNELSFLAGS) -c $^
-
 force-kernels.o: force-kernels.c
-	$(CC) $(KERNELSFLAGS) -c $^
+	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
 
 force-kernels-tiled.o: force-kernels-tiled.c
 	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
-	#$(CC) $(KERNELSFLAGS) -c $^
 
 downward-kernels.o: downward-kernels.c 
 	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
-	#$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
 	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
-#$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_FORCE).o: $(UPWARDKERNELS_FORCE).c 
 	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
-#	$(CC) $(KERNELSFLAGS) -c $^
 
 potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) potential-kernels-sse.m4  > potential-kernels.c
 
-force-kernels.c: force-kernels.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels.m4  > force-kernels.c
+force-kernels.c: force-kernels-sse.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) force-kernels-sse.m4  > force-kernels.c
 
 force-kernels-tiled.c: $(FORCEKERNELSM4) force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $(FORCEKERNELSM4) | indent > force-kernels-tiled.c
