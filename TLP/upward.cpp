@@ -19,7 +19,7 @@
 #include "upward.h"
 #include "upward-kernels.h"
 
-#define  _INSTRUMENTATION_
+//#define  _INSTRUMENTATION_
 
 #define LMAX 15
 
