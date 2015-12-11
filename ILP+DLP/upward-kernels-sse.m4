@@ -68,9 +68,9 @@ void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
 
     if (w == 0)
     {
-      *weight = 1;
-      *xsum = x0 + 0.5 * h;
-      *ysum = y0 + 0.5 * h;
+      *weight = w = 1e-13;
+      *xsum = wx = (x0 + 0.5 * h) * w;
+      *ysum = wy = (y0 + 0.5 * h) * w;
     }
 
     const realtype xcom = wx / w;
