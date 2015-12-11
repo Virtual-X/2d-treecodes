@@ -19,6 +19,8 @@
 #include "potential-kernels.h"
 #include "upward.h"
 
+#define _INSTRUMENTATION_
+
 namespace EvaluatePotential
 {
     struct NodePotential : Tree::NodeImplementation<ORDER> { };
@@ -73,8 +75,9 @@ void treecode_potential(const realtype theta,
     thetasquared = theta * theta;
 
     NodePotential root;
-
+    const double t0 = omp_get_wtime();
     Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 64);
+    const double t1 = omp_get_wtime();
 
     xdata = Tree::xdata;
     ydata = Tree::ydata;
@@ -83,5 +86,11 @@ void treecode_potential(const realtype theta,
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i], root);
+
+    const double t2 = omp_get_wtime();
+
+#ifdef _INSTRUMENTATION_
+    printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t2 - t1) / (t2 - t0) * 100);
+#endif
 }
 
