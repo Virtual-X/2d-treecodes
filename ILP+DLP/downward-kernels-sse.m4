@@ -15,7 +15,7 @@ include(unroll.m4)
 define(mysign, `ifelse(eval((-1)**($1)), -1,-,+)')
 divert(0)
 dnl
-#include <emmintrin.h>
+#include <pmmintrin.h>
 #include <math.h>
 
 #if defined(__INTEL_COMPILER)

@@ -12,7 +12,7 @@
 
 include(unroll.m4)
 dnl
-#include <emmintrin.h>
+#include <pmmintrin.h>
 #include <math.h>
 
 #if defined(__INTEL_COMPILER)

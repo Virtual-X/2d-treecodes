@@ -11,9 +11,8 @@
 */
 
 include(unroll.m4)
-#include <pmmintrin.h>                                                                                                                                                                                                                                                         
-
-#if defined(__INTEL_COMPILER)                                                                                                                                                                                                                                                  
+#include <pmmintrin.h>                                                                                                                                                                                                                                                        
+#if defined(__INTEL_COMPILER)                                                                                                                                                                                                                                               
 inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
 inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
 inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
