@@ -50,8 +50,8 @@ void downward_e2l(
 		const __m128d y0 = _mm_loadu_pd(y0s + ie);
 		const __m128d mass = _mm_loadu_pd(masses + ie);
 
-		LUNROLL(j, 0, 2, `const realtype * __restrict__ const TMP(rxp, j) = vrexpansions[ie + j];')
-		LUNROLL(j, 0, 2, `const realtype * __restrict__ const TMP(ixp, j) = viexpansions[ie + j];')
+		LUNROLL(j, 0, 1, `const realtype * __restrict__ const TMP(rxp, j) = vrexpansions[ie + j];')
+		LUNROLL(j, 0, 1, `const realtype * __restrict__ const TMP(ixp, j) = viexpansions[ie + j];')
 
 		const __m128d r2z0 = x0 * x0 + y0 * y0;
     		//not needed as long as we evaluate grad(pot)
@@ -94,19 +94,24 @@ void downward_e2l(
 			rlocal[0] += tmp0;
        			ilocal[0] += tmp1;
       		}
-		*/
+		*/ 
 
       		LUNROLL(l, 1, eval(ORDER),`
       		{
-			const __m128d TMP(rtmp, l) = _mm_setzero_pd() LUNROLL(k, 1, eval(ORDER),`
-        		mysign(k) _mm_set1_pd(BINOMIAL(eval(l + k - 1), eval(k - 1))) * TMP(rcoeff, k)');
+			const __m128d TMP(prefac, l) = ifelse(l,1,
+			`_mm_setzero_pd() - mass', 
+		   	`mass * _mm_set1_pd(esyscmd(echo -1/eval(l) | bc --mathlib ))');
+
+			pushdef(`BINFAC', `BINOMIAL(eval(l + k - 1), eval(k - 1)).f')dnl
+			const __m128d TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, eval(ORDER),`
+        		mysign(k) ifelse(BINFAC,1.f,,`_mm_set1_pd(BINFAC) *') TMP(rcoeff, k)');
 
         		const __m128d TMP(itmp, l) = _mm_setzero_pd() LUNROLL(k, 1, eval(ORDER),`
-        		mysign(k) _mm_set1_pd(BINOMIAL(eval(l + k - 1), eval(k - 1))) * TMP(icoeff, k)');
-
-        		const __m128d TMP(prefac, l) = _mm_setzero_pd() - mass / _mm_set1_pd(l);
-        		__m128d rpartial = (TMP(prefac, l) + TMP(rtmp, l)) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
-        		__m128d ipartial = (TMP(prefac, l) + TMP(rtmp, l)) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
+        		mysign(k) ifelse(BINFAC,1.f,,`_mm_set1_pd(BINFAC) *') TMP(icoeff, k)');
+			popdef(`BINFAC')dnl
+        		
+        		__m128d rpartial = TMP(rtmp, l) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
+        		__m128d ipartial = TMP(rtmp, l) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
 
 			if (ie + 2 <= ne)
 			{
