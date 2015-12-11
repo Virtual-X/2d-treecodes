@@ -50,8 +50,8 @@ void downward_e2l(
 		const __m128d y0 = _mm_loadu_pd(y0s + ie);
 		const __m128d mass = _mm_loadu_pd(masses + ie);
 
-		LUNROLL(j, 0, 3, `const realtype * __restrict__ const TMP(rxp, j) = vrexpansions[ie + j];')
-		LUNROLL(j, 0, 3, `const realtype * __restrict__ const TMP(ixp, j) = viexpansions[ie + j];')
+		LUNROLL(j, 0, 2, `const realtype * __restrict__ const TMP(rxp, j) = vrexpansions[ie + j];')
+		LUNROLL(j, 0, 2, `const realtype * __restrict__ const TMP(ixp, j) = viexpansions[ie + j];')
 
 		const __m128d r2z0 = x0 * x0 + y0 * y0;
     		//not needed as long as we evaluate grad(pot)

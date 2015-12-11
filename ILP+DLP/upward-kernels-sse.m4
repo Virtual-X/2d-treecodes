@@ -15,12 +15,24 @@ include(unroll.m4)
 #include <pmmintrin.h>
 #include <math.h>
 
+#if defined(__INTEL_COMPILER)
+inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
+inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
+inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
+inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
+inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
+inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
+#endif
+
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
 define(P2E_KERNEL, upward_p2e_order$1)
 define(E2E_KERNEL, upward_e2e_order$1)
 
+#ifdef __cplusplus
+extern "C"
+#endif
 void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
   const realtype * __restrict__ const ysources,
   const realtype * __restrict__ const sources,
@@ -161,53 +173,85 @@ void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
 
 typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 
-  void E2E_KERNEL(ORDER)(const V4 srcmass, const V4 rx, const V4 ry,
-    const V4 * __restrict__ const rsrcxp,
-    const V4 * __restrict__ const isrcxp,
-    realtype * __restrict__ const rdstxp,
-    realtype * __restrict__ const idstxp)
+#ifdef __cplusplus
+extern "C"
+#endif
+  void E2E_KERNEL(ORDER)(
+       const realtype * const x0s, 
+       const realtype * const y0s,
+       const realtype * const masses, 
+       const realtype * __restrict__ const * vrexpansions,
+       const realtype * __restrict__ const * viexpansions,
+       realtype * __restrict__ const rdstxp,
+       realtype * __restrict__ const idstxp)
     {
-      const V4 zero = {0, 0, 0, 0};
-      const V4 one = {1, 1, 1, 1};
+	LUNROLL(pass, 0, 1,`
+  	{
+		const __m128d x0 = _mm_loadu_pd(x0s + eval(2 * pass));
+		const __m128d y0 = _mm_loadu_pd(y0s + eval(2 * pass));
+		const __m128d mass = _mm_loadu_pd(masses + eval(2 * pass));
 
-      V4 rresult[ORDER];
+		LUNROLL(j, 0, 1, `
+		const realtype * __restrict__ const TMP(rxp, j) = vrexpansions[eval(2 * pass) + j];')
+		LUNROLL(j, 0, 1, `
+		const realtype * __restrict__ const TMP(ixp, j) = viexpansions[eval(2 * pass) + j];')
 
-      V4 dummy LUNROLL(i, 0, eval(ORDER - 1),`, TMP(rresult, i) = zero, TMP(iresult, i) = zero');
+		const __m128d r2z0 = x0 * x0 + y0 * y0;
+       		const __m128d rinvz_1 = x0 / r2z0;
+    		const __m128d iinvz_1 = _mm_setzero_pd() - y0 / r2z0;
+		dnl
+    		LUNROLL(j, 1, eval(ORDER),`
+    		ifelse(j, 1, , `
+      		  const __m128d TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
+      		  const __m128d TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
 
-      LUNROLL(j, 0, eval(ORDER - 1),`
-      {
-        V4 rsum = zero, isum = zero, rprod = one, iprod = zero;
+		  const __m128d TMP(curr_rxp, j) = _mm_set_pd(RLUNROLL(c, 1, 0, 
+		  	`TMP(rxp, c)[eval(j - 1)]ifelse(c,0,,`, ')'));
+		  const __m128d TMP(curr_ixp, j) = _mm_set_pd(RLUNROLL(c, 1, 0, 
+		  	`TMP(ixp, c)[eval(j - 1)]ifelse(c,0,,`, ')'));
 
-        RLUNROLL(k, j, 0, `
-          {
-	    pushdef(`BINVAL', BINOMIAL(j, k))
-	    ifelse(BINVAL, 1,`dnl', `const V4 factor = {BINVAL, BINVAL, BINVAL, BINVAL};')
-	    	    
-            rsum += ifelse(BINVAL, 1,, factor *) (rsrcxp[k] * rprod - isrcxp[k] * iprod);
-            isum += ifelse(BINVAL, 1,, factor *) (isrcxp[k] * rprod + rsrcxp[k] * iprod);
-	    popdef(`BINVAL')
+      		  const __m128d TMP(rcoeff, j) = TMP(curr_rxp, j) * TMP(rinvz, j) - TMP(curr_ixp, j) * TMP(iinvz, j);
+      		  const __m128d TMP(icoeff, j) = TMP(curr_rxp, j) * TMP(iinvz, j) + TMP(curr_ixp, j) * TMP(rinvz, j);
+      		')
 
-            const V4 rnewprod = rprod * rx - iprod * ry;
-            const V4 inewprod = rprod * ry + iprod * rx;
+      		LUNROLL(l, 1, eval(ORDER),`
+      		{
+        	   const __m128d TMP(prefac, l) = ifelse(l,1,
+		   `_mm_setzero_pd() - mass', 
+		   `mass * _mm_set1_pd(esyscmd(echo -1/eval(l) | bc --mathlib ))');
 
-            rprod = rnewprod;
-            iprod = inewprod;
-          }')
+		   pushdef(`BINFAC', `BINOMIAL(eval(l - 1), eval(k - 1)).f')
 
-	  ifelse(eval(j + 1), 1, `
-	  		rsum -= rprod * srcmass;
-          		isum -= iprod * srcmass;',
-	  		`pushdef(`INVDENOM', esyscmd(echo 1/eval(j + 1) | bc -l));
-	  		const V4 invdenom = {INVDENOM, INVDENOM, INVDENOM, INVDENOM};
-	  		popdef(`DENOM')
-          		const V4 term = srcmass * invdenom;
-	  		rsum -= rprod * term;
-          		isum -= iprod * term;')
+		   const __m128d TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,` +
+        	   ifelse(BINFAC,1.f,,`_mm_set1_pd(BINFAC) * ') TMP(rcoeff, k)');
 
-          TMP(rresult, j) += rsum;
-          TMP(iresult, j) += isum;
-        }')
+        	   const __m128d TMP(itmp, l) = LUNROLL(k, 1, l,` ifelse(k,1,,+)
+        	   ifelse(BINFAC,1.f,,`_mm_set1_pd(BINFAC) * ') TMP(icoeff, k)');
 
-        LUNROLL(i, 0, eval(ORDER - 1), `rdstxp[i] =  TMP(rresult, i)[0] + TMP(rresult, i)[1] + TMP(rresult, i)[2] + TMP(rresult, i)[3];')
-        LUNROLL(i, 0, eval(ORDER - 1), `idstxp[i] =  TMP(iresult, i)[0] + TMP(iresult, i)[1] + TMP(iresult, i)[2] + TMP(iresult, i)[3];')
-      }
+		   popdef(`BINFAC')
+
+		   const __m128d TMP(invz2, l) = TMP(rinvz, l) * TMP(rinvz, l) + TMP(iinvz, l) * TMP(iinvz, l);
+		   const __m128d TMP(invinvz2, l) = _mm_and_pd(_mm_set1_pd(1) / TMP(invz2, l),
+		   	 		     	   _mm_cmpnle_pd(TMP(invz2, l), _mm_setzero_pd()));
+
+		   const __m128d TMP(rz, l) = TMP(rinvz, l) * TMP(invinvz2, l);
+		   const __m128d TMP(iz, l) = _mm_setzero_pd() - TMP(iinvz, l) * TMP(invinvz2, l);
+
+        	   __m128d rpartial = TMP(rtmp, l) * TMP(rz, l) - TMP(itmp, l) * TMP(iz, l);
+        	   __m128d ipartial = TMP(rtmp, l) * TMP(iz, l) + TMP(itmp, l) * TMP(rz, l);
+		  
+		   rpartial = _mm_hadd_pd(rpartial, rpartial);
+		   ipartial = _mm_hadd_pd(ipartial, ipartial);
+		
+		   double tmp0, tmp1;
+		   _mm_store_sd(&tmp0, rpartial);
+		   _mm_store_sd(&tmp1, ipartial);
+
+		   ifelse(pass,0,`
+		   rdstxp[eval(l - 1)] = tmp0;
+		   idstxp[eval(l - 1)] = tmp1;',`
+		   rdstxp[eval(l - 1)] += tmp0;
+		   idstxp[eval(l - 1)] += tmp1;')
+		}')
+	}')
+    }

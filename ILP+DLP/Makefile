@@ -54,10 +54,12 @@ downward-kernels.o: downward-kernels.c
 	#$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_POTENTIAL).o: $(UPWARDKERNELS_POTENTIAL).c 
-	$(CC) $(KERNELSFLAGS) -c $^
+	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
+#$(CC) $(KERNELSFLAGS) -c $^
 
 $(UPWARDKERNELS_FORCE).o: $(UPWARDKERNELS_FORCE).c 
-	$(CC) $(KERNELSFLAGS) -c $^
+	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel
+#	$(CC) $(KERNELSFLAGS) -c $^
 
 potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) potential-kernels-sse.m4  > potential-kernels.c
@@ -74,8 +76,8 @@ downward-kernels.c:  downward-kernels-sse.m4 downward-kernels.h Makefile
 $(UPWARDKERNELS_POTENTIAL).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) upward-kernels-sse.m4  > $(UPWARDKERNELS_POTENTIAL).c
 
-$(UPWARDKERNELS_FORCE).c: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels.m4  > $(UPWARDKERNELS_FORCE).c
+$(UPWARDKERNELS_FORCE).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4  Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) upward-kernels-sse.m4  > $(UPWARDKERNELS_FORCE).c
 
 clean:
 	rm -f *.o *kernels*.c

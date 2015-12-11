@@ -38,9 +38,11 @@ extern "C"
 
     typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 
-    void E2E_KERNEL(const V4 srcmass, const V4 rx, const V4 ry,
-		    const V4 * __restrict__ const rsrcxp,
-		    const V4 * __restrict__ const isrcxp,
+    void E2E_KERNEL(const realtype * const x0s, 
+		    const realtype * const y0s,
+		    const realtype * const masses, 
+		    const realtype * __restrict__ const * vrexpansions,
+		    const realtype * __restrict__ const * viexpansions,
 		    realtype * __restrict__ const rdstxp,
 		    realtype * __restrict__ const idstxp);
 #ifdef __cplusplus

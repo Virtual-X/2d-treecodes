@@ -320,13 +320,13 @@ int main(int argc, char ** argv)
 
 	    FILE * fin = fopen(filename, "r");
 	    assert(fin && sizeof(realtype) == sizeof(double));
-	    if (!mragfile && (testt | P_TEST))
+	    if (!mragfile && (testt & P_TEST))
 	      test(theta, tol, fin, true, verify);
 
 	    fseek(fin, 0, SEEK_SET);
 
-	    //if (testt | V_TEST)
-	    //  test(theta, tol * 100, fin, false, verify, mragfile);
+	    if (testt & V_TEST)
+	      test(theta, tol * 100, fin, false, verify, mragfile);
 	    fclose(fin);
 	};
 
@@ -334,18 +334,18 @@ int main(int argc, char ** argv)
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
 
-      //if (!verify)
+    /*  if (!verify)
     {
-//	file2test("testDiego/diegoBinaryN12000");
-/*	file2test("diegoVel/velocityPoissonFishLmax6");
-	file2test("diegoVel/velocityPoissonCylUnif2048");
-	file2test("diegoVel/velocityPoissonFishLmax8Early");
-	file2test("diegoVel/velocityPoissonFishLmax8Late");
-*/
-      //File2te("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
-      //      file2test("testSid/diegoSolverCylUniform", true, V_TEST);
-
+	file2test("diegoVel/velocityPoissonFishLmax6", true, V_TEST);
+	file2test("diegoVel/velocityPoissonCylUnif2048", true, V_TEST);
+	file2test("diegoVel/velocityPoissonFishLmax8Early", true, V_TEST);
+	file2test("diegoVel/velocityPoissonFishLmax8Late", true, V_TEST);
+    */
+    {
+	file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
+	file2test("testSid/diegoSolverCylUniform", true, V_TEST);
     }
+
     /*else
 	for(int itest = 0; itest < 10; ++itest)
 	{

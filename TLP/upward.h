@@ -89,27 +89,21 @@ namespace Tree
 
 	void e2e() override
 	{
-	    V4 srcmass, rx, ry, chldexp[2][ORDER];
+	  realtype srcmass[4], rx[4], ry[4];
+	  realtype * chldrxp[4], *chldixp[4];
 
 	    for(int c = 0; c < 4; ++c)
 	    {
 		NodeImplementation * chd = (NodeImplementation *)children[c];
 
 		srcmass[c] = chd->mass;
-		rx[c] = chd->xcom();
-		ry[c] = chd->ycom();
-
-		for(int j = 0; j < ORDER; ++j)
-		    chldexp[0][j][c] = chd->rexpansions[j];
-
-		for(int j = 0; j < ORDER; ++j)
-		    chldexp[1][j][c] = chd->iexpansions[j];
+		rx[c] = chd->xcom() - xcom();
+		ry[c] = chd->ycom() - ycom();
+		chldrxp[c] = chd->rexpansions;
+		chldixp[c] = chd->iexpansions;
 	    }
 
-	    rx -= xcom();
-	    ry -= ycom();
-
-	    E2E_KERNEL(srcmass, rx, ry, chldexp[0], chldexp[1], rexpansions, iexpansions);
+	    E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
 #ifndef NDEBUG
 	    {
 		for(int i = 0; i < ORDER; ++i)

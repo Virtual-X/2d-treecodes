@@ -368,7 +368,7 @@ namespace EvaluateForce
     void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, const int e2pinstructions)
     {
 #ifdef _INSTRUMENTATION_
-	for(int i = 0; i < N; ++i)
+      /*	for(int i = 0; i < N; ++i)
 	    if (perf[i].failed)
 	    {
 		printf("oops there was an overflow in the computation\n");
@@ -400,7 +400,7 @@ namespace EvaluateForce
 	    printf("TID %d: P2P importance: %.1f %% cycles-per-interactions: %.1f, cycles-per-call: %.1f\n",
 		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
 	}
-
+      */
 	const double t2 = omp_get_wtime();
 	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
 #endif

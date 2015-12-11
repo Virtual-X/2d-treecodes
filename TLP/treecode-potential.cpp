@@ -23,7 +23,7 @@
 
 namespace EvaluatePotential
 {
-    struct NodePotential : Tree::NodeImplementation<ORDER> { };
+    struct NodePotential : Tree::NodeImplementation<ORDER> { }; 
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
