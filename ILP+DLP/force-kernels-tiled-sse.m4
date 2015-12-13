@@ -257,20 +257,17 @@ extern "C"
 
 			   TMP(iprodA, iy) = TMP(itmpA, iy);
 			   TMP(iprodB, iy) = TMP(itmpB, iy);
-			   
-			   const __m128d rxp4 = _mm_set1_pd(rxp[n]);
-			   const __m128d ixp4 = _mm_set1_pd(ixp[n]);
 
-			   ifelse(1,eval(n + 1),,`const __m128d pre4 = _mm_set1_pd(eval(n+1));')
-			   pushdef(`FACTOR', ifelse(1,eval(n + 1), ,pre4 *))
+			   ifelse(1,eval(n + 1),,`const __m128d TMP(pre4, n) = _mm_set1_pd(eval(n+1).f);')
+			   pushdef(`FACTOR', ifelse(1,eval(n + 1), ,TMP(pre4, n) *))
+			   const __m128d TMP(rxp4, n) = FACTOR _mm_set1_pd(rxp[n]);
+			   const __m128d TMP(ixp4, n) = FACTOR _mm_set1_pd(ixp[n]);
+	   
+			   TMP(xsA, iy) -= TMP(rprodA, iy) * TMP(rxp4, n) - TMP(iprodA, iy) * TMP(ixp4, n);
+			   TMP(xsB, iy) -= TMP(rprodB, iy) * TMP(rxp4, n) - TMP(iprodB, iy) * TMP(ixp4, n);
 
-			   TMP(xsA, iy) -= FACTOR (TMP(rprodA, iy) * rxp4 - TMP(iprodA, iy) * ixp4);
-			   TMP(xsB, iy) -= FACTOR (TMP(rprodB, iy) * rxp4 - TMP(iprodB, iy) * ixp4);
-
-			   TMP(ysA, iy) -= FACTOR (TMP(rprodA, iy) * ixp4 + TMP(iprodA, iy) * rxp4);
-			   TMP(ysB, iy) -= FACTOR (TMP(rprodB, iy) * ixp4 + TMP(iprodB, iy) * rxp4);
-
-			   popdef(`FACTOR')
+			   TMP(ysA, iy) -= TMP(rprodA, iy) * TMP(ixp4, n) + TMP(iprodA, iy) * TMP(rxp4, n);
+			   TMP(ysB, iy) -= TMP(rprodB, iy) * TMP(ixp4, n) + TMP(iprodB, iy) * TMP(rxp4, n);
 			}')
 
 

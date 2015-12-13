@@ -459,7 +459,7 @@ namespace EvaluateForce
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128);
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;

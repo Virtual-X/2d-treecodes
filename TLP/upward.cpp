@@ -66,12 +66,13 @@ namespace Tree
 	    const int key1 = mask | (c << shift);
 	    const int key2 = key1 + (1 << shift) - 1;
 
-	    const size_t indexmin = std::lower_bound(keys + s, keys + e, key1) - keys;
-	    const size_t indexsup = std::upper_bound(keys + s, keys + e, key2) - keys;
+	    const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
+	    const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
 
 	    Node * chd = node->children[c];
 
-#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (c < 3 && l < 8)
+#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (indexsup - indexmin > 5e3 && c < 3)
+	    //if (c < 3 && l < 8)
 	    {
 	      _build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 	    }
@@ -141,6 +142,10 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
   posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
 
+  std::pair<int, int> * kv = NULL;
+  posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
+
+  const double t1 = omp_get_wtime();
   xmin = *__gnu_parallel::min_element(xsrc, xsrc + nsrc);
   ymin = *__gnu_parallel::min_element(ysrc, ysrc + nsrc);
 
@@ -152,9 +157,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   ext = std::max(ext0, ext1) * (1 + 2 * eps);
   xmin -= eps * ext;
   ymin -= eps * ext;
-
-  std::pair<int, int> * kv = NULL;
-  posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
+  const double t2 = omp_get_wtime();
 
 #pragma omp parallel for
   for(int i = 0; i < nsrc; ++i)
@@ -181,14 +184,18 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
       kv[i].second = i;
     }
 
-  const double t1 = omp_get_wtime();
+  const double t3 = omp_get_wtime();
 //omp_set_num_threads(maxthreads);
+  //omp_set_dynamic(0);
+  //omp_set_num_threads(24);
   __gnu_parallel::sort(kv, kv + nsrc);
-  const double t2 = omp_get_wtime();
+  const double t4 = omp_get_wtime();
 
 
-  omp_set_num_threads(6);
+  //omp_set_num_threads(6);
   ////omp_set_dynamic(isdynamic);
+
+  double t5;
 
 #pragma omp parallel
   //shared(root)
@@ -207,6 +214,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	vdata[i] = vsrc[entry];
       }
 
+    t5 = omp_get_wtime();
+
 #pragma omp single
     {
       free(kv);
@@ -218,12 +227,15 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   omp_set_num_threads(maxthreads);
   omp_set_dynamic(isdynamic);
 
-  const double t3 = omp_get_wtime();
+  const double t6 = omp_get_wtime();
 #ifdef _INSTRUMENTATION_
-  printf("SETUP: %.2f ms (%.1f %%) SORT: %.2f ms (%.1f %%) TREE: %.2f ms (%.1f%%)\n", 
-	 (t1 - t0) * 1e3, (t1 - t0) / (t3 - t0) * 100,
-	 (t2 - t1) * 1e3, (t2 - t1) / (t3 - t0) * 100,
-	 (t3 - t2) * 1e3, (t3 - t2) / (t3 - t0) * 100);
+  printf("SETUP: %.2f ms (%.1f %%) REDUCE: %.2f ms (%.1f %%) KEY: %.2f ms (%.1f %%) SORT: %.2f ms (%.1f %%) REORDER: %.2f ms (%.1f %%) TREE: %.2f ms (%.1f%%)\n", 
+	 (t1 - t0) * 1e3, (t1 - t0) / (t6 - t0) * 100,
+	 (t2 - t1) * 1e3, (t2 - t1) / (t6 - t0) * 100,
+	 (t3 - t2) * 1e3, (t3 - t2) / (t6 - t0) * 100,
+	 (t4 - t3) * 1e3, (t4 - t3) / (t6 - t0) * 100,
+	 (t5 - t4) * 1e3, (t5 - t4) / (t6 - t0) * 100,
+	 (t6 - t5) * 1e3, (t6 - t5) / (t6 - t0) * 100);
 #endif
 }
 

@@ -76,7 +76,7 @@ void treecode_potential(const realtype theta,
 
     NodePotential root;
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 64);
+    Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 32 * 16); //before: 64
     const double t1 = omp_get_wtime();
 
     xdata = Tree::xdata;
