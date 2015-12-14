@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-//#define _INSTRUMENTATION_ 2
+//#define _INSTRUMENTATION_ 1
 #if ORDER <= 12
 #define _MIXPREC_
 #endif
@@ -278,7 +278,7 @@ namespace EvaluateForce
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
 
-		    const bool localexpansion_converges = distance / node->r - 1 > 1 / theta && rbrick <= node->r;
+		    const bool localexpansion_converges = (distance / node->r - 1) > (1 / theta) && rbrick <= node->r;
 
 		    if (localexpansion_converges)
 			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);
@@ -492,7 +492,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 256); //before: 128
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;
