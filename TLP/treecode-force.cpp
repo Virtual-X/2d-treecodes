@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-//#define _INSTRUMENTATION_
+//#define _INSTRUMENTATION_ 2
 #if ORDER <= 12
 #define _MIXPREC_
 #endif
@@ -43,7 +43,7 @@ namespace EvaluateForce
 
     struct PerfMon
     {
-	int64_t e2pcalls, e2pcycles, p2pcalls, p2pcycles, p2pinteractions;
+      int64_t e2pcalls, e2lcalls, e2lcycles, e2pcycles, p2pcalls, p2pcycles, p2pinteractions;
 	int64_t startc, endc;
 
 	int maxstacksize, evaluations;
@@ -52,8 +52,10 @@ namespace EvaluateForce
 
 	void setup()
 	    {
-		e2pcalls = 0;
-		e2pcycles = 0;
+	      e2lcalls = 0;
+	      e2lcycles = 0;
+	      e2pcalls = 0;
+	      e2pcycles = 0;
 		p2pcalls = 0;
 		p2pcycles = 0;
 		p2pinteractions = 0;
@@ -65,6 +67,13 @@ namespace EvaluateForce
 
 	double tot_cycles() { return (double)(endc - startc); }
 
+      std::tuple<double, double, double, double> e2l(const int instructions)
+	    {
+	      return std::make_tuple((double)(e2lcycles),
+				       (double)(e2lcycles) / tot_cycles(),
+				     (double)(e2lcycles) / e2lcalls,
+				       (double)(e2lcalls * instructions) / e2lcycles);
+	    }
 	std::tuple<double, double, double, double> e2p(const int instructions)
 	    {
 		return std::make_tuple((double)(e2pcycles),
@@ -83,8 +92,8 @@ namespace EvaluateForce
 
 	std::tuple<double, double, int> traversal()
 	    {
-		return std::make_tuple((double)(endc - startc - p2pcycles - e2pcycles),
-				       (double)(endc - startc - p2pcycles - e2pcycles) / (endc - startc),
+		return std::make_tuple((double)(endc - startc - p2pcycles - e2pcycles - e2lcycles),
+				       (double)(endc - startc - p2pcycles - e2pcycles - e2lcycles) / (endc - startc),
 				       maxstacksize);
 	    }
 
@@ -170,14 +179,20 @@ namespace EvaluateForce
 	realtype x0s[size], y0s[size], masses[size];
 	const realtype * rxps[size], *ixps[size];
 
-
 	E2LWork(realtype * const rlocal, realtype * const ilocal):
 	    count(0), rdst(rlocal), idst(ilocal) { }
 
 	void _flush()
 	    {
-		downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
-		count = 0;
+	      const int64_t startc = MYRDTSC;
+	      downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+	      const int64_t endc = MYRDTSC;
+
+#ifdef _INSTRUMENTATION_
+	      perfmon.e2lcycles += endc - startc;
+	      perfmon.e2lcalls += (count + 1) / 2;
+#endif
+	      count = 0;
 	    }
 
 	void push(const realtype x0, const realtype y0, const realtype mass,
@@ -263,7 +278,7 @@ namespace EvaluateForce
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
 
-		    const bool localexpansion_converges = distance / node->r - 1 > 0.5 + 1/theta && rbrick <= node->r;
+		    const bool localexpansion_converges = distance / node->r - 1 > 1 / theta && rbrick <= node->r;
 
 		    if (localexpansion_converges)
 			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);
@@ -274,7 +289,7 @@ namespace EvaluateForce
 
 			const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
 
-			if (4 * node->r * node->r < theta * theta * r2)
+			if (node->r * node->r < theta * theta * r2)
 			{
 			    int64_t startc = MYRDTSC;
 
@@ -365,19 +380,32 @@ namespace EvaluateForce
 #endif
     }
 
-    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, const int e2pinstructions)
+  void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, 
+			      const int e2linstructions, const int e2pinstructions)
     {
 #ifdef _INSTRUMENTATION_
-      /*	for(int i = 0; i < N; ++i)
-	    if (perf[i].failed)
-	    {
-		printf("oops there was an overflow in the computation\n");
-		abort();
-	    }
+#if _INSTRUMENTATION_ == 2
+      for(int i = 0; i < N; ++i)
+	if (perf[i].failed)
+	  {
+	    printf("oops there was an overflow in the computation\n");
+	    abort();
+	  }
 
+      printf("EVALUATION CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
 
+printf("DOWNWARD CYCLES ===============================\n");
+	for(int i = 0; i < N; ++i)
+	{
+	    auto p = perf[i].e2l(e2linstructions);
+
+	    printf("TID %d: E2L cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
+		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
+	}
+
+printf("E2P CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	{
 	    auto p = perf[i].e2p(e2pinstructions);
@@ -386,12 +414,7 @@ namespace EvaluateForce
 		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
 	}
 
-	for(int i = 0; i < N; ++i)
-	{
-	    auto p = perf[i].traversal();
-
-	    printf("TID %d: traversal overhead: %.1f %%, max stacksize: %d \n", i, 100. * std::get<1>(p), std::get<2>(p));
-	}
+printf("EVALUATION P2P CYCLES ===============================\n");
 
 	for(int i = 0; i < N; ++i)
 	{
@@ -400,7 +423,17 @@ namespace EvaluateForce
 	    printf("TID %d: P2P importance: %.1f %% cycles-per-interactions: %.1f, cycles-per-call: %.1f\n",
 		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
 	}
-      */
+
+printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
+	for(int i = 0; i < N; ++i)
+	{
+	    auto p = perf[i].traversal();
+
+	    printf("TID %d: traversal overhead: %.1f %%, max stacksize: %d \n", i, 100. * std::get<1>(p), std::get<2>(p));
+	}
+
+#endif
+      
 	const double t2 = omp_get_wtime();
 	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
 #endif
@@ -440,7 +473,7 @@ namespace EvaluateForce
 #endif
 	}
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2P_IC);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
     }
 
     extern "C"
@@ -459,7 +492,7 @@ namespace EvaluateForce
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 256); //before: 128
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;
@@ -502,6 +535,6 @@ namespace EvaluateForce
 	free(vdata_fp32);
 #endif
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2P_TILED_IC);
+	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
     }
 }

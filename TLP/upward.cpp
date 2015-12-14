@@ -185,45 +185,33 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     }
 
   const double t3 = omp_get_wtime();
-//omp_set_num_threads(maxthreads);
-  //omp_set_dynamic(0);
-  //omp_set_num_threads(24);
   __gnu_parallel::sort(kv, kv + nsrc);
   const double t4 = omp_get_wtime();
 
+#pragma omp parallel for
+  for(int i = 0; i < nsrc; ++i)
+    {
+      keys[i] = kv[i].first;
 
-  //omp_set_num_threads(6);
-  ////omp_set_dynamic(isdynamic);
+      const int entry = kv[i].second;
+      assert(entry >= 0 && entry < nsrc);
 
-  double t5;
+      xdata[i] = xsrc[entry];
+      ydata[i] = ysrc[entry];
+      vdata[i] = vsrc[entry];
+    }
+
+  const double t5 = omp_get_wtime();
 
 #pragma omp parallel
-  //shared(root)
   {
-
-#pragma omp for
-    for(int i = 0; i < nsrc; ++i)
-      {
-	keys[i] = kv[i].first;
-
-	const int entry = kv[i].second;
-	assert(entry >= 0 && entry < nsrc);
-
-	xdata[i] = xsrc[entry];
-	ydata[i] = ysrc[entry];
-	vdata[i] = vsrc[entry];
-      }
-
-    t5 = omp_get_wtime();
-
 #pragma omp single
-    {
-      free(kv);
-      _build(root, 0, 0, 0, 0, nsrc, 0);
-      free(keys);
-    }
+    { _build(root, 0, 0, 0, 0, nsrc, 0); }
   }
-  
+
+  free(kv);  
+  free(keys);
+
   omp_set_num_threads(maxthreads);
   omp_set_dynamic(isdynamic);
 

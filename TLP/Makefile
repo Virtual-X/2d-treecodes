@@ -43,11 +43,9 @@ treecode-potential.o: treecode-potential.cpp treecode.h Makefile
 	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
 
 treecode-force.o: treecode-force.cpp treecode.h Makefile
-	E2P_TILED_IC=
-	E2P_IC=
 	$(CXX) $(TLPFLAGS) \
-	-DE2P_TILED_IC=$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
-	-DE2P_IC=$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P ../ILP+DLP/force-kernels.o) -DORDER=$(treecode-force-order) -c $<
+	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
+	-DORDER=$(treecode-force-order) -c $<
 
 upward.o: upward.cpp upward.h Makefile
 	$(CXX) $(TLPFLAGS) -c $<

@@ -46,6 +46,7 @@ void downward_e2l(
   {
 	for(int ie = 0; ie < ne; ie += 2)
   	{
+__asm__("L_DOWNWARD_E2L_ITERATION:");	
 		const __m128d x0 = _mm_loadu_pd(x0s + ie);
 		const __m128d y0 = _mm_loadu_pd(y0s + ie);
 		const __m128d mass = _mm_loadu_pd(masses + ie);
@@ -126,9 +127,8 @@ void downward_e2l(
 			rlocal[l] += tmp0;
        			ilocal[l] += tmp1;
 		}')
+	__asm__("L_END_DOWNWARD_E2L_ITERATION:");
 	}
-
-      	__asm__("L_END_DOWNWARD_E2L:");
     }
 
 #ifdef __cplusplus

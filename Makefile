@@ -50,8 +50,6 @@ header:
 
 drivers: kernels
 	make -C TLP drivers CXX="$(CXX)" \
-	E2P_TILED_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ILP+DLP/force-kernels-tiled.o) \
-	E2P_IC=$(shell ILP+DLP/instruction-count.sh  FORCE_E2P ILP+DLP/force-kernels.o) \
 	treecode-potential-order=$(treecode-potential-order) \
 	treecode-force-order=$(treecode-force-order)
 
