@@ -32,13 +32,14 @@ ifeq ($(real),double)
 FORCEKERNELSM4 = force-kernels-tiled-$(backend).m4
 endif
 
-#KERNELSFLAGS = -std=c99 -O4 -DNDEBUG -ftree-vectorize -Wno-psabi \
+KERNELSFLAGS = -std=c99 -O4 -DNDEBUG -ftree-vectorize -Wno-psabi \
 	 -march=native -mtune=native -fassociative-math -ffast-math
 
 kernels: $(OBJS)
 
 %.o: %.c
-	module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel;
+	$(CC) $(KERNELSFLAGS) -c $^
+#module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel;
 
 potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > potential-kernels.c

@@ -22,6 +22,13 @@ inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
 inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
 inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
 inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
+#else
+inline __m128d _mm_log_pd(const __m128d x)
+{
+  double tmp[2];
+  _mm_storeu_pd(tmp, x);
+  return _mm_set_pd(log(tmp[1]), log(tmp[0]));
+}
 #endif
 
 define(NACC, 16)
@@ -61,7 +68,7 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
 
     LUNROLL(i, 1, eval(NACC - 1), `
     TMP(s,0) += TMP(s, i);')
-    
+
     double sum;
     _mm_store_sd(&sum, _mm_hadd_pd(TMP(s, 0), TMP(s, 0)));
 
@@ -100,21 +107,20 @@ realtype potential_e2p(const realtype mass,
     const __m128d ibase_0 = _mm_set_pd(TMP(iinvz, 2), TMP(iinvz, 1));
 
     LUNROLL(j, 0, eval(ORDER/2 - 1), `dnl
-    ifelse(j, eval(ORDER/2 - 1), , 
+    ifelse(j, eval(ORDER/2 - 1), ,
     const __m128d TMP(rbase, eval(j + 1)) = TMP(rbase, j) * rz2 - TMP(ibase, j) * iz2;)
-    	       
-    ifelse(j, eval(ORDER/2 - 1), , 
+
+    ifelse(j, eval(ORDER/2 - 1), ,
     const __m128d TMP(ibase, eval(j + 1)) = TMP(rbase, j) * iz2 + TMP(ibase, j) * rz2;)
 
     const __m128d TMP(rxp2, j) = _mm_loadu_pd(rxp + eval(2 * j));
 
     const __m128d TMP(ixp2, j) = _mm_loadu_pd(ixp + eval(2 * j));
 
-    const __m128d TMP(rsum, j) = (TMP(rxp2, j) * TMP(rbase, j) - TMP(ixp2, j) * TMP(ibase, j)) 
+    const __m128d TMP(rsum, j) = (TMP(rxp2, j) * TMP(rbase, j) - TMP(ixp2, j) * TMP(ibase, j))
        	     	     	       ifelse(j, 0, ,+ TMP(rsum, eval(j - 1)));')
     double partial;
     _mm_store_sd(&partial,  _mm_hadd_pd(TMP(rsum, eval(ORDER/2 - 1)), TMP(rsum, eval(ORDER/2 - 1))));
 
     return  mass * log(r2) / 2 + partial;
   }
-
