@@ -44,7 +44,7 @@ namespace Tree
 
 #ifndef NDEBUG
     for(int i = s; i < e; ++i)
-      assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
+	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
 #endif
 
     node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
@@ -152,7 +152,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
   const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
 
-  const realtype eps = 100 * std::numeric_limits<realtype>::epsilon();
+
+  const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
 
   ext = std::max(ext0, ext1) * (1 + 2 * eps);
   xmin -= eps * ext;

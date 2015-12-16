@@ -87,6 +87,7 @@ void treecode_potential(const realtype theta,
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i], root);
 
+    Tree::dispose();    
     const double t2 = omp_get_wtime();
 
 #ifdef _INSTRUMENTATION_

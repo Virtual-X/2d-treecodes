@@ -22,7 +22,7 @@ UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
 OBJS = treecode-potential.o treecode-force.o upward.o
 
-config ?= release
+config ?=release
 
 TLPFLAGS = -I../ILP+DLP/ -Wno-psabi -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
 

@@ -473,6 +473,8 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 #endif
 	}
 
+	Tree::dispose();
+
 	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
     }
 
@@ -534,6 +536,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	free(ydata_fp32);
 	free(vdata_fp32);
 #endif
+	Tree::dispose();
 
 	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
     }
