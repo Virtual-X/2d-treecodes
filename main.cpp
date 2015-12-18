@@ -343,6 +343,7 @@ int main(int argc, char ** argv)
   file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
   file2test("/cluster/scratch_xp/public/sverma/treecodeDataDec10/diegoVelTestsDec10", true, V_TEST);
   file2test("/cluster/scratch_xp/public/sverma/MRAG2D/fishHardcoreDebug/diegoVelTestsDec14", true, V_TEST);
+  file2test("testSid/diegoVelTestsDec17", true, V_TEST);
   
 #if 0  
     for(int itest = 0; itest < 10; ++itest)

@@ -17,6 +17,7 @@
 
 #include <parallel/algorithm>
 #include <limits>
+#include <utility>
 
 typedef REAL realtype;
 
@@ -26,6 +27,8 @@ namespace Tree
     {
 	int x, y, l, s, e;
 	bool leaf;
+
+      int64_t e2ecycles, p2ecycles, searchcycles, allcycles;
 
 	realtype w, wx, wy, mass, r;
 
@@ -44,9 +47,55 @@ namespace Tree
 	realtype xcom() const { return wx / w; }
 	realtype ycom() const { return wy / w; }
 
-	Node() { for (int i = 0; i < 4; ++i) children[i] = nullptr; w = wx = wy = mass = r = 0; }
+	Node() 
+      { 
+	for (int i = 0; i < 4; ++i) 
+	  children[i] = nullptr; 
+	
+	w = wx = wy = mass = r = 0; 
+	
+	e2ecycles = p2ecycles = searchcycles = 0;
+      }
 
+      //all, critical path
+      std::pair<int64_t, int64_t> cycles(bool all, bool searchonly) 
+      {
+	int64_t subworkloads[4] = {0, 0, 0, 0};
+	int64_t aggregate = 0;
 
+	for(int i = 0; i < 4; ++i)
+	  if (children[i])
+	    { 
+	      auto tmp = children[i]->cycles(all, searchonly);
+	      aggregate += tmp.first;
+	      subworkloads[i] = tmp.second;
+	    }
+	
+	const int64_t highest_workload = std::max(std::max(subworkloads[0], subworkloads[1]),
+						  std::max(subworkloads[2], subworkloads[3]));
+	
+	const int64_t myworkload = all ? allcycles : searchonly? searchcycles : (e2ecycles + p2ecycles + searchcycles);
+
+	return std::make_pair(aggregate + myworkload, 
+			      highest_workload + myworkload);
+      } 
+
+      //all nodes, leaves
+      std::pair<int, int> nodes()
+      {
+	int leaves = 0, nodes = 0;
+
+	for(int i = 0; i < 4; ++i)
+          if (children[i])
+            {
+              auto tmp = children[i]->nodes();
+              nodes += tmp.first;
+	      leaves += tmp.second;
+            }	
+
+	return std::make_pair(nodes + 1, leaves + (leaves == 0 && nodes == 0));
+      }
+      
 	virtual void allocate_children() = 0;
 
 	virtual void p2e(const realtype * __restrict__ const xsources,
@@ -70,7 +119,7 @@ namespace Tree
 
 	alignedvec rexpansions;	
 	alignedvec iexpansions;
-
+	
 	void allocate_children() override
 	{
 	    for(int i = 0; i < 4; ++i)

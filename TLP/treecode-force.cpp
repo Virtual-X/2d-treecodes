@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-//#define _INSTRUMENTATION_ 1
+#define _INSTRUMENTATION_ 1
 #if ORDER <= 12
 #define _MIXPREC_
 #endif
