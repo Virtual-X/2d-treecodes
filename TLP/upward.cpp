@@ -15,11 +15,17 @@
 
 #include <parallel/algorithm>
 #include <limits>
+#include <utility>
 
 #include "upward.h"
 #include "upward-kernels.h"
 
-#define  _INSTRUMENTATION_
+//#define  _INSTRUMENTATION_
+#ifndef _INSTRUMENTATION_
+#define MYRDTSC 0
+#else
+#define MYRDTSC _rdtsc()
+#endif
 
 #define LMAX 15
 
@@ -37,6 +43,8 @@ namespace Tree
 
   void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
   {
+    const int64_t startallc = MYRDTSC;
+
     const double h = ext / (1 << l);
     const double x0 = xmin + h * x, y0 = ymin + h * y;
 
@@ -51,7 +59,9 @@ namespace Tree
 
     if (node->leaf)
       {
+	const int64_t startc = MYRDTSC;
 	node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
+	node->p2ecycles = MYRDTSC - startc;
 
 	assert(node->r < 1.5 * h);
       }
@@ -66,8 +76,10 @@ namespace Tree
 	    const int key1 = mask | (c << shift);
 	    const int key2 = key1 + (1 << shift) - 1;
 
+	    const int64_t startc = MYRDTSC;
 	    const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
 	    const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
+	    node->searchcycles += MYRDTSC - startc;
 
 	    Node * chd = node->children[c];
 
@@ -80,6 +92,8 @@ namespace Tree
 	  }
 
 #pragma omp taskwait
+
+	const int64_t startc = MYRDTSC;
 
 	for(int c = 0; c < 4; ++c)
 	  {
@@ -114,7 +128,9 @@ namespace Tree
 	  assert (sqrt(r) <= node->r);
 	}
 #endif
+
 	node->e2e();
+	node->e2ecycles = MYRDTSC - startc;
       }
 
 #ifndef NDEBUG
@@ -122,6 +138,9 @@ namespace Tree
       assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
 #endif
+
+    const int64_t endallc = MYRDTSC;
+    node->allcycles = endallc - startallc;
   }
 }
 
@@ -151,7 +170,6 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
   const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
   const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
-
 
   const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
 
@@ -225,6 +243,20 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	 (t4 - t3) * 1e3, (t4 - t3) / (t6 - t0) * 100,
 	 (t5 - t4) * 1e3, (t5 - t4) / (t6 - t0) * 100,
 	 (t6 - t5) * 1e3, (t6 - t5) / (t6 - t0) * 100);
+
+  std::pair<int64_t, int64_t> allcycles = root->cycles(true, false);
+  std::pair<int64_t, int64_t> usecycles = root->cycles(false, false);
+  std::pair<int64_t, int64_t> searchcycles = root->cycles(false, true);
+  std::pair<int, int> nodes = root->nodes();
+  printf("TREE:\nNODES: %.2e LEAVES: %.2e (%.1f%%)\n ALL: %.2e c, CP: %.2e c (%.1f%%), WORK: %e (%.1f%%), USEFUL CP: %e (%.1f%% of WORK)\nSEARCH: %.2e (%.1f%%) CP: %.2e (%.1f%%)\n",
+	 (double)nodes.first, (double)nodes.second, (double)nodes.second * 100. / nodes.first,
+	 (double)allcycles.first,
+	 (double)allcycles.second,(double)(allcycles.second * 100. / allcycles.first),
+	 (double)usecycles.first, (double)(usecycles.first * 100. / allcycles.first),
+	 (double)usecycles.second,(double)(usecycles.second * 100./ usecycles.first),
+	 (double)searchcycles.first,(double)(searchcycles.first * 100./ usecycles.first),
+	 (double)searchcycles.second,(double)(searchcycles.second * 100./ searchcycles.first));
+
 #endif
 }
 
