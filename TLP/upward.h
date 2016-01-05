@@ -26,7 +26,7 @@ namespace Tree
     {
 	int x, y, l, s, e;
 	bool leaf;
-
+  
 	realtype w, wx, wy, mass, r;
 
 	Node * children[4];
@@ -68,7 +68,7 @@ namespace Tree
     {
 	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
 
-	alignedvec rexpansions;	
+	alignedvec rexpansions;
 	alignedvec iexpansions;
 
 	void allocate_children() override

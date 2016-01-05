@@ -19,7 +19,7 @@
 #include "upward.h"
 #include "upward-kernels.h"
 
-//#define  _INSTRUMENTATION_
+#define  _INSTRUMENTATION_
 
 #define LMAX 15
 
@@ -131,7 +131,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   const double t0 = omp_get_wtime();
   const int isdynamic = omp_get_dynamic();
   const int maxthreads = omp_get_max_threads();
-  
+
   omp_set_dynamic(0);
   omp_set_num_threads(24);
 
@@ -210,7 +210,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     { _build(root, 0, 0, 0, 0, nsrc, 0); }
   }
 
-  free(kv);  
+  free(kv);
   free(keys);
 
   omp_set_num_threads(maxthreads);
@@ -218,7 +218,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
   const double t6 = omp_get_wtime();
 #ifdef _INSTRUMENTATION_
-  printf("SETUP: %.2f ms (%.1f %%) REDUCE: %.2f ms (%.1f %%) KEY: %.2f ms (%.1f %%) SORT: %.2f ms (%.1f %%) REORDER: %.2f ms (%.1f %%) TREE: %.2f ms (%.1f%%)\n", 
+  printf("SETUP: %.2f ms (%.1f %%) REDUCE: %.2f ms (%.1f %%) KEY: %.2f ms (%.1f %%) SORT: %.2f ms (%.1f %%) REORDER: %.2f ms (%.1f %%) TREE: %.2f ms (%.1f%%)\n",
 	 (t1 - t0) * 1e3, (t1 - t0) / (t6 - t0) * 100,
 	 (t2 - t1) * 1e3, (t2 - t1) / (t6 - t0) * 100,
 	 (t3 - t2) * 1e3, (t3 - t2) / (t6 - t0) * 100,
