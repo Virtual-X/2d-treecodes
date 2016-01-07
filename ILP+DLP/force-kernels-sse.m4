@@ -10,25 +10,23 @@
 *  before getting a written permission from the author of this file.
 */
 
+define(NACC, 4)
 include(unroll.m4)
-#include <pmmintrin.h>                                                                                                                                                                                                                                                        
-#if defined(__INTEL_COMPILER)                                                                                                                                                                                                                                               
+#include <pmmintrin.h>
+#if defined(__INTEL_COMPILER)
 inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
 inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
 inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
 inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
 inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
 inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
-#endif                                                                                                                                                                                                                                                                          
-#define EPS (10 * __DBL_EPSILON__)                                                                                                                                                                                                                                             
-#define MAX(a,b) (((a)>(b))?(a):(b))                                                                                                                                                                                                                                           
-
-
-define(NACC, 4)
+#endif
+#define EPS (10 * __DBL_EPSILON__)
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
 #ifdef __cplusplus
 extern "C"
-#endif                       
+#endif
 void force_p2p(const realtype * __restrict__ const _xsrc,
 	const realtype * __restrict__ const _ysrc,
 	const realtype * __restrict__ const _vsrc,
@@ -74,15 +72,12 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 			')
 		}
 
-		__m128d xsum2 = _mm_setzero_pd(), ysum2 = _mm_setzero_pd();
-		LUNROLL(i, 0, eval(NACC - 1), `
-		xsum2 += TMP(xs, i);
-		ysum2 += TMP(ys, i);')
+		REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(xs,i)'))
+		REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(ys,i)'))
 
 		realtype xsum, ysum;
-		_mm_store_sd(&xsum, _mm_hadd_pd(xsum2, xsum2));
-		_mm_store_sd(&ysum, _mm_hadd_pd(ysum2, ysum2));
-		
+		_mm_store_sd(&xsum, _mm_hadd_pd(TMP(xs, 0), TMP(xs, 0)));
+		_mm_store_sd(&ysum, _mm_hadd_pd(TMP(ys, 0), TMP(ys, 0)));
 
 		for(int i = nnice; i < nsources; ++i)
 		{
@@ -102,7 +97,7 @@ void force_p2p(const realtype * __restrict__ const _xsrc,
 
 #ifdef __cplusplus
 extern "C"
-#endif                       
+#endif
 	void force_e2p(const realtype mass,
 		const realtype rz,
 		const realtype iz,
@@ -112,7 +107,7 @@ extern "C"
 		realtype * const yresult)
 		{
 			const realtype r2 = rz * rz + iz * iz;
-			
+
 			const realtype rinvz_1 = rz / r2;
 			const realtype iinvz_1 = -iz / r2;
 
@@ -121,7 +116,7 @@ extern "C"
 			const realtype TMP(iinvz, n) = TMP(rinvz, eval(n - 1)) * iinvz_1 + TMP(iinvz, eval(n - 1)) * rinvz_1;')dnl
 
 			const __m128d rz2 = _mm_set1_pd(TMP(rinvz, 2));
-			const __m128d iz2 = _mm_set1_pd(TMP(iinvz, 2)); 
+			const __m128d iz2 = _mm_set1_pd(TMP(iinvz, 2));
 
 			const __m128d rbase_0 = _mm_set_pd(TMP(rinvz, 3), TMP(rinvz, 2));
 			const __m128d ibase_0 = _mm_set_pd(TMP(iinvz, 3), TMP(iinvz, 2));
@@ -151,4 +146,3 @@ extern "C"
 
 			__asm__("L_END_FORCE_E2P:");
 		}
-

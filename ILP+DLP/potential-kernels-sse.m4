@@ -10,8 +10,9 @@
 *  before getting a written permission from the author of this file.
 */
 
-include(unroll.m4)
-dnl
+define(NACC, 16)
+
+include(unroll.m4) dnl
 #include <pmmintrin.h>
 #include <math.h>
 
@@ -31,7 +32,6 @@ inline __m128d _mm_log_pd(const __m128d x)
 }
 #endif
 
-define(NACC, 16)
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
@@ -49,7 +49,8 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
     const __m128d yt = _mm_set1_pd(_yt);
     const __m128d eps = _mm_set1_pd(EPS);
 
-    __m128d LUNROLL(`i', 0, NACC, `ifelse(i,0,,`,') TMP(s,i) = _mm_setzero_pd()') ;
+    __m128d LUNROLL(`i', 0, NACC, `
+    ifelse(i,0,,`,') TMP(s,i) = _mm_setzero_pd()') ;
 
     const int nnice = NACC * (nsources / NACC);
 
@@ -66,8 +67,7 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
       ')
     }
 
-    LUNROLL(i, 1, eval(NACC - 1), `
-    TMP(s,0) += TMP(s, i);')
+    REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(s,i)'))
 
     double sum;
     _mm_store_sd(&sum, _mm_hadd_pd(TMP(s, 0), TMP(s, 0)));

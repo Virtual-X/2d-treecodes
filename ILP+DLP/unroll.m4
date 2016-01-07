@@ -39,5 +39,16 @@ define(PEEL2, `pushdef(`$1', `ITERV') EATLOOP(shift($*)) popdef(`$1')')
 
 define(EATLOOP, `ifelse($1,,, `pushdef(`ITERV', $1) BODY popdef(`ITERV') EATLOOP(shift($*))')')
 
+define(`REDUCEL',`
+ifelse(eval($# < 3), 1,, $2 $1 $3;)' `ifelse(eval($# <= 3), 1,`',`REDUCEL($1, shift(shift(shift($*))))')')
+
+define(`ODDREMOVE', `ifelse(eval($# <= 2), 1, ifelse(eval($# > 0),1,$1), `$1,ODDREMOVE(shift(shift($*)))')')
+
+define(`REDUCE',`REDUCEL($*)' `ifelse(eval($# <= 3), 1, ,`
+REDUCE($1, ODDREMOVE(shift($*)))')')
+
+#example: REDUCE(`+=', s0, s1, s2, s3, s4, s5, s6, s7)
+
+
 divert(0)
 

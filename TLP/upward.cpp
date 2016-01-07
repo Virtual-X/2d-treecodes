@@ -90,7 +90,7 @@ namespace Tree
 	    }
 
 	  }
-
+//#pragma omp taskyield
 #pragma omp taskwait
 
 	const int64_t startc = MYRDTSC;
