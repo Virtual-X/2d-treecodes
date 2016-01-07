@@ -151,8 +151,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   const int isdynamic = omp_get_dynamic();
   const int maxthreads = omp_get_max_threads();
 
-  omp_set_dynamic(0);
-  omp_set_num_threads(24);
+  //omp_set_dynamic(0);
+  //omp_set_num_threads(24);
 
   Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
 
@@ -165,11 +165,51 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
 
   const double t1 = omp_get_wtime();
-  xmin = *__gnu_parallel::min_element(xsrc, xsrc + nsrc);
-  ymin = *__gnu_parallel::min_element(ysrc, ysrc + nsrc);
 
-  const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
-  const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
+  realtype ext0, ext1;
+
+  {
+    const int nthreads = maxthreads;
+
+    realtype xpartials[2][nthreads], ypartials[2][nthreads];
+
+#pragma omp parallel //num_threads(24)
+    {
+      realtype lxmi = HUGE_VAL, lymi = HUGE_VAL, lxma = 0, lyma = 0;
+
+#pragma omp for
+      for(int i = 0; i < nsrc; ++i)
+	{
+	  const realtype xval = xsrc[i];
+	  const realtype yval = ysrc[i];
+
+	  lxmi = std::min(lxmi, xval);
+	  lxma = std::max(lxma, xval);
+
+	  lymi = std::min(lymi, yval);
+	  lyma = std::max(lyma, yval);
+	}
+
+      const int tid = omp_get_thread_num();
+
+      xpartials[0][tid] = lxmi;
+      xpartials[1][tid] = lxma;
+      ypartials[0][tid] = lymi;
+      ypartials[1][tid] = lyma;
+    }
+
+    xmin = *std::min_element(xpartials[0], xpartials[0] + nthreads);
+    ymin = *std::min_element(ypartials[0], ypartials[0] + nthreads);
+
+    ext0 = (*std::max_element(xpartials[1], xpartials[1] + nthreads) - xmin);
+    ext1 = (*std::max_element(ypartials[1], ypartials[1] + nthreads) - ymin);
+
+  }
+  //xmin = *__gnu_parallel::min_element(xsrc, xsrc + nsrc);
+  //ymin = *__gnu_parallel::min_element(ysrc, ysrc + nsrc);
+
+  //const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
+  //const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
 
   const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
 
@@ -178,7 +218,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   ymin -= eps * ext;
   const double t2 = omp_get_wtime();
 
-#pragma omp parallel for
+#pragma omp parallel for //num_threads(24)
   for(int i = 0; i < nsrc; ++i)
     {
       int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
@@ -207,7 +247,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   __gnu_parallel::sort(kv, kv + nsrc);
   const double t4 = omp_get_wtime();
 
-#pragma omp parallel for
+#pragma omp parallel for //num_threads(24)
   for(int i = 0; i < nsrc; ++i)
     {
       keys[i] = kv[i].first;
@@ -222,7 +262,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
   const double t5 = omp_get_wtime();
 
-#pragma omp parallel
+#pragma omp parallel //num_threads(24)
   {
 #pragma omp single
     { _build(root, 0, 0, 0, 0, nsrc, 0); }
@@ -231,8 +271,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   free(kv);
   free(keys);
 
-  omp_set_num_threads(maxthreads);
-  omp_set_dynamic(isdynamic);
+  //omp_set_num_threads(maxthreads);
+  //omp_set_dynamic(isdynamic);
 
   const double t6 = omp_get_wtime();
 #ifdef _INSTRUMENTATION_

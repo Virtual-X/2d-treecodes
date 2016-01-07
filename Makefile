@@ -12,6 +12,7 @@
 
 CXX ?= g++
 CC = gcc -std=c99
+LOCKLESS_ALLOCATOR_OBJ = ~/lockless_allocator/libllalloc.o
 
 real ?= double
 treecode-potential-order ?= 12
@@ -31,7 +32,7 @@ test: main.cpp libtreecode.a
 	$(CXX) $(CXXFLAGS) -g $^ -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header svml
-	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o
+	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
 
 #	svml/svml_d_log2_iface_la.o \
 	svml/svml_d_feature_flag_.o \
