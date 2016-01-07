@@ -19,7 +19,7 @@
 #include "potential-kernels.h"
 #include "upward.h"
 
-//#define _INSTRUMENTATION_
+#define _INSTRUMENTATION_
 
 namespace EvaluatePotential
 {
