@@ -13,10 +13,12 @@
 #pragma once
 
 #include <cassert>
-#include <cmath>
+//#include <cmath>
 
-#include <parallel/algorithm>
-#include <limits>
+//#include <parallel/algorithm>
+//#include <limits>
+#include <cinttypes>
+#include <algorithm>
 #include <utility>
 
 typedef REAL realtype;

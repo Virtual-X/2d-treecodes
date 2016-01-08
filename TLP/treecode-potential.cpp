@@ -10,6 +10,8 @@
  *  before getting a written permission from the author of this file.
  */
 
+#include <omp.h>
+
 #include <cassert>
 #include <cmath>
 #include <cstring>
@@ -19,7 +21,7 @@
 #include "potential-kernels.h"
 #include "upward.h"
 
-//#define _INSTRUMENTATION_
+#define _INSTRUMENTATION_
 
 namespace EvaluatePotential
 {

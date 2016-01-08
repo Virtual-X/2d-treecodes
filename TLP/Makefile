@@ -11,6 +11,7 @@
 #
 
 CXX ?= g++
+NVCC ?= nvcc
 real ?= double
 
 treecode-potential-order ?= 12
@@ -20,14 +21,19 @@ mrag-blocksize ?= 32
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
+
 OBJS = treecode-potential.o treecode-force.o upward.o
 
 config ?=release
 
-TLPFLAGS = -I../ILP+DLP/ -Wno-psabi -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
+TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
+NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp
+TLPFLAGS += -march=native -fopenmp
+
 
 ifeq "$(config)" "release"
-	TLPFLAGS += -O3 -DNDEBUG 
+	TLPFLAGS += -O3 -DNDEBUG
+	NVCCFLAGS += -O3 -DNDEBUG
 else
 	TLPFLAGS += -g
 endif
@@ -47,8 +53,8 @@ treecode-force.o: treecode-force.cpp treecode.h Makefile
 	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
 	-DORDER=$(treecode-force-order) -c $<
 
-upward.o: upward.cpp upward.h Makefile
-	$(CXX) $(TLPFLAGS) -c $<
+upward.o: upward.cu upward.h Makefile
+	$(NVCC) $(NVCCFLAGS) -c $<
 
 clean:
 	rm -f *.o 

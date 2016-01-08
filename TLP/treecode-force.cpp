@@ -10,6 +10,8 @@
  *  before getting a written permission from the author of this file.
  */
 
+#include <omp.h>
+
 #include <cassert>
 #include <cmath>
 #include <cstring>

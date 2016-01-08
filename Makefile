@@ -11,6 +11,7 @@
 #
 
 CXX ?= g++
+NVCC = nvcc
 CC = gcc -std=c99
 LOCKLESS_ALLOCATOR_OBJ = ~/lockless_allocator/libllalloc.o
 
@@ -21,7 +22,7 @@ mrag-blocksize ?= 32
 config ?= release
 backend ?= sse
 
-CXXFLAGS = -std=c++11  -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
+NVCCFLAGS = -std=c++11  -Xcompiler -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize) -lcudart
 
 ifeq "$(gprof)" "1"
 	CXXFLAGS += -pg
@@ -29,7 +30,7 @@ ifeq "$(gprof)" "1"
 endif
 
 test: main.cpp libtreecode.a
-	$(CXX) $(CXXFLAGS) -g $^ -o test
+	$(NVCC) $(NVCCFLAGS) -g $^ -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
 	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
