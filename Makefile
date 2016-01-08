@@ -31,21 +31,8 @@ endif
 test: main.cpp libtreecode.a
 	$(CXX) $(CXXFLAGS) -g $^ -o test
 
-libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header svml
+libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
 	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
-
-#	svml/svml_d_log2_iface_la.o \
-	svml/svml_d_feature_flag_.o \
-	svml/cpu_feature_disp.o \
-	svml/svml_d_log2_core_h9la.o \
-	svml/svml_d_log2_core_exla.o \
-	svml/svml_d_log2_core_e7la.o
-
-svml:
-	$(shell mkdir svml ; cd svml; \
-	ar -x /opt/intel/composer_xe_2013_sp1.2.144/compiler/lib/intel64/libsvml.a; \
-	ar -x /opt/intel/composer_xe_2013_sp1.2.144/compiler/lib/intel64/libirc.a; \
-	cd ..)
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
