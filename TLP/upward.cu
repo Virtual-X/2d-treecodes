@@ -219,12 +219,13 @@ namespace Tree
    
     struct DeviceNode
     {
-	int x, y, l, s, e, mask;
+	int x, y, l, s, e, mask, parent;
 	int children[4];
+	int validchildren;
 
 	realtype mass, w, wx, wy;
 
-	__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask)
+	__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask, int parent)
 	    {
 		this->x = x;
 		this->y = y;
@@ -232,6 +233,8 @@ namespace Tree
 		this->s = s;
 		this->e = e;
 		this->mask = mask;
+		this->parent = parent;
+		this->validchildren = 0;
 		
 		for (int i = 0; i < 4; ++i) 
 		    children[i] = 0;
@@ -249,7 +252,7 @@ namespace Tree
     __global__ void setup(const int nsrc)
     {
 	nnodes = 1;
-	bufnodes[0].setup(0, 0, 0, 0, nsrc, false);
+	bufnodes[0].setup(0, 0, 0, 0, nsrc, false, -1);
 
 	queue[0] = 0;
 	qlock = 1;
@@ -287,20 +290,17 @@ namespace Tree
 	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
 	
 	const int tid = threadIdx.x;
-	const int slot = threadIdx.y;
 	const bool master = tid == 0;
 
-	//__shared__ volatile DeviceNode * volatile currnodes[4];
-
-	DeviceNode * curr; // = currnodes[slot];
+	int curr;
 	
 	while(qitems && qgood) 
 	{
-	    curr = NULL;
+	    curr = -1;
 	    
 	    if (master)
 	    {
-		if (atomicCAS(&qlock, 1, 0))
+		if (atomicCAS(&qlock, 1, 0)) //then take one task if available
 		{
 		    const int currhead = qhead;
 		    
@@ -308,35 +308,33 @@ namespace Tree
 		    {
 			const int entry = currhead % queuesize;
 			
-			//currnodes[slot] = bufnodes + queue[entry];
-			curr = bufnodes + queue[entry];
+			curr = queue[entry];
 
 			qhead = currhead + 1;
 		
 			__threadfence();			
 		    }
-		    else
-			;//currnodes[slot] = NULL;
-
+		    
 		    qlock = 1;
 		}
 	    }
-	    	
-	    //DeviceNode * const curr = currnodes[slot];
-	    curr = bcast_ptr(curr);
+
+	    curr = __shfl(curr, 0);
 	    
-	    if (curr)
+	    if (curr >= 0)
 	    {
-		const int s = curr->s;
-		const int e = curr->e;
-		const int l = curr->l;
+		DeviceNode * node = bufnodes + curr;
+		
+		const int s = node->s;
+		const int e = node->e;
+		const int l = node->l;
 		
 		const bool leaf = e - s <= LEAF_MAXCOUNT || l + 1 > LMAX;
 		
 		if (leaf)
 		{
-		    //compute P2E here
 		    realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+		    
 		    for(int t = s + tid; t < e; t += WARPSIZE)
 		    {
 			const realtype x = xsorted[t];
@@ -358,21 +356,57 @@ namespace Tree
 			wxsum += __shfl_xor(wxsum, mask);
 			wysum += __shfl_xor(wysum, mask);
 		    }
+
+		    //compute P2E here
 		    		    
 		    if (master)
 		    {
-			curr->mass = msum;
-			curr->w = wsum;
-			curr->wx = wxsum;
-			curr->wy = wysum;
+			node->mass = msum;
+			node->w = wsum;
+			node->wx = wxsum;
+			node->wy = wysum;
 			
 			atomicSub(&qitems, 1);
+
+			__threadfence();
+
+			while(node->parent >= 0)
+			{
+			    DeviceNode * parent = bufnodes + node->parent;
+			    			    
+			    if (3 == atomicAdd(&parent->validchildren, 1)) //then this node is in the critical path
+			    {
+				realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+				
+				for(int c = 0; c < 4; ++c)
+				{
+				    const DeviceNode * child = bufnodes + parent->children[c];
+				    
+				    msum += child->mass;
+				    wsum += child->w;
+				    wxsum += child->wx;
+				    wysum += child->wy;
+				}
+
+				parent->mass = msum;
+				parent->w = wsum;
+				parent->wx = wxsum;
+				parent->wy = wysum;
+
+				//compute E2E here
+
+				__threadfence();
+			    }
+			    else
+				break;
+
+			    node = parent;
+			}
 		    }
 		}		
 		else
 		{
-		    //allocate children
-		    if (master)
+		    if (master) //children allocation
 		    {
 			const int bufbase = atomicAdd(&nnodes, 4);
 
@@ -383,12 +417,12 @@ namespace Tree
 			}
 			
 			for(int c = 0; c < 4; ++c)
-			    curr->children[c] = bufbase + c;
+			    node->children[c] = bufbase + c;
 		    }
 
-		    const int mask = curr->mask;
-		    const int x = curr->x;
-		    const int y = curr->y;
+		    const int mask = node->mask;
+		    const int x = node->x;
+		    const int y = node->y;
 		
 		    for(int c = 0; c < 4; ++c)
 		    {
@@ -402,22 +436,21 @@ namespace Tree
 
 			if (master)
 			{    
-			    DeviceNode * child = bufnodes + curr->children[c];
-			    child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+			    DeviceNode * child = bufnodes + node->children[c];
+			    child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, curr);
 			}
 		    }
 
-		    if (master)
+		    if (master) //enqueue new tasks
 		    {
 			const int base = atomicAdd(&qtailnext, 4);
-		    //printf("base: %d\n", base);
 
 			if (base + 4 - qhead >= queuesize)
 			    qgood = false;
 			else
 			{
 			    for(int c = 0; c < 4; ++c)
-				queue[(base + c) % queuesize] = curr->children[c];
+				queue[(base + c) % queuesize] = node->children[c];
 			    
 			    atomicAdd(&qitems, 3);
 			    
@@ -429,8 +462,6 @@ namespace Tree
 		}
 	    }
 	}
-
-	//assert(qgood);
     }
 
     __global__ void conclude(int * treenodes, int * queuesize)
@@ -455,13 +486,13 @@ int check_bits(double x, double y)
     int currbit = 0;
     for(int i = 0; i < 8; ++i)
     {
-	printf(":%d: 0x%x vs 0x%x \n", i, a.c[7 - i], b.c[7 - i]);
+//	printf(":%d: 0x%x vs 0x%x \n", i, a.c[7 - i], b.c[7 - i]);
 	unsigned char c1 = a.c[7 - i], c2 = b.c[7 - i];
 	for(int b = 0; b < 8; ++b, ++currbit)
 	{
 	    if (((c1 >> b) & 1) != ((c2 >> b) & 1))
 	    {
-		printf("numbers differ from the %d most-significant bit\n", currbit);
+//		printf("numbers differ from the %d most-significant bit\n", currbit);
 		return currbit;
 	    }
 	}
@@ -479,6 +510,18 @@ void check_tree (Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b
 	    assert(a.e == b.e);
 	    //assert(a.mask == b.mask);
 
+	    /* printf("a/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		   a.mass, a.w, a.wx, a.wy);
+	    printf("b/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		   b.mass, b.w, b.wx, b.wy);
+
+	    */	
+		
+	    assert(check_bits(a.mass, b.mass) >= 48);
+	    assert(check_bits(a.w, b.w) >= 48);
+	    assert(check_bits(a.wx, b.wx) >= 48 || a.w == 0);
+	    assert(check_bits(a.wy, b.wy) >= 48 || a.w == 0);
+
 	    printf("node %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 	    
 	    if (!b.leaf)
@@ -487,17 +530,7 @@ void check_tree (Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b
 	    else
 	    {
 		
-		printf("a/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
-		       a.mass, a.w, a.wx, a.wy);
-		printf("b/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
-		       b.mass, b.w, b.wx, b.wy);
-
-		
-		
-		assert(check_bits(a.mass, b.mass) >= 48);
-		assert(check_bits(a.w, b.w) >= 48);
-		assert(check_bits(a.wx, b.wx) >= 48 || a.w == 0);
-		assert(check_bits(a.wy, b.wy) >= 48 || a.w == 0);
+	
 		//assert(a.mass == b.mass);
 		//assert(a.w == b.w);
 	    }
