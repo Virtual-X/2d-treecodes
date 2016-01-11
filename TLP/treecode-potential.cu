@@ -15,6 +15,9 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
+
+#include "cuda-common.h"
 
 #include "treecode.h"
 #include "upward-kernels.h"
@@ -41,7 +44,7 @@ namespace EvaluatePotential
 	{
 	    const NodePotential * const node = stack[stackentry--];
 
-	    realtype tmp[2];
+	    //realtype tmp[2];
 
 	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
 
@@ -77,10 +80,14 @@ void treecode_potential(const realtype theta,
     thetasquared = theta * theta;
 
     NodePotential root;
+    
+    //CUDA_CHECK(cudaMemset(device_root, 0, sizeof(device_root)));
+    
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 32 * 16); //before: 64
+    Tree::build(xsrc, ysrc, vsrc, nsrc, &root,  32 * 16); //before: 64
     const double t1 = omp_get_wtime();
-
+    
+    
     xdata = Tree::xdata;
     ydata = Tree::ydata;
     vdata = Tree::vdata;
@@ -89,7 +96,8 @@ void treecode_potential(const realtype theta,
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i], root);
 
-    Tree::dispose();    
+    Tree::dispose();
+        
     const double t2 = omp_get_wtime();
 
 #ifdef _INSTRUMENTATION_

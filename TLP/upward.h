@@ -34,7 +34,7 @@ namespace Tree
 
 	Node * children[4];
 
-	void setup(int x, int y, int l, int s, int e, bool leaf)
+	__host__ __device__ void setup(int x, int y, int l, int s, int e, bool leaf)
 	    {
 		this->x = x;
 		this->y = y;
@@ -42,12 +42,13 @@ namespace Tree
 		this->s = s;
 		this->e = e;
 		this->leaf = leaf;
+		
 	    }
 
 	realtype xcom() const { return wx / w; }
 	realtype ycom() const { return wy / w; }
 
-	Node() 
+	__host__ __device__ Node() 
       { 
 	for (int i = 0; i < 4; ++i) 
 	  children[i] = nullptr; 
@@ -56,6 +57,16 @@ namespace Tree
 	
 	e2ecycles = p2ecycles = searchcycles = 0;
       }
+
+	__device__ void clear()
+	    {
+		for (int i = 0; i < 4; ++i) 
+	  children[i] = nullptr; 
+	
+	w = wx = wy = mass = r = 0; 
+	
+	e2ecycles = p2ecycles = searchcycles = 0;
+	    }
 
       //all, critical path
       std::pair<int64_t, int64_t> cycles(bool all, bool searchonly) 
@@ -96,7 +107,10 @@ namespace Tree
 	return std::make_pair(nodes + 1, leaves + (leaves == 0 && nodes == 0));
       }
       
-	virtual void allocate_children() = 0;
+	__host__ __device__ virtual void allocate_children()
+	    {
+		printf("hello BASE:::!\n");
+	}
 
 	virtual void p2e(const realtype * __restrict__ const xsources,
 			 const realtype * __restrict__ const ysources,
@@ -105,7 +119,7 @@ namespace Tree
 
 	virtual void e2e() = 0;
 
-	virtual ~Node()
+	__host__ __device__ virtual ~Node()
 	    {
 
 	    }
@@ -115,15 +129,16 @@ namespace Tree
     template<int XXXDONTCARE>
 	struct NodeImplementation : Node
     {
-	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
-
-	alignedvec rexpansions;
+//	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
+	realtype rexpansions[ORDER], iexpansions[ORDER];
+/*	alignedvec rexpansions;
 	alignedvec iexpansions;
-	
-	void allocate_children() override
+*/	
+	__host__ __device__ void allocate_children() override
 	{
-	    for(int i = 0; i < 4; ++i)
-		children[i] = new NodeImplementation;
+	    printf("hallocazzz!\n");
+	    /*for(int i = 0; i < 4; ++i)
+	      children[i] = new NodeImplementation;*/
 	}
 
 	void p2e(const realtype * __restrict__ const xsources,
@@ -161,7 +176,7 @@ namespace Tree
 #endif
 	}
 
-	~NodeImplementation() override
+	__host__ __device__ ~NodeImplementation() override
 	{
 	    for(int i = 0; i < 4; ++i)
 		if (children[i])

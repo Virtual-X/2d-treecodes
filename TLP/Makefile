@@ -10,7 +10,6 @@
 # before getting a written permission from the author of this file.
 #
 
-CXX ?= g++
 NVCC ?= nvcc
 real ?= double
 
@@ -24,7 +23,7 @@ UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
 OBJS = treecode-potential.o treecode-force.o upward.o
 
-config ?=release
+#config ?=release
 
 TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
 NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp
@@ -35,21 +34,20 @@ ifeq "$(config)" "release"
 	TLPFLAGS += -O3 -DNDEBUG
 	NVCCFLAGS += -O3 -DNDEBUG
 else
-	TLPFLAGS += -g
+	TLPFLAGS += -g -G
 endif
 
 ifeq "$(gprof)" "1"
-	CXXFLAGS += -pg
 	TLPFLAGS += -pg
 endif
 
 drivers: $(OBJS)
 
-treecode-potential.o: treecode-potential.cpp treecode.h Makefile
-	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
+treecode-potential.o: treecode-potential.cu treecode.h Makefile
+	$(NVCC) $(NVCCFLAGS) -DORDER=$(treecode-potential-order) -c $<
 
-treecode-force.o: treecode-force.cpp treecode.h Makefile
-	$(CXX) $(TLPFLAGS) \
+treecode-force.o: treecode-force.cu treecode.h Makefile
+	$(NVCC) $(NVCCFLAGS) \
 	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
 	-DORDER=$(treecode-force-order) -c $<
 

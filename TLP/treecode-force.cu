@@ -18,6 +18,8 @@
 #include <tuple>
 #include <algorithm>
 
+#include "cuda-common.h"
+
 #include "treecode.h"
 #include "upward-kernels.h"
 #include "downward-kernels.h"
@@ -449,7 +451,6 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	const realtype thetasquared = theta * theta;
 
 	NodeForce root;
-
 	const double t0 = omp_get_wtime();
 	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128);
 	const double t1 = omp_get_wtime();
@@ -496,6 +497,8 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	NodeForce root;
 
 	const double t0 = omp_get_wtime();
+	NodeForce* device_root;
+	CUDA_CHECK(cudaMalloc(&device_root, sizeof(*device_root)));
 	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
 	const double t1 = omp_get_wtime();
 
@@ -539,7 +542,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	free(vdata_fp32);
 #endif
 	Tree::dispose();
-
+	
 	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
     }
 }

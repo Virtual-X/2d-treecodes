@@ -10,7 +10,6 @@
 # before getting a written permission from the author of this file.
 #
 
-CXX ?= g++
 NVCC = nvcc
 CC = gcc -std=c99
 LOCKLESS_ALLOCATOR_OBJ = ~/lockless_allocator/libllalloc.o
@@ -25,7 +24,6 @@ backend ?= sse
 NVCCFLAGS = -std=c++11  -Xcompiler -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize) -lcudart
 
 ifeq "$(gprof)" "1"
-	CXXFLAGS += -pg
 	TLPFLAGS += -pg
 endif
 
@@ -39,7 +37,7 @@ header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
 
 drivers: kernels
-	make -C TLP drivers CXX="$(CXX)" \
+	make -C TLP drivers \
 	treecode-potential-order=$(treecode-potential-order) \
 	treecode-force-order=$(treecode-force-order)
 
