@@ -146,42 +146,41 @@ namespace Tree
 	node->allcycles = endallc - startallc;
     }
 
- template <class ForwardIterator, class T>
- __device__ ForwardIterator lower_bound (ForwardIterator first, ForwardIterator last, const T& val)
-{
-  ForwardIterator it;
-  int count, step;
-  count = last - first; //distance(first,last);
-  while (count>0)
-  {
+    template <class ForwardIterator, class T>
+    __device__ ForwardIterator lower_bound (ForwardIterator first, ForwardIterator last, const T& val)
+    {
+	ForwardIterator it;
+	int count, step;
+	count = last - first; //distance(first,last);
+	while (count>0)
+	{
       
-      it = first; step=count/2; it += step; //advance (it,step);
-      // printf("step: %d\n", step);
-    if (*it<val) {                 // or: if (comp(*it,val)), for version (2)
-      first=++it;
-      count-=step+1;
+	    it = first; step=count/2; it += step; //advance (it,step);
+	    // printf("step: %d\n", step);
+	    if (*it<val) {                 // or: if (comp(*it,val)), for version (2)
+		first=++it;
+		count-=step+1;
+	    }
+	    else count=step;
+	}
+	return first;
     }
-    else count=step;
-  }
-  return first;
-}
 
     template <class ForwardIterator, class T>
- __device__ ForwardIterator upper_bound (ForwardIterator first, ForwardIterator last, const T& val)
-{
-  ForwardIterator it;
-  int count, step;
-  count = last - first;//std::distance(first,last);
-  while (count>0)
-  {
-      it = first; step=count/2; it += step;//std::advance (it,step);
-    if (!(val<*it))                 // or: if (!comp(val,*it)), for version (2)
-      { first=++it; count-=step+1;  }
-    else count=step;
-  }
-  return first;
-}
-    
+    __device__ ForwardIterator upper_bound (ForwardIterator first, ForwardIterator last, const T& val)
+    {
+	ForwardIterator it;
+	int count, step;
+	count = last - first;//std::distance(first,last);
+	while (count>0)
+	{
+	    it = first; step=count/2; it += step;//std::advance (it,step);
+	    if (!(val<*it))                 // or: if (!comp(val,*it)), for version (2)
+	    { first=++it; count-=step+1;  }
+	    else count=step;
+	}
+	return first;
+    }
     
     __global__ void generate_keys(const realtype * const xsrc, const realtype * const ysrc, const int n,
 				  const realtype xmin, const realtype ymin, const realtype ext,
@@ -220,8 +219,7 @@ namespace Tree
     struct DeviceNode
     {
 	int x, y, l, s, e, mask;
-
-	DeviceNode * children[4];
+	int children[4];
 
 	__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask)
 	    {
@@ -233,36 +231,25 @@ namespace Tree
 		this->mask = mask;
 		
 		for (int i = 0; i < 4; ++i) 
-		    children[i] = nullptr; 
-	    }
-	
-	__device__ void allocate_children()
-	    {
-		for(int i = 0; i < 4; ++i)
-		    children[i] = new DeviceNode;
-	    }
-
-	__device__ ~DeviceNode()
-	    {
-		for(int i = 0; i < 4; ++i)
-		    if (children[i])
-			delete children[i];
+		    children[i] = 0;
 	    }
     };
+    
+    __constant__ int bufsize;
+    __device__ int nnodes;
+    __constant__ DeviceNode * bufnodes;
 
-
-#define QSIZE 1000
-    __device__ DeviceNode * queue[QSIZE];
-    __device__ int qlock, qhead, qtail, qtailnext, qitems;
+    __constant__ int queuesize;
+    __device__ int * queue, qlock, qhead, qtail, qtailnext, qitems;
     __device__ bool qgood;
 
-    __global__ void place_root(DeviceNode * root, const int nsrc)
+    __global__ void setup(const int nsrc)
     {
-	root->setup(0, 0, 0, 0, nsrc, false);
+	nnodes = 1;
+	bufnodes[0].setup(0, 0, 0, 0, nsrc, false);
 
-	queue[0] = root;
-	
-	qlock = 0;
+	queue[0] = 0;
+	qlock = 1;
 	qhead = 0;
 	qtail = 1;
 	qtailnext = 1;
@@ -303,31 +290,28 @@ namespace Tree
 	    curr = NULL;
 	    
 	    if (master)
-		if (0 == atomicCAS(&qlock, 0, 1))
+		if (atomicCAS(&qlock, 1, 0))
 		{
 		    const int currhead = qhead;
 		    
 		    if (currhead < qtail)
 		    {
-			//printf("block %d slot %d got something \n", blockIdx.x, slot);
+			const int entry = currhead % queuesize;
 			
-			const int entry = currhead % QSIZE;
-			
-			curr = queue[entry];
+			curr = bufnodes + queue[entry];
 
 			qhead = currhead + 1;
 		
 			__threadfence();			
 		    }
 
-		    qlock = 0;
+		    qlock = 1;
 		}
 
 	    curr = bcast_ptr(curr);
 	    
 	    if (curr && master)
 	    {
-
 		const int s = curr->s;
 		const int e = curr->e;
 		const int l = curr->l;
@@ -341,7 +325,19 @@ namespace Tree
 		}		
 		else
 		{
-		    curr->allocate_children();
+		    //allocate children
+		    {
+			const int bufbase = atomicAdd(&nnodes, 4);
+
+			if (bufbase + 4 > bufsize)
+			{
+			    qgood = false;
+			    break;
+			}
+			
+			for(int c = 0; c < 4; ++c)
+			    curr->children[c] = bufbase + c;
+		    }
 
 		    const int mask = curr->mask;
 		    const int x = curr->x;
@@ -354,26 +350,22 @@ namespace Tree
 			const int key1 = mask | (c << shift);
 			const int key2 = key1 + (1 << shift) - 1;
 
-			//printf("lowerbound: %d %d %d and ptr %p  -> %p\n", s, e, key1, sorted_keys, kk);
-
-			const size_t indexmin = c == 0 ? s :  lower_bound(sorted_keys + s, sorted_keys + e, key1) - sorted_keys;
-			const size_t indexsup = c == 3 ? e :  upper_bound(sorted_keys + s, sorted_keys + e, key2) - sorted_keys;
+			const size_t indexmin = c == 0 ? s : lower_bound(sorted_keys + s, sorted_keys + e, key1) - sorted_keys;
+			const size_t indexsup = c == 3 ? e : upper_bound(sorted_keys + s, sorted_keys + e, key2) - sorted_keys;
 			
-			curr->children[c]->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+			DeviceNode * child = bufnodes + curr->children[c];
+			child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 		    }
 
 		    const int base = atomicAdd(&qtailnext, 4);
 		    //printf("base: %d\n", base);
 
-		    if (base + 4 - qhead >= QSIZE)
-		    {
-			//printf("oooops base: %d, qhead: %d -> size %d\n", base, qhead, base - qhead);
+		    if (base + 4 - qhead >= queuesize)
 			qgood = false;
-		    }
 		    else
 		    {
 			for(int c = 0; c < 4; ++c)
-			    queue[(base + c) % QSIZE] = curr->children[c];
+			    queue[(base + c) % queuesize] = curr->children[c];
 
 			atomicAdd(&qitems, 3);
 			
@@ -385,9 +377,31 @@ namespace Tree
 	    }
 	}
 
-	assert(qgood);
+	//assert(qgood);
+    }
+
+    __global__ void conclude(int * treenodes, int * queuesize)
+    {
+	*treenodes = nnodes;
+	*queuesize = qtail - qhead;
     }
 }
+
+void check_tree (Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b)
+	{
+	    assert(a.x == b.x);
+	    assert(a.y == b.y);
+	    assert(a.l == b.l);
+	    assert(a.s == b.s);
+	    assert(a.e == b.e);
+	    //assert(a.mask == b.mask);
+
+	    printf("node %d %d l%d check passed..\n", b.x, b.y, b.l);
+	    
+	    if (!b.leaf)
+		for(int c = 0; c < 4; ++c)
+		    check_tree(allnodes, allnodes[a.children[c]], *b.children[c]);
+	}
 
 #include <thrust/extrema.h>
 #include <thrust/device_ptr.h>
@@ -403,16 +417,26 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
     posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
     posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
+
+    CUDA_CHECK(cudaDeviceReset());
+    
+    const int device_queuesize = 1e3;
+    int * device_queue;
+    CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize));
+    
+    const int device_bufsize = 1e4;
+    DeviceNode * device_bufnodes;
+    CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
+
+    int * device_diag;
+    CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(int) * 2));
     
     realtype *device_xdata, *device_ydata, *device_vdata;
-    CUDA_CHECK(cudaDeviceReset());
+    
     CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
-
-    DeviceNode * device_root;
-    CUDA_CHECK(cudaMalloc(&device_root, sizeof(*device_root)));
-
+    
     int * device_keys;
     CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
     
@@ -457,23 +481,27 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     
-    CUDA_CHECK(cudaMemcpyToSymbol (sorted_keys, &device_keys, sizeof(device_keys)));
+    CUDA_CHECK(cudaMemcpyToSymbol(sorted_keys, &device_keys, sizeof(device_keys)));
+    CUDA_CHECK(cudaMemcpyToSymbol(bufsize, &device_bufsize, sizeof(device_bufsize)));
+    CUDA_CHECK(cudaMemcpyToSymbol(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
+    CUDA_CHECK(cudaMemcpyToSymbol(queuesize, &device_queuesize, sizeof(device_queuesize)));
+    CUDA_CHECK(cudaMemcpyToSymbol(queue, &device_queue, sizeof(device_queue)));
     
-    place_root<<<1, 1>>>(device_root, nsrc);
+    setup<<<1, 1>>>(nsrc);
     build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, device_keys);
+    conclude<<<1, 1>>>(device_diag, device_diag + 1);
 
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
+
+    printf("device has found %d nodes, and max queue size was %d\n", device_diag[0], device_diag[1]);
     
     CUDA_CHECK(cudaMemcpy(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
     
     CUDA_CHECK(cudaMemcpy(keys, device_keys, sizeof(int) * nsrc, cudaMemcpyDeviceToHost));
-
-    printf("bye!\n");
-    exit(0);
-	
+    
 #ifndef NDEBUG
     std::pair<int, int> * kv = NULL;
     
@@ -532,11 +560,31 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	{ _build(root, 0, 0, 0, 0, nsrc, 0); }
     }
 
+#ifndef NDEBUG
+    const int nnodes = device_diag[0];
+    std::vector<DeviceNode> allnodes(nnodes);
+    CUDA_CHECK(cudaMemcpy(&allnodes.front(), device_bufnodes, sizeof(DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
+
+    printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
+	   allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
+	   allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
+    
+    //ok let's check this
+    
+    
+    check_tree(&allnodes.front(), allnodes[0], *root);
+#endif
+
+    printf("bye!\n");
+    exit(0);
+
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
     CUDA_CHECK(cudaFree(device_vdata));
     CUDA_CHECK(cudaFree(device_keys));
-    CUDA_CHECK(cudaFree(device_root));
+    CUDA_CHECK(cudaFree(device_bufnodes));
+    CUDA_CHECK(cudaFree(device_queue));
+    CUDA_CHECK(cudaFree(device_diag));
 }
 
 void Tree::dispose()

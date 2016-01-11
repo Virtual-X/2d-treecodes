@@ -107,10 +107,11 @@ namespace Tree
 	return std::make_pair(nodes + 1, leaves + (leaves == 0 && nodes == 0));
       }
       
-	__host__ __device__ virtual void allocate_children()
+	__host__ __device__ virtual void allocate_children() = 0;
+	/*
 	    {
 		printf("hello BASE:::!\n");
-	}
+		}*/
 
 	virtual void p2e(const realtype * __restrict__ const xsources,
 			 const realtype * __restrict__ const ysources,
@@ -129,16 +130,16 @@ namespace Tree
     template<int XXXDONTCARE>
 	struct NodeImplementation : Node
     {
-//	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
-	realtype rexpansions[ORDER], iexpansions[ORDER];
-/*	alignedvec rexpansions;
+	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
+//	realtype rexpansions[ORDER], iexpansions[ORDER];
+	alignedvec rexpansions;
 	alignedvec iexpansions;
-*/	
+	
 	__host__ __device__ void allocate_children() override
 	{
-	    printf("hallocazzz!\n");
-	    /*for(int i = 0; i < 4; ++i)
-	      children[i] = new NodeImplementation;*/
+	    // printf("hallocazzz!\n");
+	    for(int i = 0; i < 4; ++i)
+	      children[i] = new NodeImplementation;
 	}
 
 	void p2e(const realtype * __restrict__ const xsources,
