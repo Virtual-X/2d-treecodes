@@ -215,11 +215,14 @@ namespace Tree
 
     //Node * const node;//, const int x, const int y, const int l, const int s, const int e, const int mask)
     __constant__ int * sorted_keys;
+    __constant__ realtype *xsorted, *ysorted, *vsorted;
    
     struct DeviceNode
     {
 	int x, y, l, s, e, mask;
 	int children[4];
+
+	realtype mass, w, wx, wy;
 
 	__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask)
 	    {
@@ -276,20 +279,27 @@ namespace Tree
 
 	return p.ptr;
     }
+
+#define WARPSIZE 32
     
     __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
-    {	
+    {
+	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
+	
 	const int tid = threadIdx.x;
 	const int slot = threadIdx.y;
 	const bool master = tid == 0;
-	
-	DeviceNode * curr;
 
+	//__shared__ volatile DeviceNode * volatile currnodes[4];
+
+	DeviceNode * curr; // = currnodes[slot];
+	
 	while(qitems && qgood) 
 	{
 	    curr = NULL;
 	    
 	    if (master)
+	    {
 		if (atomicCAS(&qlock, 1, 0))
 		{
 		    const int currhead = qhead;
@@ -298,19 +308,24 @@ namespace Tree
 		    {
 			const int entry = currhead % queuesize;
 			
+			//currnodes[slot] = bufnodes + queue[entry];
 			curr = bufnodes + queue[entry];
 
 			qhead = currhead + 1;
 		
 			__threadfence();			
 		    }
+		    else
+			;//currnodes[slot] = NULL;
 
 		    qlock = 1;
 		}
-
+	    }
+	    	
+	    //DeviceNode * const curr = currnodes[slot];
 	    curr = bcast_ptr(curr);
 	    
-	    if (curr && master)
+	    if (curr)
 	    {
 		const int s = curr->s;
 		const int e = curr->e;
@@ -321,11 +336,43 @@ namespace Tree
 		if (leaf)
 		{
 		    //compute P2E here
-		    atomicSub(&qitems, 1);
+		    realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+		    for(int t = s + tid; t < e; t += WARPSIZE)
+		    {
+			const realtype x = xsorted[t];
+			const realtype y = ysorted[t];
+			const realtype m = vsorted[t];
+			const realtype w = fabs(m);
+			
+			msum += m;
+			wsum += w;
+			wxsum += x * w;
+			wysum += y * w;
+		    }
+			
+#pragma unroll
+		    for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		    {
+			msum += __shfl_xor(msum, mask);
+			wsum += __shfl_xor(wsum, mask);
+			wxsum += __shfl_xor(wxsum, mask);
+			wysum += __shfl_xor(wysum, mask);
+		    }
+		    		    
+		    if (master)
+		    {
+			curr->mass = msum;
+			curr->w = wsum;
+			curr->wx = wxsum;
+			curr->wy = wysum;
+			
+			atomicSub(&qitems, 1);
+		    }
 		}		
 		else
 		{
 		    //allocate children
+		    if (master)
 		    {
 			const int bufbase = atomicAdd(&nnodes, 4);
 
@@ -352,26 +399,32 @@ namespace Tree
 
 			const size_t indexmin = c == 0 ? s : lower_bound(sorted_keys + s, sorted_keys + e, key1) - sorted_keys;
 			const size_t indexsup = c == 3 ? e : upper_bound(sorted_keys + s, sorted_keys + e, key2) - sorted_keys;
-			
-			DeviceNode * child = bufnodes + curr->children[c];
-			child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+
+			if (master)
+			{    
+			    DeviceNode * child = bufnodes + curr->children[c];
+			    child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+			}
 		    }
 
-		    const int base = atomicAdd(&qtailnext, 4);
+		    if (master)
+		    {
+			const int base = atomicAdd(&qtailnext, 4);
 		    //printf("base: %d\n", base);
 
-		    if (base + 4 - qhead >= queuesize)
-			qgood = false;
-		    else
-		    {
-			for(int c = 0; c < 4; ++c)
-			    queue[(base + c) % queuesize] = curr->children[c];
-
-			atomicAdd(&qitems, 3);
-			
-			__threadfence();
-
-			atomicAdd(&qtail, 4);
+			if (base + 4 - qhead >= queuesize)
+			    qgood = false;
+			else
+			{
+			    for(int c = 0; c < 4; ++c)
+				queue[(base + c) % queuesize] = curr->children[c];
+			    
+			    atomicAdd(&qitems, 3);
+			    
+			    __threadfence();
+			    
+			    atomicAdd(&qtail, 4);
+			}
 		    }
 		}
 	    }
@@ -387,6 +440,36 @@ namespace Tree
     }
 }
 
+int check_bits(double x, double y)
+{
+    union ASD
+    {
+	unsigned char c[8];
+	double d;
+    };
+
+    ASD a, b;
+    a.d = x;
+    b.d = y;
+
+    int currbit = 0;
+    for(int i = 0; i < 8; ++i)
+    {
+	printf(":%d: 0x%x vs 0x%x \n", i, a.c[7 - i], b.c[7 - i]);
+	unsigned char c1 = a.c[7 - i], c2 = b.c[7 - i];
+	for(int b = 0; b < 8; ++b, ++currbit)
+	{
+	    if (((c1 >> b) & 1) != ((c2 >> b) & 1))
+	    {
+		printf("numbers differ from the %d most-significant bit\n", currbit);
+		return currbit;
+	    }
+	}
+    }
+
+    return currbit;
+}
+
 void check_tree (Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b)
 	{
 	    assert(a.x == b.x);
@@ -396,11 +479,28 @@ void check_tree (Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b
 	    assert(a.e == b.e);
 	    //assert(a.mask == b.mask);
 
-	    printf("node %d %d l%d check passed..\n", b.x, b.y, b.l);
+	    printf("node %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 	    
 	    if (!b.leaf)
 		for(int c = 0; c < 4; ++c)
 		    check_tree(allnodes, allnodes[a.children[c]], *b.children[c]);
+	    else
+	    {
+		
+		printf("a/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		       a.mass, a.w, a.wx, a.wy);
+		printf("b/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		       b.mass, b.w, b.wx, b.wy);
+
+		
+		
+		assert(check_bits(a.mass, b.mass) >= 48);
+		assert(check_bits(a.w, b.w) >= 48);
+		assert(check_bits(a.wx, b.wx) >= 48 || a.w == 0);
+		assert(check_bits(a.wy, b.wy) >= 48 || a.w == 0);
+		//assert(a.mass == b.mass);
+		//assert(a.w == b.w);
+	    }
 	}
 
 #include <thrust/extrema.h>
@@ -482,6 +582,9 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaDeviceSynchronize());
     
     CUDA_CHECK(cudaMemcpyToSymbol(sorted_keys, &device_keys, sizeof(device_keys)));
+    CUDA_CHECK(cudaMemcpyToSymbol(xsorted, &device_xdata, sizeof(device_xdata)));
+    CUDA_CHECK(cudaMemcpyToSymbol(ysorted, &device_ydata, sizeof(device_ydata)));
+    CUDA_CHECK(cudaMemcpyToSymbol(vsorted, &device_vdata, sizeof(device_vdata)));
     CUDA_CHECK(cudaMemcpyToSymbol(bufsize, &device_bufsize, sizeof(device_bufsize)));
     CUDA_CHECK(cudaMemcpyToSymbol(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
     CUDA_CHECK(cudaMemcpyToSymbol(queuesize, &device_queuesize, sizeof(device_queuesize)));
@@ -576,7 +679,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 #endif
 
     printf("bye!\n");
-    exit(0);
+    //exit(0);
 
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
@@ -584,7 +687,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaFree(device_keys));
     CUDA_CHECK(cudaFree(device_bufnodes));
     CUDA_CHECK(cudaFree(device_queue));
-    CUDA_CHECK(cudaFree(device_diag));
+    CUDA_CHECK(cudaFreeHost(device_diag));
 }
 
 void Tree::dispose()
