@@ -53,7 +53,7 @@ treecode-force.o: treecode-force.cu treecode.h Makefile
 	-DORDER=$(treecode-force-order) -c $<
 
 upward.o: upward.cu upward.h Makefile
-	$(NVCC) $(NVCCFLAGS) -c $<
+	$(NVCC) $(NVCCFLAGS) -dc -c $< 
 
 clean:
 	rm -f *.o 

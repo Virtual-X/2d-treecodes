@@ -14,8 +14,8 @@
 
 #define _CONCATENATE_BODY(a, b) a ## b
 #define _CONCATENATE(a, b) _CONCATENATE_BODY(a, b)
-#define P2E_KERNEL _CONCATENATE(upward_p2e_order, ORDER)
-#define E2E_KERNEL _CONCATENATE(upward_e2e_order, ORDER)
+#define P2E_KERNEL _CONCATENATE(reference_upward_p2e_order, ORDER)
+#define E2E_KERNEL _CONCATENATE(reference_upward_e2e_order, ORDER)
 
 #ifdef __cplusplus
 extern "C"
@@ -38,9 +38,9 @@ extern "C"
 
     typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
 
-    void E2E_KERNEL(const realtype * const x0s, 
+    void E2E_KERNEL(const realtype * const x0s,
 		    const realtype * const y0s,
-		    const realtype * const masses, 
+		    const realtype * const masses,
 		    const realtype * __restrict__ const * vrexpansions,
 		    const realtype * __restrict__ const * viexpansions,
 		    realtype * __restrict__ const rdstxp,
@@ -49,3 +49,14 @@ extern "C"
 }
 #endif
 
+
+#define P2E_KERNEL_CUDA _CONCATENATE(upward_p2e_order, ORDER)
+
+__device__ void P2E_KERNEL_CUDA(const realtype xcom,
+		     const realtype ycom,
+		     const realtype * __restrict__ const xsources,
+		     const realtype * __restrict__ const ysources,
+		     const realtype * __restrict__ const vsources,
+		     const int nsources,
+		     realtype * __restrict__ const rexpansions,
+		     realtype * __restrict__ const iexpansions);

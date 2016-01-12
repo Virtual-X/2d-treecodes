@@ -27,8 +27,8 @@ inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b);
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-define(P2E_KERNEL, upward_p2e_order$1)
-define(E2E_KERNEL, upward_e2e_order$1)
+define(P2E_KERNEL, reference_upward_p2e_order$1)
+define(E2E_KERNEL, reference_upward_e2e_order$1)
 
 #ifdef __cplusplus
 extern "C"
@@ -169,6 +169,39 @@ void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
             _mm_store_sd(rexpansions + n, _mm_hadd_pd(TMP(rxp, n), TMP(rxp, n)));')
             LUNROLL(n, 0, eval(ORDER - 1),`
             _mm_store_sd(iexpansions + n, _mm_hadd_pd(TMP(ixp, n), TMP(ixp, n)));')
+            
+/*
+realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
+    TMP(rxp, n) = 0')
+  LUNROLL(n, 0, eval(ORDER - 1),`,
+    TMP(ixp, n) = 0');
+
+for(int i = 0; i < nsources; ++i)
+  {
+    const realtype rprod_0 = xsources[i] - xcom; 
+    const realtype iprod_0 = ysources[i] - ycom;
+
+    const realtype src = sources[i]; 
+
+    TMP(rxp, 0) -= rprod_0 * src;
+    TMP(ixp, 0) -= iprod_0 * src;
+
+    LUNROLL(n, 1, eval(ORDER - 1),`
+    const realtype TMP(rprod, n) = TMP(rprod, eval(n - 1)) * TMP(rprod, 0) - TMP(iprod, eval(n - 1)) * TMP(iprod, 0);
+    const realtype TMP(iprod, n) = TMP(rprod, eval(n - 1)) * TMP(iprod, 0) + TMP(iprod, eval(n - 1)) * TMP(rprod, 0);
+
+    const realtype TMP(term, n) = src / eval(n+1).f;
+
+    TMP(rxp, n) -= TMP(rprod, n) * TMP(term, n);
+    TMP(ixp, n) -= TMP(iprod, n) * TMP(term, n);
+    ')
+  }dnl
+
+LUNROLL(n, 0, eval(ORDER - 1),`
+    rexpansions[n] = TMP(rxp, n);
+    iexpansions[n] = TMP(ixp, n);
+    ');
+*/
           }
 
           typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));

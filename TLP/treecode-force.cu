@@ -452,7 +452,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 
 	NodeForce root;
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128);
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128, ORDER);
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;
@@ -499,7 +499,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	const double t0 = omp_get_wtime();
 	NodeForce* device_root;
 	CUDA_CHECK(cudaMalloc(&device_root, sizeof(*device_root)));
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
+	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192, ORDER); //before: 128
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;

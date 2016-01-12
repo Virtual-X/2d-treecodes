@@ -120,6 +120,9 @@ namespace Tree
 
 	virtual void e2e() = 0;
 
+virtual realtype * rexp() = 0;
+virtual realtype * iexp() = 0;
+
 	__host__ __device__ virtual ~Node()
 	    {
 
@@ -141,7 +144,8 @@ namespace Tree
 	    for(int i = 0; i < 4; ++i)
 	      children[i] = new NodeImplementation;
 	}
-
+ realtype * rexp() override {return &rexpansions[0];} 
+ realtype * iexp() override {return &iexpansions[0];} 
 	void p2e(const realtype * __restrict__ const xsources,
 		 const realtype * __restrict__ const ysources,
 		 const realtype * __restrict__ const vsources,
@@ -193,7 +197,7 @@ namespace Tree
     extern realtype *xdata, *ydata, *vdata;
 
     void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	       Node * const root, const int LEAF_MAXCOUNT);
+	       Node * const root, const int LEAF_MAXCOUNT, const int exporder);
 
     void dispose();
 };

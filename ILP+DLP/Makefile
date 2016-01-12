@@ -10,6 +10,7 @@
 # before getting a written permission from the author of this file.
 #
 
+NVCC ?= nvcc
 CC = gcc -std=c99
 backend ?= sse
 real ?= double
@@ -17,9 +18,11 @@ treecode-potential-order ?= 12
 treecode-force-order ?= 24
 
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
+UPWARDKERNELS_POTENTIAL_REF = upward-kernels-order$(treecode-potential-order)-ref
+
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
-OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o
+OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o $(UPWARDKERNELS_POTENTIAL_REF).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 	OBJS += $(UPWARDKERNELS_FORCE).o 
@@ -37,6 +40,9 @@ KERNELSFLAGS = -std=c99 -O4 -DNDEBUG -ftree-vectorize -Wno-psabi \
 
 kernels: $(OBJS)
 
+$(UPWARDKERNELS_POTENTIAL).o : $(UPWARDKERNELS_POTENTIAL).cu
+	$(NVCC) -O3 --use_fast_math -arch=sm_30 -dc -c $^
+
 %.o: %.c
 	$(CC) $(KERNELSFLAGS) -c $^
 #module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel;
@@ -53,8 +59,11 @@ force-kernels-tiled.c: force-kernels-tiled-sse.m4 force-kernels.h Makefile
 downward-kernels.c:  downward-kernels-sse.m4 downward-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > downward-kernels.c
 
-$(UPWARDKERNELS_POTENTIAL).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4 Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $(UPWARDKERNELS_POTENTIAL).c
+$(UPWARDKERNELS_POTENTIAL).cu: upward-kernels-cuda.m4 upward-kernels.h unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $@
+
+$(UPWARDKERNELS_POTENTIAL_REF).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $@
 
 $(UPWARDKERNELS_FORCE).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4  Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $< > $(UPWARDKERNELS_FORCE).c

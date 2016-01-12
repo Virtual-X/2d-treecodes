@@ -31,7 +31,7 @@ test: main.cpp libtreecode.a
 	$(NVCC) $(NVCCFLAGS) -g $^ -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
-	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
+	$(NVCC) -lib -o libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
