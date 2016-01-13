@@ -69,6 +69,6 @@ $(UPWARDKERNELS_FORCE).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4  Make
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $< > $(UPWARDKERNELS_FORCE).c
 
 clean:
-	rm -f *.o *kernels*.c
+	rm -f *.o *kernels*.c *kernels*.cu
 
 .PHONY = clean

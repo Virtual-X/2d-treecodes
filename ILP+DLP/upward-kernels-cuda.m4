@@ -1,7 +1,10 @@
+#include <cassert>
+
 include(unroll.m4)
 divert(-1)
 define(WARPSIZE, 32)
 define(P2E_KERNEL, upward_p2e_order$1)
+define(E2E_KERNEL, upward_e2e_order$1)
 divert(0) dnl dnl dnl
 
 ifelse(eval(WARPSIZE >= ORDER), 1, ,`
@@ -79,4 +82,57 @@ __device__ void P2E_KERNEL(ORDER)(const realtype xcom,
 		iexpansions[tid] = ival;
 	}
 	
+}
+
+__device__ void E2E_KERNEL(ORDER)(
+	const realtype x0,
+	const realtype y0,
+	const realtype mass,
+	const realtype * __restrict__ const rsrcxp,
+	const realtype * __restrict__ const isrcxp,
+	realtype * __restrict__ const rdstxp,
+	realtype * __restrict__ const idstxp)
+{
+	const int tid = threadIdx.x;
+	assert(tid < 4);
+	
+	const realtype r2z0 = x0 * x0 + y0 * y0;
+	const realtype rinvz_1 = x0 / r2z0;
+	const realtype iinvz_1 = - y0 / r2z0;
+	dnl
+	LUNROLL(j, 1, eval(ORDER),`
+	ifelse(j, 1, , `
+	const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
+	const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
+	const realtype TMP(rcoeff, j) = rsrcxp[eval(j - 1)] * TMP(rinvz, j) - isrcxp[eval(j - 1)] * TMP(iinvz, j);
+	const realtype TMP(icoeff, j) = rsrcxp[eval(j - 1)] * TMP(iinvz, j) + isrcxp[eval(j - 1)] * TMP(rinvz, j);
+	')
+
+	LUNROLL(l, 1, eval(ORDER),`
+	{
+		const realtype TMP(prefac, l) = ifelse(l, 1, `- mass',`mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
+		pushdef(`BINFAC', `BINOMIAL(eval(l - 1), eval(k - 1)).f')
+		const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,` + ifelse(BINFAC,1.f,,`BINFAC * ') TMP(rcoeff, k)');
+		const realtype TMP(itmp, l) = LUNROLL(k, 1, l,` ifelse(k,1,,+) ifelse(BINFAC,1.f,,`BINFAC * ') TMP(icoeff, k)');
+		popdef(`BINFAC')dnl
+
+		const realtype TMP(invz2, l) = TMP(rinvz, l) * TMP(rinvz, l) + TMP(iinvz, l) * TMP(iinvz, l);
+		const realtype TMP(invinvz2, l) = TMP(invz2, l) ? 1 / TMP(invz2, l) : 0;
+		const realtype TMP(rz, l) = TMP(rinvz, l) * TMP(invinvz2, l);
+		const realtype TMP(iz, l) = - TMP(iinvz, l) * TMP(invinvz2, l);
+
+		realtype rpartial = TMP(rtmp, l) * TMP(rz, l) - TMP(itmp, l) * TMP(iz, l);
+		realtype ipartial = TMP(rtmp, l) * TMP(iz, l) + TMP(itmp, l) * TMP(rz, l);
+
+		SEQ(`
+		rpartial += __shfl_xor(rpartial, L);
+		ipartial += __shfl_xor(ipartial, L);', L, 2, 1)
+
+		//realtype tmp0, tmp1;
+		if (tid == 0)
+		{
+			rdstxp[eval(l - 1)] = rpartial;
+			idstxp[eval(l - 1)] = ipartial;
+		}
+	}')
 }

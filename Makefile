@@ -12,7 +12,6 @@
 
 NVCC = nvcc
 CC = gcc -std=c99
-LOCKLESS_ALLOCATOR_OBJ = ~/lockless_allocator/libllalloc.o
 
 real ?= double
 treecode-potential-order ?= 12
@@ -31,7 +30,7 @@ test: main.cpp libtreecode.a
 	$(NVCC) $(NVCCFLAGS) -g $^ -o test
 
 libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
-	$(NVCC) -lib -o libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
+	$(NVCC) -lib -o libtreecode.a TLP/*.o ILP+DLP/*.o 
 
 header:
 	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h

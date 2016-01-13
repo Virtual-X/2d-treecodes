@@ -151,7 +151,7 @@ virtual realtype * iexp() = 0;
 		 const realtype * __restrict__ const vsources,
 		 const double x0, const double y0, const double h) override
 	{
-	    P2E_KERNEL(xsources, ysources, vsources, e - s,
+	    REFERENCE_P2E_KERNEL(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
 		       rexpansions, iexpansions);
 	}
@@ -172,7 +172,7 @@ virtual realtype * iexp() = 0;
 		chldixp[c] = chd->iexpansions;
 	    }
 
-	    E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+	    REFERENCE_E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
 #ifndef NDEBUG
 	    {
 		for(int i = 0; i < ORDER; ++i)

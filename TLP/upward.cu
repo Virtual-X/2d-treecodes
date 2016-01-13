@@ -37,14 +37,23 @@
 
 #define LMAX 15
 
-extern __device__ void upward_p2e_order12(const realtype xcom,
-		     const realtype ycom,
-		     const realtype * __restrict__ const xsources,
-		     const realtype * __restrict__ const ysources,
-		     const realtype * __restrict__ const vsources,
-		     const int nsources,
-		     realtype * __restrict__ const rexpansions,
-		     realtype * __restrict__ const iexpansions);
+ extern __device__ void upward_p2e_order12(const realtype xcom,
+ 	const realtype ycom,
+ 	const realtype * __restrict__ const xsources,
+ 	const realtype * __restrict__ const ysources,
+ 	const realtype * __restrict__ const vsources,
+ 	const int nsources,
+ 	realtype * __restrict__ const rexpansions,
+ 	realtype * __restrict__ const iexpansions);
+
+extern __device__ void upward_e2e_order12(
+				const realtype  x0,
+	const realtype  y0,
+	const realtype  mass,
+	const realtype * const rsrcxp,
+	const realtype * const isrcxp,
+	realtype * __restrict__ const rdstxp,
+	realtype * __restrict__ const idstxp);	
 
  namespace Tree
  {
@@ -253,6 +262,10 @@ struct DeviceNode
 		for (int i = 0; i < 4; ++i) 
 			children[i] = 0;
 	}
+
+	__device__ realtype xcom() const { return w ? wx / w : 0; }
+
+	__device__ realtype ycom() const { return w ? wy / w : 0; }
 };
 
 __constant__ int bufsize;
@@ -344,7 +357,7 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 				wysum += y * w;
 			}
 			
-#pragma unroll
+			#pragma unroll
 			for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
 			{
 				msum += __shfl_xor(msum, mask);
@@ -356,14 +369,14 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 		    //compute P2E here
 		    //const realtype h = ext / (1 << l);
  			//const realtype x0 = xmin + h * x, y0 = ymin + h * y;
-		    const realtype xcom = wsum ? wxsum / wsum : 0;
-		    const realtype ycom = wsum ? wysum / wsum : 0;
+			const realtype xcom = wsum ? wxsum / wsum : 0;
+			const realtype ycom = wsum ? wysum / wsum : 0;
 
-		    upward_p2e_order12(xcom, ycom, 
-		    	xsorted + s, ysorted + s, vsorted + s, e - s,
-		    	bufexpansion + order * (2 * curr + 0),
-		    	bufexpansion + order * (2 * curr + 1));
-		
+			upward_p2e_order12(xcom, ycom, 
+				xsorted + s, ysorted + s, vsorted + s, e - s,
+				bufexpansion + order * (2 * curr + 0),
+				bufexpansion + order * (2 * curr + 1));
+			
 			if (master)
 			{
 				node->mass = msum;
@@ -374,31 +387,59 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 				atomicSub(&qitems, 1);
 
 				__threadfence();
+			}
 
-				while(node->parent >= 0)
-				{
-					DeviceNode * parent = bufnodes + node->parent;
+			while(node->parent >= 0)
+			{
+				DeviceNode * parent = bufnodes + node->parent;
 
-			    if (3 == atomicAdd(&parent->validchildren, 1)) //then this node is in the critical path
+				bool e2e = false;
+
+				if (master)
+			    	e2e = (3 == atomicAdd(&parent->validchildren, 1)); //then this node is in the critical path
+			    
+			    e2e = __shfl(e2e, 0);
+
+			    if (e2e)
 			    {
-			    	realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+			    	realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0, xcom_parent, ycom_parent;
 
-			    	for(int c = 0; c < 4; ++c)
+			    	if (master)
 			    	{
-			    		const DeviceNode * child = bufnodes + parent->children[c];
+			    		for(int c = 0; c < 4; ++c)
+			    		{
+			    			const DeviceNode * child = bufnodes + parent->children[c];
 
-			    		msum += child->mass;
-			    		wsum += child->w;
-			    		wxsum += child->wx;
-			    		wysum += child->wy;
+			    			msum += child->mass;
+			    			wsum += child->w;
+			    			wxsum += child->wx;
+			    			wysum += child->wy;
+			    		}
+
+			    		parent->mass = msum;
+			    		parent->w = wsum;
+			    		parent->wx = wxsum;
+			    		parent->wy = wysum;
+
+			    		assert(wsum);
+			    		xcom_parent = wxsum / wsum;
+			    		ycom_parent = wysum / wsum;
 			    	}
 
-			    	parent->mass = msum;
-			    	parent->w = wsum;
-			    	parent->wx = wxsum;
-			    	parent->wy = wysum;
+			    	xcom_parent = __shfl(xcom_parent, 0);
+			    	ycom_parent = __shfl(ycom_parent, 0);
+			    	//msum = __shfl(msum, 0);
 
-				//compute E2E here
+			    	if (tid < 4)
+			    	{
+		    			const DeviceNode * chd = bufnodes + parent->children[tid];
+
+			    		upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
+			    			bufexpansion + order * (2 * parent->children[tid] + 0),
+			    			bufexpansion + order * (2 * parent->children[tid] + 1),
+			    			bufexpansion + order * (2 * node->parent + 0),
+			    			bufexpansion + order * (2 * node->parent + 1));
+			    	}
 
 			    	__threadfence();
 			    }
@@ -407,10 +448,9 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 
 			    node = parent;
 			}
-		}
-	}		
-	else
-	{
+		}	
+		else
+		{
 		    if (master) //children allocation
 		    {
 		    	const int bufbase = atomicAdd(&nnodes, 4);
@@ -501,7 +541,7 @@ int check_bits(double x, double y)
 		{
 			if (((c1 >> b) & 1) != ((c2 >> b) & 1))
 			{
-		printf("numbers differ from the %d most-significant bit\n", currbit);
+				printf("numbers differ from the %d most-significant bit\n", currbit);
 				return currbit;
 			}
 		}
@@ -519,40 +559,52 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 	assert(a.e == b.e);
 	    //assert(a.mask == b.mask);
 
-	     printf("a/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
-		   a.mass, a.w, a.wx, a.wy);
-	    printf("b/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
-		   b.mass, b.w, b.wx, b.wy);
+	printf("a/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		a.mass, a.w, a.wx, a.wy);
+	printf("b/ m-w-wx-wy: %.20e %.20e %.20e %.20e\n",
+		b.mass, b.w, b.wx, b.wy);
 
-	    
+	
 
 	assert(check_bits(a.mass, b.mass) >= 48);
 	assert(check_bits(a.w, b.w) >= 48);
 	assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
 	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
+printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	printf("node %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
-
-	if (!b.leaf)
-		for(int c = 0; c < 4; ++c)
-			check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
-		else
-		{
+	
+	{
 			const realtype * rexp = allexp + EXPORD * (2 * nodeid + 0);
 			const realtype * iexp = allexp + EXPORD * (2 * nodeid + 1);
-			printf("RES: ");
+			printf("RRES: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e,%+.2e ", rexp[i], iexp[i]);
+				printf("%+.2e ", rexp[i]);
 			printf("\n");
 
-			printf("REF: ");
+			printf("RREF: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e,%+.2e ", b.rexp()[i], b.iexp()[i]);
+				printf("%+.2e ", b.rexp()[i]);
+			printf("\n");
+
+			printf("IRES: ");
+			for(int i = 0; i < EXPORD; ++i)
+				printf("%+.2e ", iexp[i]);
+			printf("\n");
+
+			printf("IREF: ");
+			for(int i = 0; i < EXPORD; ++i)
+				printf("%+.2e ", b.iexp()[i]);
 			printf("\n");
 			
 		//assert(a.mass == b.mass);
 		//assert(a.w == b.w);
 		}
+
+	if (!b.leaf)
+		for(int c = 0; c < 4; ++c)
+			check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
+		else;
 	}
 
 
@@ -730,33 +782,33 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 			if (allexpansions[i] != 0)
 				printf("ASD %d: %e\n", i, allexpansions[i]);
 */
-		printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
-			allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
-			allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
+			printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
+				allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
+				allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
 
     //ok let's check this
 
 
-		check_tree(EXPANSIONORDER, 0, &allexpansions.front(), &allnodes.front(), allnodes[0], *root);
+			check_tree(EXPANSIONORDER, 0, &allexpansions.front(), &allnodes.front(), allnodes[0], *root);
 #endif
 
-		printf("bye!\n");
-    exit(0);
+			printf("bye!\n");
+			exit(0);
 
-		CUDA_CHECK(cudaFree(device_xdata));
-		CUDA_CHECK(cudaFree(device_ydata));
-		CUDA_CHECK(cudaFree(device_vdata));
-		CUDA_CHECK(cudaFree(device_keys));
-		CUDA_CHECK(cudaFree(device_bufnodes));
-		CUDA_CHECK(cudaFree(device_queue));
-		CUDA_CHECK(cudaFree(device_bufexpansions));
-		CUDA_CHECK(cudaFreeHost(device_diag));
-	}
+			CUDA_CHECK(cudaFree(device_xdata));
+			CUDA_CHECK(cudaFree(device_ydata));
+			CUDA_CHECK(cudaFree(device_vdata));
+			CUDA_CHECK(cudaFree(device_keys));
+			CUDA_CHECK(cudaFree(device_bufnodes));
+			CUDA_CHECK(cudaFree(device_queue));
+			CUDA_CHECK(cudaFree(device_bufexpansions));
+			CUDA_CHECK(cudaFreeHost(device_diag));
+		}
 
-	void Tree::dispose()
-	{
-		free(xdata);
-		free(ydata);
-		free(vdata);
-		free(keys);
-	}
+		void Tree::dispose()
+		{
+			free(xdata);
+			free(ydata);
+			free(vdata);
+			free(keys);
+		}
