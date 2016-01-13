@@ -366,9 +366,6 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 				wysum += __shfl_xor(wysum, mask);
 			}
 
-		    //compute P2E here
-		    //const realtype h = ext / (1 << l);
- 			//const realtype x0 = xmin + h * x, y0 = ymin + h * y;
 			const realtype xcom = wsum ? wxsum / wsum : 0;
 			const realtype ycom = wsum ? wysum / wsum : 0;
 
@@ -396,7 +393,7 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 				bool e2e = false;
 
 				if (master)
-			    	e2e = (3 == atomicAdd(&parent->validchildren, 1)); //then this node is in the critical path
+			    	e2e = 3 == atomicAdd(&parent->validchildren, 1); //then this node is in the critical path
 			    
 			    e2e = __shfl(e2e, 0);
 
@@ -428,7 +425,6 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 
 			    	xcom_parent = __shfl(xcom_parent, 0);
 			    	ycom_parent = __shfl(ycom_parent, 0);
-			    	//msum = __shfl(msum, 0);
 
 			    	if (tid < 4)
 			    	{
@@ -441,12 +437,16 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, int * kk)
 			    			bufexpansion + order * (2 * node->parent + 1));
 			    	}
 
-			    	__threadfence();
+			    	if (master)
+			    		__threadfence();
 			    }
 			    else
 			    	break;
 
 			    node = parent;
+
+			    if (master && node->parent == -1)
+			    	printf("that was the root.\n");
 			}
 		}	
 		else
@@ -535,7 +535,7 @@ int check_bits(double x, double y)
 	int currbit = 0;
 	for(int i = 0; i < 8; ++i)
 	{
-//	printf(":%d: 0x%x vs 0x%x \n", i, a.c[7 - i], b.c[7 - i]);
+		//printf(":%d: 0x%x vs 0x%x \n", i, a.c[7 - i], b.c[7 - i]);
 		unsigned char c1 = a.c[7 - i], c2 = b.c[7 - i];
 		for(int b = 0; b < 8; ++b, ++currbit)
 		{
@@ -548,6 +548,28 @@ int check_bits(double x, double y)
 	}
 
 	return currbit;
+}
+
+int check_bits(const double *a , const double *b, const int n)
+{
+	printf("******************\n");
+	int r = 64;
+
+	for(int i = 0; i < n; ++i)
+	{
+		if (fabs(a[i]) > 1.11e-16 || fabs(b[i]) > 1.11e-16)
+		{
+			int l = check_bits(a[i], b[i]);
+			const double x = a[i];
+			const double y = b[i];
+			if (l < 48 )
+				printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
+			r= min(r, l );
+		}
+	}
+
+	printf("********** end ***************\n");
+	return r;
 }
 
 void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b)
@@ -566,37 +588,41 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 
 	
 
-	assert(check_bits(a.mass, b.mass) >= 48);
-	assert(check_bits(a.w, b.w) >= 48);
+	assert(check_bits(a.mass, b.mass) >= 40);
+	assert(check_bits(a.w, b.w) >= 40);
 	assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
 	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
-printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
-	printf("node %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
+//printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
+//	printf("node %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 	
 	{
-			const realtype * rexp = allexp + EXPORD * (2 * nodeid + 0);
-			const realtype * iexp = allexp + EXPORD * (2 * nodeid + 1);
-			printf("RRES: ");
+			const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
+			const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
+			const realtype * refrexp = b.rexp();
+			const realtype * refiexp = b.iexp();
+			assert(24 <= check_bits(resrexp, refrexp, EXPORD));
+			assert(24 <= check_bits(resiexp, refiexp, EXPORD));
+		/*	printf("RRES: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", rexp[i]);
+				printf("%+.2e ", resrexp[i]);
 			printf("\n");
 
 			printf("RREF: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", b.rexp()[i]);
+				printf("%+.2e ", refrexp[i]);
 			printf("\n");
 
 			printf("IRES: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", iexp[i]);
+				printf("%+.2e ", resiexp[i]);
 			printf("\n");
 
 			printf("IREF: ");
 			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", b.iexp()[i]);
+				printf("%+.2e ", resrexp[i]);
 			printf("\n");
-			
+			*/
 		//assert(a.mass == b.mass);
 		//assert(a.w == b.w);
 		}
@@ -621,13 +647,14 @@ printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 
 		CUDA_CHECK(cudaDeviceReset());
 
-		const int device_queuesize = 1e3;
+		const int device_queuesize = 8e4;
 		int * device_queue;
 		CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize));
 
-		const int device_bufsize = 1e4;
+		const int device_bufsize = 8e4;
 		DeviceNode * device_bufnodes;
 		CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
+		CUDA_CHECK(cudaMemset(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
 
 		realtype * device_bufexpansions;
 		CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));    
@@ -772,6 +799,7 @@ printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 #ifndef NDEBUG
 		const int nnodes = device_diag[0];
 		std::vector<DeviceNode> allnodes(nnodes);
+		printf("nnodes: %d", nnodes);
 		CUDA_CHECK(cudaMemcpy(&allnodes.front(), device_bufnodes, sizeof(DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
 
 		std::vector<realtype> allexpansions(nnodes * EXPANSIONORDER * 2);
@@ -793,7 +821,7 @@ printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 #endif
 
 			printf("bye!\n");
-			exit(0);
+			//exit(0);
 
 			CUDA_CHECK(cudaFree(device_xdata));
 			CUDA_CHECK(cudaFree(device_ydata));
