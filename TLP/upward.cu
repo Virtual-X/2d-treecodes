@@ -349,8 +349,8 @@ namespace Tree
 	}
 
 	//QUEUE info
-	__constant__ int queuesize;
-	__device__ int * queue, qlock, qhead, qtail, qtailnext, qitems;
+	__constant__ int queuesize, * queue;
+	__device__  int qlock, qhead, qtail, qtailnext, qitems;
 	__device__ bool qgood;
 
 	__global__ void setup(const int nsrc)
