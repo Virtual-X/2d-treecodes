@@ -170,18 +170,22 @@
  			node->allcycles = endallc - startallc;
  		}
 
-    template <class ForwardIterator, class T>
- 		__device__ ForwardIterator lower_bound (ForwardIterator first, ForwardIterator last, const T& val)
+#define WARPSIZE 32
+
+texture<int, cudaTextureType1D> texKeys;
+
+#if 0
+ 		__device__ int  lower_bound (int * data, int count, const int val)
  		{
- 			ForwardIterator it;
- 			int count, step;
-	count = last - first; //distance(first,last);
+ 			int  it;
+ 			int  step, first = 0;
+	//count = last - first; //distance(first,last);
 	while (count>0)
 	{
 
 	    it = first; step=count/2; it += step; //advance (it,step);
 	    // printf("step: %d\n", step);
-	    if (*it<val) {                 // or: if (comp(*it,val)), for version (2)
+	    if (data[it]<val) {                 // or: if (comp(*it,val)), for version (2)
 	    	first=++it;
 	    	count-=step+1;
 	    }
@@ -190,21 +194,104 @@
 	return first;
 }
 
-    template <class ForwardIterator, class T>
-__device__ ForwardIterator upper_bound (ForwardIterator first, ForwardIterator last, const T& val)
+__device__ int  upper_bound (int * data, int count, const int val)
 {
-	ForwardIterator it;
-	int count, step;
-	count = last - first;//std::distance(first,last);
+	int first = 0;
+	int  it;
+	int step;
+	//count = last - first;//std::distance(first,last);
 	while (count>0)
 	{
 	    it = first; step=count/2; it += step;//std::advance (it,step);
-	    if (!(val<*it))                 // or: if (!comp(val,*it)), for version (2)
+	    if (!(val<data[it]))                 // or: if (!comp(val,*it)), for version (2)
 	    	{ first=++it; count-=step+1;  }
 	    else count=step;
 	}
 	return first;
 }
+
+
+#else
+
+
+__device__ int lower_bound(int b, const int n, const int val)
+{
+	const int t = threadIdx.x;
+	const bool master = t == 0;
+
+	int s = 0, e = n, c = n;
+
+	if (tex1Dfetch(texKeys, b + s) >= val)
+		return 0;
+
+	if (tex1Dfetch(texKeys, b + e - 1) < val)
+		return e;
+
+	while (c)
+	{
+		int candidate_s = s, candidate_e = e;
+
+		const float h = (e - s) * 1.f/ WARPSIZE;
+		const int i = min(e - 1, (int)(s + t * h + 0.499999f));
+
+		const bool isless = tex1Dfetch(texKeys, b + i) < val;
+		candidate_s = isless ? i : s;
+		candidate_e = isless ? e : i;
+
+		#pragma unroll
+		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		{
+			candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
+			candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+		}
+
+		s = candidate_s;
+		e = candidate_e; 
+		c = min(c / 32, e - s);
+	}
+
+	return b + s + 1;
+}
+
+__device__ int upper_bound(int b, const int n, const int val)
+{
+	const int t = threadIdx.x;
+	const bool master = t == 0;
+
+	int s = 0, e = n, c = n;
+
+	if (tex1Dfetch(texKeys, b + s) > val)
+		return 0;
+
+	if (tex1Dfetch(texKeys, b + e - 1) <= val)
+		return e;
+
+	while (c)
+	{
+		int candidate_s = s, candidate_e = e;
+
+		const float h = (e - s) * 1.f / WARPSIZE;
+		const int i = min(e - 1, (int)(s + t * h + 0.499999f));
+
+		const bool isless = tex1Dfetch(texKeys, b + i) <= val;
+		candidate_s = isless ? i : s;
+		candidate_e = isless ? e : i;
+
+		#pragma unroll
+		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		{
+			candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
+			candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+		}
+
+		s = candidate_s;
+		e = candidate_e; 
+		c = min(c / 32, e - s);
+	}
+
+	return b + s + 1;
+}
+#endif
 
 __global__ void generate_keys(const realtype * const xsrc, const realtype * const ysrc, const int n,
 	const realtype xmin, const realtype ymin, const realtype ext,
@@ -294,7 +381,6 @@ __global__ void setup(const int nsrc)
 	qgood = true;
 }
 
-#define WARPSIZE 32
 
 __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
 {
@@ -344,6 +430,8 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
 
 			if (leaf)
 			{
+				//process_leaf(node);
+				//if (master)atomicSub(&qitems, 1);
 				realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
 
 				for(int t = s + tid; t < e; t += WARPSIZE)
@@ -412,137 +500,136 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
 					bool e2e = false;
 
 					if (master)
-			    	e2e = 3 == atomicAdd(&parent->validchildren, 1); //then this node is in the critical path
-			    
-			    e2e = __shfl(e2e, 0);
+						e2e = 3 == atomicAdd(&parent->validchildren, 1); 
+			    	//then this node is in the critical path
 
-			    if (e2e)
+					e2e = __shfl(e2e, 0);
+
+					if (e2e)
+					{
+						realtype xcom_parent, ycom_parent;
+
+						if (master)
+						{
+							realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+							for(int c = 0; c < 4; ++c)
+							{
+								const DeviceNode * child = bufnodes + parent->children[c];
+
+								msum += child->mass;
+								wsum += child->w;
+								wxsum += child->wx;
+								wysum += child->wy;
+							}
+
+							parent->mass = msum;
+							parent->w = wsum;
+							parent->wx = wxsum;
+							parent->wy = wysum;
+
+							assert(wsum);
+							xcom_parent = wxsum / wsum;
+							ycom_parent = wysum / wsum;
+
+							realtype rr = 0;
+							for(int c = 0; c < 4; ++c)
+							{
+								const DeviceNode * child = bufnodes + parent->children[c];
+
+								if (child->w)
+								{
+									const realtype rx = xcom_parent - child->xcom();
+									const realtype ry = ycom_parent - child->ycom();
+
+									rr = max(rr, child->r + sqrt(rx * rx + ry * ry));
+								}
+							}
+
+							parent->r = min(rr, 1.4143f * extent / (1 << parent->l));
+						}
+
+						xcom_parent = __shfl(xcom_parent, 0);
+						ycom_parent = __shfl(ycom_parent, 0);
+
+						if (tid < 4)
+						{
+							const DeviceNode * chd = bufnodes + parent->children[tid];
+
+							upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
+								bufexpansion + order * (2 * parent->children[tid] + 0),
+								bufexpansion + order * (2 * parent->children[tid] + 1),
+								bufexpansion + order * (2 * node->parent + 0),
+								bufexpansion + order * (2 * node->parent + 1));
+						}
+
+						if (master)
+							__threadfence();
+					}
+					else
+						break;
+
+					node = parent;
+				}
+				
+			}	
+			else
+			{
+			    if (master) //children allocation
 			    {
-			    	realtype xcom_parent, ycom_parent;
+			    	const int bufbase = atomicAdd(&nnodes, 4);
 
-			    	if (master)
+			    	if (bufbase + 4 > bufsize)
 			    	{
-			    		realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-			    		for(int c = 0; c < 4; ++c)
-			    		{
-			    			const DeviceNode * child = bufnodes + parent->children[c];
-
-			    			msum += child->mass;
-			    			wsum += child->w;
-			    			wxsum += child->wx;
-			    			wysum += child->wy;
-			    		}
-
-			    		parent->mass = msum;
-			    		parent->w = wsum;
-			    		parent->wx = wxsum;
-			    		parent->wy = wysum;
-
-			    		assert(wsum);
-			    		xcom_parent = wxsum / wsum;
-			    		ycom_parent = wysum / wsum;
-
-			    		realtype rr = 0;
-			    		for(int c = 0; c < 4; ++c)
-			    		{
-			    			const DeviceNode * child = bufnodes + parent->children[c];
-
-			    			if (child->w)
-			    			{
-			    				const realtype rx = xcom_parent - child->xcom();
-			    				const realtype ry = ycom_parent - child->ycom();
-
-			    				rr = max(rr, child->r + sqrt(rx * rx + ry * ry));
-			    			}
-			    		}
-
-			    		parent->r = min(rr, 1.4143 * extent / (1 << parent->l));
+			    		qgood = false;
+			    		break;
 			    	}
 
-			    	xcom_parent = __shfl(xcom_parent, 0);
-			    	ycom_parent = __shfl(ycom_parent, 0);
-
-			    	if (tid < 4)
-			    	{
-			    		const DeviceNode * chd = bufnodes + parent->children[tid];
-
-			    		upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
-			    			bufexpansion + order * (2 * parent->children[tid] + 0),
-			    			bufexpansion + order * (2 * parent->children[tid] + 1),
-			    			bufexpansion + order * (2 * node->parent + 0),
-			    			bufexpansion + order * (2 * node->parent + 1));
-			    	}
-
-			    	if (master)
-			    		__threadfence();
+			    	for(int c = 0; c < 4; ++c)
+			    		node->children[c] = bufbase + c;
 			    }
-			    else
-			    	break;
 
-			    node = parent;
+			    const int mask = node->mask;
+			    const int x = node->x;
+			    const int y = node->y;
 
-			    /*if (master && node->parent == -1)
-			    	printf("that was the root.\n");*/
+			    for(int c = 0; c < 4; ++c)
+			    {
+			    	const int shift = 2 * (LMAX - l - 1);
+
+			    	const int key1 = mask | (c << shift);
+			    	const int key2 = key1 + (1 << shift) - 1;
+
+			    	const size_t indexmin = c == 0 ? s : lower_bound( s,  e - s, key1);
+			    	const size_t indexsup = c == 3 ? e : upper_bound( s,  e - s, key2);
+
+			    	if (master)
+			    	{    
+			    		DeviceNode * child = bufnodes + node->children[c];
+			    		child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, curr);
+			    	}
+			    }
+
+			    if (master) //enqueue new tasks
+			    {
+			    	const int base = atomicAdd(&qtailnext, 4);
+
+			    	if (base + 4 - qhead >= queuesize)
+			    		qgood = false;
+			    	else
+			    	{
+			    		for(int c = 0; c < 4; ++c)
+			    			queue[(base + c) % queuesize] = node->children[c];
+
+			    		atomicAdd(&qitems, 3);
+
+			    		__threadfence();
+
+			    		atomicAdd(&qtail, 4);
+			    	}
+			    }
 			}
-		}	
-		else
-		{
-		    if (master) //children allocation
-		    {
-		    	const int bufbase = atomicAdd(&nnodes, 4);
-
-		    	if (bufbase + 4 > bufsize)
-		    	{
-		    		qgood = false;
-		    		break;
-		    	}
-
-		    	for(int c = 0; c < 4; ++c)
-		    		node->children[c] = bufbase + c;
-		    }
-
-		    const int mask = node->mask;
-		    const int x = node->x;
-		    const int y = node->y;
-
-		    for(int c = 0; c < 4; ++c)
-		    {
-		    	const int shift = 2 * (LMAX - l - 1);
-
-		    	const int key1 = mask | (c << shift);
-		    	const int key2 = key1 + (1 << shift) - 1;
-
-		    	const size_t indexmin = c == 0 ? s : lower_bound(sorted_keys + s, sorted_keys + e, key1) - sorted_keys;
-		    	const size_t indexsup = c == 3 ? e : upper_bound(sorted_keys + s, sorted_keys + e, key2) - sorted_keys;
-
-		    	if (master)
-		    	{    
-		    		DeviceNode * child = bufnodes + node->children[c];
-		    		child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, curr);
-		    	}
-		    }
-
-		    if (master) //enqueue new tasks
-		    {
-		    	const int base = atomicAdd(&qtailnext, 4);
-
-		    	if (base + 4 - qhead >= queuesize)
-		    		qgood = false;
-		    	else
-		    	{
-		    		for(int c = 0; c < 4; ++c)
-		    			queue[(base + c) % queuesize] = node->children[c];
-
-		    		atomicAdd(&qitems, 3);
-
-		    		__threadfence();
-
-		    		atomicAdd(&qtail, 4);
-		    	}
-		    }
 		}
 	}
-}
 }
 
 __global__ void conclude(int * treenodes, int * queuesize)
@@ -690,6 +777,7 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 			posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
 
 			//CUDA_CHECK(cudaDeviceReset());
+			CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
 
 			const int device_queuesize = 8e4;
 			int * device_queue;
@@ -752,6 +840,17 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 					thrust::device_pointer_cast(device_xdata),
 					thrust::device_pointer_cast(device_ydata),
 					thrust::device_pointer_cast(device_vdata)))); 
+
+			size_t textureoffset = 0;
+
+	texKeys.channelDesc = cudaCreateChannelDesc<int>();
+texKeys.filterMode = cudaFilterModePoint;
+texKeys.mipmapFilterMode = cudaFilterModePoint;
+	texKeys.normalized = 0;
+
+	    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
+				       sizeof(int) * nsrc));
+	    assert(textureoffset == 0);
 
 			CUDA_CHECK(cudaPeekAtLastError());
 			CUDA_CHECK(cudaDeviceSynchronize());
