@@ -38,6 +38,7 @@
 #define WARPSIZE 32
 #define MFENCE __threadfence()
 #define LMAX 15
+#define NQUEUES 4
 
 extern __device__ void upward_p2e_order12(const realtype xcom,
 		const realtype ycom,
@@ -349,8 +350,9 @@ namespace Tree
 	}
 
 	//QUEUE info
-	__constant__ int queuesize, * queue;
-	__device__  int qlock, qhead, qtail, qtailnext, qitems;
+	__constant__ int queuesize, * queues[NQUEUES];
+	__device__  int qlock[NQUEUES], qhead[NQUEUES], qtail[NQUEUES], qtailnext[NQUEUES], qitems;
+
 	__device__ bool qgood;
 
 	__global__ void setup(const int nsrc)
@@ -358,11 +360,19 @@ namespace Tree
 		nnodes = 1;
 		bufnodes[0].setup(0, 0, 0, 0, nsrc, 0, -1);
 
-		queue[0] = 0;
-		qlock = 1;
-		qhead = 0;
-		qtail = 1;
-		qtailnext = 1;
+		for(int i = 0; i < NQUEUES; ++i)
+		{
+			qlock[i] = 1;
+			qhead[i] = 0;
+			qtail[i] = 0;
+			qtailnext[i] = 0;
+		}
+
+		const int qid = 1;	
+		queues[qid][0] = 0;
+		qtail[qid] = 1;
+		qtailnext[qid] = 1;
+
 		qitems = 1;
 		qgood = true;
 	}
@@ -376,31 +386,37 @@ namespace Tree
 
 		int currid = -1;
 
+		int iteration = -1;
+
 		while(qitems && qgood) 
 		{
+			const int qid = (++iteration + blockIdx.x) % NQUEUES;
+
 			if (currid == -1)
+			{
 				if (master)
 				{
-					if (atomicCAS(&qlock, 1, 0)) //then take one task if available
+					if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
 					{
-						const int currhead = qhead;
+						const int currhead = qhead[qid];
 
-						if (currhead < qtail)
+						if (currhead < qtail[qid])
 						{
 							const int entry = currhead % queuesize;
 
-							currid = queue[entry];
+							currid = queues[qid][entry];
 
-							qhead = currhead + 1;
+							qhead[qid] = currhead + 1;
 
 							MFENCE;			
 						}
 
-						qlock = 1;
+						qlock[qid] = 1;
 					}
 				}
 
-			currid = __shfl(currid, 0);
+				currid = __shfl(currid, 0);
+			}
 
 			if (currid >= 0)
 			{
@@ -460,23 +476,23 @@ namespace Tree
 
 					if (master) //enqueue new tasks
 					{
-						const int base = atomicAdd(&qtailnext, 3);
+						const int base = atomicAdd(&qtailnext[qid], 3);
 
-						if (base + 4 - qhead >= queuesize)
+						if (base + 4 - qhead[qid] >= queuesize)
 							qgood = false;
 						else
 						{
 							for(int c = 0; c < 3; ++c)
-								queue[(base + c) % queuesize] = node->children[c];
+								queues[qid][(base + c) % queuesize] = node->children[c];
 
 							atomicAdd(&qitems, 3);
 
 							MFENCE;
 
-							atomicAdd(&qtail, 3);
+							atomicAdd(&qtail[qid], 3);
 						}
 
-						currid= node->children[3];
+						currid = node->children[3];
 					}
 				}
 
@@ -688,7 +704,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	const int device_bufsize = 8e4;
 
 	int * device_queue;
-	CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize));
+	CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize * NQUEUES));
 
 	DeviceNode * device_bufnodes;
 	CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
@@ -766,7 +782,16 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	CUDA_CHECK(cudaMemcpyToSymbolAsync(bufexpansion, &device_bufexpansions, sizeof(device_bufexpansions)));
 	CUDA_CHECK(cudaMemcpyToSymbolAsync(order, &EXPANSIONORDER, sizeof(EXPANSIONORDER)));
 	CUDA_CHECK(cudaMemcpyToSymbolAsync(queuesize, &device_queuesize, sizeof(device_queuesize)));
-	CUDA_CHECK(cudaMemcpyToSymbolAsync(queue, &device_queue, sizeof(device_queue)));
+
+	{
+		int * ptrs[NQUEUES];
+		for(int i = 0; i < NQUEUES; ++i)
+			ptrs[i] = device_queue + device_queuesize * i;
+
+		CUDA_CHECK(cudaMemcpyToSymbolAsync(queues, &ptrs, sizeof(ptrs)));
+		//printf("sizeof(ptrs) = %d\n", sizeof(ptrs));
+		//exit(0);
+	}
 
 	setup<<<1, 1>>>(nsrc);
 
