@@ -1,4 +1,4 @@
-	/*
+/*
  *  treecode.cpp
  *  Part of MRAG/2d-treecode-potential
  *
@@ -35,612 +35,577 @@
 #define MYRDTSC _rdtsc()
 #endif
 
-#define LMAX 15
-
- extern __device__ void upward_p2e_order12(const realtype xcom,
- 	const realtype ycom,
- 	const realtype * __restrict__ const xsources,
- 	const realtype * __restrict__ const ysources,
- 	const realtype * __restrict__ const vsources,
- 	const int nsources,
- 	realtype * __restrict__ const rexpansions,
- 	realtype * __restrict__ const iexpansions);
-
- extern __device__ void upward_e2e_order12(
- 	const realtype  x0,
- 	const realtype  y0,
- 	const realtype  mass,
- 	const realtype * const rsrcxp,
- 	const realtype * const isrcxp,
- 	realtype * __restrict__ const rdstxp,
- 	realtype * __restrict__ const idstxp);	
-
- namespace Tree
- {
- 	int LEAF_MAXCOUNT;
-
- 	realtype ext, xmin, ymin;
-
- 	int * keys = NULL;
-
- 	realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
-
- 	Node * root = NULL;
-
- 	void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
- 	{
- 		const int64_t startallc = MYRDTSC;
-
- 		const double h = ext / (1 << l);
- 		const double x0 = xmin + h * x, y0 = ymin + h * y;
-
- 		assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
-
-#ifndef NDEBUG
- 		for(int i = s; i < e; ++i)
- 			assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
-#endif
-
- 		node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
-
- 		if (node->leaf)
- 		{
- 			const int64_t startc = MYRDTSC;
- 			node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
- 			node->p2ecycles = MYRDTSC - startc;
-
- 			assert(node->r < 1.5 * h);
- 		}
- 		else
- 		{
- 			node->allocate_children();
-
- 			for(int c = 0; c < 4; ++c)
- 			{
- 				const int shift = 2 * (LMAX - l - 1);
-
- 				const int key1 = mask | (c << shift);
- 				const int key2 = key1 + (1 << shift) - 1;
-
- 				const int64_t startc = MYRDTSC;
- 				const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
- 				const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
- 				node->searchcycles += MYRDTSC - startc;
-
- 				Node * chd = node->children[c];
-
-#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (indexsup - indexmin > 5e3 && c < 3)
-		//if (c < 3 && l < 8)
- 				{
- 					_build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
- 				}
-
- 			}
-//#pragma omp taskyield
-#pragma omp taskwait
-
- 			const int64_t startc = MYRDTSC;
-
- 			for(int c = 0; c < 4; ++c)
- 			{
- 				Node * chd = node->children[c];
- 				node->mass += chd->mass;
- 				node->w += chd->w;
- 				node->wx += chd->wx;
- 				node->wy += chd->wy;
-
- 				node->children[c] = chd;
- 			}
-
-	    //realtype rcandidates[4];
- 			node->r = 0;
- 			for(int c = 0; c < 4; ++c)
- 				if (node->children[c]->w)
- 					node->r = std::max(node->r,
- 						node->children[c]->r +
- 						sqrt(pow(node->xcom() - node->children[c]->xcom(), 2) +
- 							pow(node->ycom() - node->children[c]->ycom(), 2)));
-
- 				node->r = std::min(node->r, 1.4143 * h);
-
- 				assert(node->r < 1.5 * h);
-
-#ifndef NDEBUG
- 				{
- 					realtype r = 0;
-
- 					for(int i = s; i < e; ++i)
- 						r = std::max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
-
- 					assert (sqrt(r) <= node->r);
- 				}
-#endif
-
- 				node->e2e();
- 				node->e2ecycles = MYRDTSC - startc;
- 			}
-
-#ifndef NDEBUG
- 			{
- 				assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
- 			}
-#endif
-
- 			const int64_t endallc = MYRDTSC;
- 			node->allcycles = endallc - startallc;
- 		}
-
 #define WARPSIZE 32
 
-texture<int, cudaTextureType1D> texKeys;
+#define LMAX 15
 
-#if 0
- 		__device__ int  lower_bound (int * data, int count, const int val)
- 		{
- 			int  it;
- 			int  step, first = 0;
-	//count = last - first; //distance(first,last);
-	while (count>0)
-	{
+extern __device__ void upward_p2e_order12(const realtype xcom,
+		const realtype ycom,
+		const realtype * __restrict__ const xsources,
+		const realtype * __restrict__ const ysources,
+		const realtype * __restrict__ const vsources,
+		const int nsources,
+		realtype * __restrict__ const rexpansions,
+		realtype * __restrict__ const iexpansions);
 
-	    it = first; step=count/2; it += step; //advance (it,step);
-	    // printf("step: %d\n", step);
-	    if (data[it]<val) {                 // or: if (comp(*it,val)), for version (2)
-	    	first=++it;
-	    	count-=step+1;
-	    }
-	    else count=step;
-	}
-	return first;
-}
+extern __device__ void upward_e2e_order12(
+		const realtype  x0,
+		const realtype  y0,
+		const realtype  mass,
+		const realtype * const rsrcxp,
+		const realtype * const isrcxp,
+		realtype * __restrict__ const rdstxp,
+		realtype * __restrict__ const idstxp);	
 
-__device__ int  upper_bound (int * data, int count, const int val)
+namespace Tree
 {
-	int first = 0;
-	int  it;
-	int step;
-	//count = last - first;//std::distance(first,last);
-	while (count>0)
+	texture<int, cudaTextureType1D> texKeys;
+
+	__global__ void generate_keys(const realtype * const xsrc, const realtype * const ysrc, const int n,
+			const realtype xmin, const realtype ymin, const realtype ext,
+			int * const keys)
 	{
-	    it = first; step=count/2; it += step;//std::advance (it,step);
-	    if (!(val<data[it]))                 // or: if (!comp(val,*it)), for version (2)
-	    	{ first=++it; count-=step+1;  }
-	    else count=step;
+		const int gid = threadIdx.x + blockDim.x * blockIdx.x;
+
+		if (gid >= n)
+			return;
+
+		int x = floor((xsrc[gid] - xmin) / ext * (1 << LMAX));
+		int y = floor((ysrc[gid] - ymin) / ext * (1 << LMAX));
+
+		assert(x >= 0 && y >= 0);
+		assert(x < (1 << LMAX) && y < (1 << LMAX));
+
+		x = (x | (x << 8)) & 0x00FF00FF;
+		x = (x | (x << 4)) & 0x0F0F0F0F;
+		x = (x | (x << 2)) & 0x33333333;
+		x = (x | (x << 1)) & 0x55555555;
+
+		y = (y | (y << 8)) & 0x00FF00FF;
+		y = (y | (y << 4)) & 0x0F0F0F0F;
+		y = (y | (y << 2)) & 0x33333333;
+		y = (y | (y << 1)) & 0x55555555;
+
+		const int key = x | (y << 1);
+
+		keys[gid] = key;
 	}
-	return first;
-}
 
-
-#else
-
-
-__device__ int lower_bound(int b, const int n, const int val)
-{
-	const int t = threadIdx.x;
-	const bool master = t == 0;
-
-	int s = 0, e = n, c = n;
-
-	if (tex1Dfetch(texKeys, b + s) >= val)
-		return 0;
-
-	if (tex1Dfetch(texKeys, b + e - 1) < val)
-		return e;
-
-	while (c)
+	__device__ int lower_bound(int s, int e, const int val)
 	{
-		int candidate_s = s, candidate_e = e;
+		int c = e - s;
 
-		const float h = (e - s) * 1.f/ WARPSIZE;
-		const int i = min(e - 1, (int)(s + t * h + 0.499999f));
+		if (tex1Dfetch(texKeys, s) >= val)
+			return 0;
 
-		const bool isless = tex1Dfetch(texKeys, b + i) < val;
-		candidate_s = isless ? i : s;
-		candidate_e = isless ? e : i;
+		if (tex1Dfetch(texKeys, e - 1) < val)
+			return e;
 
-		#pragma unroll
-		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		while (c)
 		{
-			candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
-			candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+			int candidate_s = s, candidate_e = e;
+
+			const float h = (e - s) * 1.f/ WARPSIZE;
+			const int i = min(e - 1, (int)(s + threadIdx.x * h + 0.499999f));
+
+			const bool isless = tex1Dfetch(texKeys, i) < val;
+			candidate_s = isless ? i : s;
+			candidate_e = isless ? e : i;
+
+#pragma unroll
+			for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+			{
+				candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
+				candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+			}
+
+			s = candidate_s;
+			e = candidate_e; 
+			c = min(c / 32, e - s);
 		}
 
-		s = candidate_s;
-		e = candidate_e; 
-		c = min(c / 32, e - s);
+		return s + 1;
 	}
 
-	return b + s + 1;
-}
-
-__device__ int upper_bound(int b, const int n, const int val)
-{
-	const int t = threadIdx.x;
-	const bool master = t == 0;
-
-	int s = 0, e = n, c = n;
-
-	if (tex1Dfetch(texKeys, b + s) > val)
-		return 0;
-
-	if (tex1Dfetch(texKeys, b + e - 1) <= val)
-		return e;
-
-	while (c)
+	__device__ int upper_bound(int s, int e, const int val)
 	{
-		int candidate_s = s, candidate_e = e;
+		int c = e - s;
 
-		const float h = (e - s) * 1.f / WARPSIZE;
-		const int i = min(e - 1, (int)(s + t * h + 0.499999f));
+		if (tex1Dfetch(texKeys, s) > val)
+			return 0;
 
-		const bool isless = tex1Dfetch(texKeys, b + i) <= val;
-		candidate_s = isless ? i : s;
-		candidate_e = isless ? e : i;
+		if (tex1Dfetch(texKeys, e - 1) <= val)
+			return e;
 
-		#pragma unroll
-		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		while (c)
 		{
-			candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
-			candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+			int candidate_s = s, candidate_e = e;
+
+			const float h = (e - s) * 1.f / WARPSIZE;
+			const int i = min(e - 1, (int)(s + threadIdx.x * h + 0.499999f));
+
+			const bool isless = tex1Dfetch(texKeys, i) <= val;
+			candidate_s = isless ? i : s;
+			candidate_e = isless ? e : i;
+
+#pragma unroll
+			for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+			{
+				candidate_s = max(candidate_s, __shfl_xor(candidate_s, mask));
+				candidate_e = min(candidate_e, __shfl_xor(candidate_e, mask));
+			}
+
+			s = candidate_s;
+			e = candidate_e; 
+			c = min(c / 32, e - s);
 		}
 
-		s = candidate_s;
-		e = candidate_e; 
-		c = min(c / 32, e - s);
+		return s + 1;
 	}
 
-	return b + s + 1;
-}
-#endif
-
-__global__ void generate_keys(const realtype * const xsrc, const realtype * const ysrc, const int n,
-	const realtype xmin, const realtype ymin, const realtype ext,
-	int * const keys)
-{
-	const int gid = threadIdx.x + blockDim.x * blockIdx.x;
-
-	if (gid >= n)
-		return;
-
-	int x = floor((xsrc[gid] - xmin) / ext * (1 << LMAX));
-	int y = floor((ysrc[gid] - ymin) / ext * (1 << LMAX));
-	
-	assert(x >= 0 && y >= 0);
-	assert(x < (1 << LMAX) && y < (1 << LMAX));
-	
-	x = (x | (x << 8)) & 0x00FF00FF;
-	x = (x | (x << 4)) & 0x0F0F0F0F;
-	x = (x | (x << 2)) & 0x33333333;
-	x = (x | (x << 1)) & 0x55555555;
-	
-	y = (y | (y << 8)) & 0x00FF00FF;
-	y = (y | (y << 4)) & 0x0F0F0F0F;
-	y = (y | (y << 2)) & 0x33333333;
-	y = (y | (y << 1)) & 0x55555555;
-	
-	const int key = x | (y << 1);
-	
-	keys[gid] = key;
-}
+	//Node * const node;//, const int x, const int y, const int l, const int s, const int e, const int mask)
+	__constant__ realtype *xsorted, *ysorted, *vsorted;
 
 
-    //Node * const node;//, const int x, const int y, const int l, const int s, const int e, const int mask)
-__constant__ int * sorted_keys;
-__constant__ realtype *xsorted, *ysorted, *vsorted;
-
-struct DeviceNode
-{
-	int x, y, l, s, e, mask, parent;
-	int children[4];
-	int validchildren;
-
-	realtype mass, w, wx, wy, r;
-
-	__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask, int parent)
+	struct DeviceNode
 	{
-		this->x = x;
-		this->y = y;
-		this->l = l;
-		this->s = s;
-		this->e = e;
-		this->mask = mask;
-		this->parent = parent;
-		this->validchildren = 0;
-		this->r = 0;
+		int x, y, l, s, e, mask, parent;
+		int children[4];
+		int validchildren;
+
+		realtype mass, w, wx, wy, r;
+
+		__host__ __device__ void setup(int x, int y, int l, int s, int e, int mask, int parent)
+		{
+			this->x = x;
+			this->y = y;
+			this->l = l;
+			this->s = s;
+			this->e = e;
+			this->mask = mask;
+			this->parent = parent;
+			this->validchildren = 0;
+			this->r = 0;
+
+			for (int i = 0; i < 4; ++i) 
+				children[i] = 0;
+		}
+
+		__device__ realtype xcom() const { return w ? wx / w : 0; }
+
+		__device__ realtype ycom() const { return w ? wy / w : 0; }
+	};
+
+	//TREE info
+	__constant__ int bufsize;
+	__device__ int nnodes;
+	__constant__ DeviceNode * bufnodes;
+	__constant__ int order;
+	__constant__ realtype * bufexpansion;
+
+	//QUEUE info
+	__constant__ int queuesize;
+	__device__ int * queue, qlock, qhead, qtail, qtailnext, qitems;
+	__device__ bool qgood;
+
+	__global__ void setup(const int nsrc)
+	{
+		nnodes = 1;
+		bufnodes[0].setup(0, 0, 0, 0, nsrc, 0, -1);
+
+		queue[0] = 0;
+		qlock = 1;
+		qhead = 0;
+		qtail = 1;
+		qtailnext = 1;
+		qitems = 1;
+		qgood = true;
+	}
+
+	__device__ void process_leaf(const int nodeid, realtype extent)
+	{
+		const int tid = threadIdx.x;
+		const bool master = tid == 0;
+
+		DeviceNode * node = bufnodes + nodeid;
+
+		const int s = node->s;
+		const int e = node->e;
 		
-		for (int i = 0; i < 4; ++i) 
-			children[i] = 0;
-	}
+		realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
 
-	__device__ realtype xcom() const { return w ? wx / w : 0; }
+		for(int t = s + tid; t < e; t += WARPSIZE)
+		{
+			const realtype x = xsorted[t];
+			const realtype y = ysorted[t];
+			const realtype m = vsorted[t];
+			const realtype w = fabs(m);
 
-	__device__ realtype ycom() const { return w ? wy / w : 0; }
-};
+			msum += m;
+			wsum += w;
+			wxsum += x * w;
+			wysum += y * w;
+		}
 
-__constant__ int bufsize;
-__device__ int nnodes;
-__constant__ int order;
-__constant__ realtype *bufexpansion;
-__constant__ DeviceNode * bufnodes;
+#pragma unroll
+		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		{
+			msum += __shfl_xor(msum, mask);
+			wsum += __shfl_xor(wsum, mask);
+			wxsum += __shfl_xor(wxsum, mask);
+			wysum += __shfl_xor(wysum, mask);
+		}
 
-__constant__ int queuesize;
-__device__ int * queue, qlock, qhead, qtail, qtailnext, qitems;
-__device__ bool qgood;
+		const realtype xcom = wsum ? wxsum / wsum : 0;
+		const realtype ycom = wsum ? wysum / wsum : 0;
 
-__global__ void setup(const int nsrc)
-{
-	nnodes = 1;
-	bufnodes[0].setup(0, 0, 0, 0, nsrc, 0, -1);
+		upward_p2e_order12(xcom, ycom, 
+				xsorted + s, ysorted + s, vsorted + s, e - s,
+				bufexpansion + order * (2 * nodeid + 0),
+				bufexpansion + order * (2 * nodeid + 1));
 
-	queue[0] = 0;
-	qlock = 1;
-	qhead = 0;
-	qtail = 1;
-	qtailnext = 1;
-	qitems = 1;
-	qgood = true;
-}
+		realtype r2 = 0;
+		for(int i = s + tid; i < e; i += WARPSIZE)
+		{
+			const realtype xr = xsorted[i] - xcom;
+			const realtype yr = ysorted[i] - ycom;
 
+			r2 = max(r2, xr * xr + yr * yr);
+		}
 
-__global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
-{
-	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
-	
-	const int tid = threadIdx.x;
-	const bool master = tid == 0;
-
-	int curr;
-	
-	while(qitems && qgood) 
-	{
-		curr = -1;
+#pragma unroll
+		for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
+		{
+			const realtype other_r2 = __shfl_xor(r2, mask);
+			r2 = max(r2, other_r2);
+		}
 
 		if (master)
 		{
-			if (atomicCAS(&qlock, 1, 0)) //then take one task if available
-			{
-				const int currhead = qhead;
-
-				if (currhead < qtail)
-				{
-					const int entry = currhead % queuesize;
-
-					curr = queue[entry];
-
-					qhead = currhead + 1;
-
-					__threadfence();			
-				}
-
-				qlock = 1;
-			}
+			node->mass = msum;
+			node->w = wsum;
+			node->wx = wxsum;
+			node->wy = wysum;
+			node->r = sqrt(r2);
+	
+			__threadfence();
 		}
 
-		curr = __shfl(curr, 0);
-
-		if (curr >= 0)
+		while(node->parent >= 0)
 		{
-			DeviceNode * node = bufnodes + curr;
+			DeviceNode * parent = bufnodes + node->parent;
 
-			const int s = node->s;
-			const int e = node->e;
-			const int l = node->l;
+			bool e2e = false;
 
-			const bool leaf = e - s <= LEAF_MAXCOUNT || l + 1 > LMAX;
+			if (master)
+				e2e = 3 == atomicAdd(&parent->validchildren, 1); 
+			//then this node is in the critical path
 
-			if (leaf)
+			e2e = __shfl(e2e, 0);
+
+			if (e2e)
 			{
-				//process_leaf(node);
-				//if (master)atomicSub(&qitems, 1);
-				realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-
-				for(int t = s + tid; t < e; t += WARPSIZE)
-				{
-					const realtype x = xsorted[t];
-					const realtype y = ysorted[t];
-					const realtype m = vsorted[t];
-					const realtype w = fabs(m);
-
-					msum += m;
-					wsum += w;
-					wxsum += x * w;
-					wysum += y * w;
-				}
-
-			#pragma unroll
-				for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
-				{
-					msum += __shfl_xor(msum, mask);
-					wsum += __shfl_xor(wsum, mask);
-					wxsum += __shfl_xor(wxsum, mask);
-					wysum += __shfl_xor(wysum, mask);
-				}
-
-				const realtype xcom = wsum ? wxsum / wsum : 0;
-				const realtype ycom = wsum ? wysum / wsum : 0;
-
-				upward_p2e_order12(xcom, ycom, 
-					xsorted + s, ysorted + s, vsorted + s, e - s,
-					bufexpansion + order * (2 * curr + 0),
-					bufexpansion + order * (2 * curr + 1));
-
-				realtype r2 = 0;
-				for(int i = s + tid; i < e; i += WARPSIZE)
-				{
-					const realtype xr = xsorted[i] - xcom;
-					const realtype yr = ysorted[i] - ycom;
-
-					r2 = max(r2, xr * xr + yr * yr);
-				}
-
-			#pragma unroll
-				for(int mask = WARPSIZE / 2 ; mask > 0 ; mask >>= 1)
-				{
-					const realtype other_r2 = __shfl_xor(r2, mask);
-					r2 = max(r2, other_r2);
-				}
+				realtype xcom_parent, ycom_parent;
 
 				if (master)
 				{
-					node->mass = msum;
-					node->w = wsum;
-					node->wx = wxsum;
-					node->wy = wysum;
-					node->r = sqrt(r2);
+					realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+					for(int c = 0; c < 4; ++c)
+					{
+						const DeviceNode * child = bufnodes + parent->children[c];
 
-					atomicSub(&qitems, 1);
+						msum += child->mass;
+						wsum += child->w;
+						wxsum += child->wx;
+						wysum += child->wy;
+					}
 
-					__threadfence();
+					parent->mass = msum;
+					parent->w = wsum;
+					parent->wx = wxsum;
+					parent->wy = wysum;
+
+					assert(wsum);
+					xcom_parent = wxsum / wsum;
+					ycom_parent = wysum / wsum;
+
+					realtype rr = 0;
+					for(int c = 0; c < 4; ++c)
+					{
+						const DeviceNode * child = bufnodes + parent->children[c];
+
+						if (child->w)
+						{
+							const realtype rx = xcom_parent - child->xcom();
+							const realtype ry = ycom_parent - child->ycom();
+
+							rr = max(rr, child->r + sqrt(rx * rx + ry * ry));
+						}
+					}
+
+					parent->r = min(rr, 1.4143f * extent / (1 << parent->l));
 				}
 
-				while(node->parent >= 0)
-				{
-					DeviceNode * parent = bufnodes + node->parent;
+				xcom_parent = __shfl(xcom_parent, 0);
+				ycom_parent = __shfl(ycom_parent, 0);
 
-					bool e2e = false;
+				if (tid < 4)
+				{
+					const DeviceNode * chd = bufnodes + parent->children[tid];
+
+					upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
+							bufexpansion + order * (2 * parent->children[tid] + 0),
+							bufexpansion + order * (2 * parent->children[tid] + 1),
+							bufexpansion + order * (2 * node->parent + 0),
+							bufexpansion + order * (2 * node->parent + 1));
+				}
+
+				if (master)
+					__threadfence();
+			}
+			else
+				break;
+
+			node = parent;
+		}
+	}
+
+	__global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
+	{
+		assert(blockDim.x == warpSize && WARPSIZE == warpSize);
+
+		const int tid = threadIdx.x;
+		const bool master = tid == 0;
+
+		int currid = -1;
+
+		while(qitems && qgood) 
+		{
+			if (currid == -1)
+				if (master)
+				{
+					if (atomicCAS(&qlock, 1, 0)) //then take one task if available
+					{
+						const int currhead = qhead;
+
+						if (currhead < qtail)
+						{
+							const int entry = currhead % queuesize;
+
+							currid = queue[entry];
+
+							qhead = currhead + 1;
+
+							__threadfence();			
+						}
+
+						qlock = 1;
+					}
+				}
+
+			currid = __shfl(currid, 0);
+
+			if (currid >= 0)
+			{
+				DeviceNode * node = bufnodes + currid;
+
+				const int s = node->s;
+				const int e = node->e;
+				const int l = node->l;
+
+				const bool leaf = e - s <= LEAF_MAXCOUNT || l + 1 > LMAX;
+
+				if (leaf)
+				{
+					process_leaf(currid, extent);
 
 					if (master)
-						e2e = 3 == atomicAdd(&parent->validchildren, 1); 
-			    	//then this node is in the critical path
+						atomicSub(&qitems, 1);
 
-					e2e = __shfl(e2e, 0);
-
-					if (e2e)
+					currid = -1;
+				}	
+				else
+				{
+					if (master) //children allocation
 					{
-						realtype xcom_parent, ycom_parent;
+						const int bufbase = atomicAdd(&nnodes, 4);
 
-						if (master)
+						if (bufbase + 4 > bufsize)
 						{
-							realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-							for(int c = 0; c < 4; ++c)
-							{
-								const DeviceNode * child = bufnodes + parent->children[c];
-
-								msum += child->mass;
-								wsum += child->w;
-								wxsum += child->wx;
-								wysum += child->wy;
-							}
-
-							parent->mass = msum;
-							parent->w = wsum;
-							parent->wx = wxsum;
-							parent->wy = wysum;
-
-							assert(wsum);
-							xcom_parent = wxsum / wsum;
-							ycom_parent = wysum / wsum;
-
-							realtype rr = 0;
-							for(int c = 0; c < 4; ++c)
-							{
-								const DeviceNode * child = bufnodes + parent->children[c];
-
-								if (child->w)
-								{
-									const realtype rx = xcom_parent - child->xcom();
-									const realtype ry = ycom_parent - child->ycom();
-
-									rr = max(rr, child->r + sqrt(rx * rx + ry * ry));
-								}
-							}
-
-							parent->r = min(rr, 1.4143f * extent / (1 << parent->l));
+							qgood = false;
+							break;
 						}
 
-						xcom_parent = __shfl(xcom_parent, 0);
-						ycom_parent = __shfl(ycom_parent, 0);
-
-						if (tid < 4)
-						{
-							const DeviceNode * chd = bufnodes + parent->children[tid];
-
-							upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
-								bufexpansion + order * (2 * parent->children[tid] + 0),
-								bufexpansion + order * (2 * parent->children[tid] + 1),
-								bufexpansion + order * (2 * node->parent + 0),
-								bufexpansion + order * (2 * node->parent + 1));
-						}
-
-						if (master)
-							__threadfence();
+						for(int c = 0; c < 4; ++c)
+							node->children[c] = bufbase + c;
 					}
-					else
-						break;
 
-					node = parent;
+					const int mask = node->mask;
+					const int x = node->x;
+					const int y = node->y;
+
+					for(int c = 0; c < 4; ++c)
+					{
+						const int shift = 2 * (LMAX - l - 1);
+
+						const int key1 = mask | (c << shift);
+						const int key2 = key1 + (1 << shift) - 1;
+
+						const size_t indexmin = c == 0 ? s : lower_bound(s, e, key1);
+						const size_t indexsup = c == 3 ? e : upper_bound(s, e, key2);
+
+						if (master)
+						{    
+							DeviceNode * child = bufnodes + node->children[c];
+							child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, currid);
+						}
+					}
+
+					if (master) //enqueue new tasks
+					{
+						const int base = atomicAdd(&qtailnext, 3);
+
+						if (base + 4 - qhead >= queuesize)
+							qgood = false;
+						else
+						{
+							for(int c = 0; c < 3; ++c)
+								queue[(base + c) % queuesize] = node->children[c];
+
+							atomicAdd(&qitems, 3);
+
+							__threadfence();
+
+							atomicAdd(&qtail, 3);
+						}
+
+						currid= node->children[3];
+					}
 				}
-				
-			}	
-			else
-			{
-			    if (master) //children allocation
-			    {
-			    	const int bufbase = atomicAdd(&nnodes, 4);
 
-			    	if (bufbase + 4 > bufsize)
-			    	{
-			    		qgood = false;
-			    		break;
-			    	}
-
-			    	for(int c = 0; c < 4; ++c)
-			    		node->children[c] = bufbase + c;
-			    }
-
-			    const int mask = node->mask;
-			    const int x = node->x;
-			    const int y = node->y;
-
-			    for(int c = 0; c < 4; ++c)
-			    {
-			    	const int shift = 2 * (LMAX - l - 1);
-
-			    	const int key1 = mask | (c << shift);
-			    	const int key2 = key1 + (1 << shift) - 1;
-
-			    	const size_t indexmin = c == 0 ? s : lower_bound( s,  e - s, key1);
-			    	const size_t indexsup = c == 3 ? e : upper_bound( s,  e - s, key2);
-
-			    	if (master)
-			    	{    
-			    		DeviceNode * child = bufnodes + node->children[c];
-			    		child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, curr);
-			    	}
-			    }
-
-			    if (master) //enqueue new tasks
-			    {
-			    	const int base = atomicAdd(&qtailnext, 4);
-
-			    	if (base + 4 - qhead >= queuesize)
-			    		qgood = false;
-			    	else
-			    	{
-			    		for(int c = 0; c < 4; ++c)
-			    			queue[(base + c) % queuesize] = node->children[c];
-
-			    		atomicAdd(&qitems, 3);
-
-			    		__threadfence();
-
-			    		atomicAdd(&qtail, 4);
-			    	}
-			    }
+				currid = __shfl(currid, 0);
 			}
 		}
 	}
-}
 
-__global__ void conclude(int * treenodes, int * queuesize)
-{
-	*treenodes = nnodes;
-	*queuesize = qtail - qhead;
+	__global__ void conclude(int * treenodes, int * queuesize)
+	{
+		*treenodes = nnodes;
+		*queuesize = qtail - qhead;
+	}
 
-	const int asd = 0;//trallallero();
-	
-	printf("conclusion...%d\n", asd);
-}
+	int LEAF_MAXCOUNT;
+
+	realtype ext, xmin, ymin;
+
+	int * keys = NULL;
+
+	realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
+
+	Node * root = NULL;
+
+	void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
+	{
+		const int64_t startallc = MYRDTSC;
+
+		const double h = ext / (1 << l);
+		const double x0 = xmin + h * x, y0 = ymin + h * y;
+
+		assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
+
+#ifndef NDEBUG
+		for(int i = s; i < e; ++i)
+			assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
+#endif
+
+		node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
+
+		if (node->leaf)
+		{
+			const int64_t startc = MYRDTSC;
+			node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
+			node->p2ecycles = MYRDTSC - startc;
+
+			assert(node->r < 1.5 * h);
+		}
+		else
+		{
+			node->allocate_children();
+
+			for(int c = 0; c < 4; ++c)
+			{
+				const int shift = 2 * (LMAX - l - 1);
+
+				const int key1 = mask | (c << shift);
+				const int key2 = key1 + (1 << shift) - 1;
+
+				const int64_t startc = MYRDTSC;
+				const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
+				const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
+				node->searchcycles += MYRDTSC - startc;
+
+				Node * chd = node->children[c];
+
+#pragma omp task firstprivate(chd, c, x, y, l, indexmin, indexsup, key1) if (indexsup - indexmin > 5e3 && c < 3)
+				//if (c < 3 && l < 8)
+				{
+					_build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
+				}
+
+			}
+			//#pragma omp taskyield
+#pragma omp taskwait
+
+			const int64_t startc = MYRDTSC;
+
+			for(int c = 0; c < 4; ++c)
+			{
+				Node * chd = node->children[c];
+				node->mass += chd->mass;
+				node->w += chd->w;
+				node->wx += chd->wx;
+				node->wy += chd->wy;
+
+				node->children[c] = chd;
+			}
+
+			//realtype rcandidates[4];
+			node->r = 0;
+			for(int c = 0; c < 4; ++c)
+				if (node->children[c]->w)
+					node->r = std::max(node->r,
+							node->children[c]->r +
+							sqrt(pow(node->xcom() - node->children[c]->xcom(), 2) +
+								pow(node->ycom() - node->children[c]->ycom(), 2)));
+
+			node->r = std::min(node->r, 1.4143 * h);
+
+			assert(node->r < 1.5 * h);
+
+#ifndef NDEBUG
+			{
+				realtype r = 0;
+
+				for(int i = s; i < e; ++i)
+					r = std::max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
+
+				assert (sqrt(r) <= node->r);
+			}
+#endif
+
+			node->e2e();
+			node->e2ecycles = MYRDTSC - startc;
+		}
+
+#ifndef NDEBUG
+		{
+			assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
+		}
+#endif
+
+		const int64_t endallc = MYRDTSC;
+		node->allcycles = endallc - startallc;
+	}
 }
 
 int check_bits(double x, double y)
@@ -702,30 +667,22 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 	assert(a.l == b.l);
 	assert(a.s == b.s);
 	assert(a.e == b.e);
-	    //assert(a.mask == b.mask);
+	//assert(a.mask == b.mask);
 	printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
-	
-	printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-		a.mass, a.w, a.wx, a.wy, a.r);
-	printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-		b.mass, b.w, b.wx, b.wy, b.r);
 
-	
+	printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+			a.mass, a.w, a.wx, a.wy, a.r);
+	printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+			b.mass, b.w, b.wx, b.wy, b.r);
 
 	assert(check_bits(a.mass, b.mass) >= 40);
 	assert(check_bits(a.w, b.w) >= 40);
 	assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
 	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
-	/*bool asd = !b.leaf;
-	asd &= b.children[0]->w == 0 ||
-	b.children[1]->w == 0 ||
-	b.children[2]->w == 0 ||
-	b.children[3]->w == 0 ;
-	check_bits(a.r, b.r);*/
 	assert(check_bits(a.r, b.r) >= 32);
-	
+
 	{
 		const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 		const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
@@ -733,253 +690,228 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 		const realtype * refiexp = b.iexp();
 		assert(24 <= check_bits(resrexp, refrexp, EXPORD));
 		assert(24 <= check_bits(resiexp, refiexp, EXPORD));
-		/*	printf("RRES: ");
-			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", resrexp[i]);
-			printf("\n");
+	}
 
-			printf("RREF: ");
-			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", refrexp[i]);
-			printf("\n");
+	if (!b.leaf)
+		for(int c = 0; c < 4; ++c)
+			check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
+	else
+		;
+}
 
-			printf("IRES: ");
-			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", resiexp[i]);
-			printf("\n");
+void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
+		Node * const root, const int LEAF_MAXCOUNT, const int EXPANSIONORDER)
+{
+	Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
 
-			printf("IREF: ");
-			for(int i = 0; i < EXPORD; ++i)
-				printf("%+.2e ", resrexp[i]);
-			printf("\n");
-			*/
-		//assert(a.mass == b.mass);
-		//assert(a.w == b.w);
-		}
+	posix_memalign((void **)&xdata, 32, sizeof(*xdata) * nsrc);
+	posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
+	posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
+	posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
 
-		if (!b.leaf)
-			for(int c = 0; c < 4; ++c)
-				check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
-			else
-				;
-		}
+	//CUDA_CHECK(cudaDeviceReset());
+	//CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
 
+	const int device_queuesize = 8e4;
+	int * device_queue;
+	CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize));
 
+	const int device_bufsize = 8e4;
+	DeviceNode * device_bufnodes;
+	CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
+	CUDA_CHECK(cudaMemset(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
 
-		void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-			Node * const root, const int LEAF_MAXCOUNT, const int EXPANSIONORDER)
-		{
-			Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
+	realtype * device_bufexpansions;
+	CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));    
+	CUDA_CHECK(cudaMemset(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
+	int * device_diag;
+	CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(int) * 2));
 
-			posix_memalign((void **)&xdata, 32, sizeof(*xdata) * nsrc);
-			posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
-			posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
-			posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
+	realtype *device_xdata, *device_ydata, *device_vdata;
 
-			//CUDA_CHECK(cudaDeviceReset());
-			CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
+	CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
+	CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
+	CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
 
-			const int device_queuesize = 8e4;
-			int * device_queue;
-			CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize));
-
-			const int device_bufsize = 8e4;
-			DeviceNode * device_bufnodes;
-			CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
-			CUDA_CHECK(cudaMemset(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
-
-			realtype * device_bufexpansions;
-			CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));    
-			CUDA_CHECK(cudaMemset(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
-			int * device_diag;
-			CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(int) * 2));
-
-			realtype *device_xdata, *device_ydata, *device_vdata;
-
-			CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
-			CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
-			CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
-
-			int * device_keys;
-			CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
+	int * device_keys;
+	CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
 
 #ifndef NDEBUG
-			CUDA_CHECK(cudaMemset(device_keys, 0xff, sizeof(int) * nsrc));
+	CUDA_CHECK(cudaMemset(device_keys, 0xff, sizeof(int) * nsrc));
 #endif
 
-			CUDA_CHECK(cudaMemcpy(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-			CUDA_CHECK(cudaMemcpy(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-			CUDA_CHECK(cudaMemcpy(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
-			thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
-			thrust::minmax_element(thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
+	thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
+		thrust::minmax_element(thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
 
-			thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > yminmax =
-			thrust::minmax_element(thrust::device_pointer_cast(device_ydata), thrust::device_pointer_cast(device_ydata)  + nsrc);
+	thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > yminmax =
+		thrust::minmax_element(thrust::device_pointer_cast(device_ydata), thrust::device_pointer_cast(device_ydata)  + nsrc);
 
-			const realtype truexmin = *xminmax.first;
-			const realtype trueymin = *yminmax.first;
+	const realtype truexmin = *xminmax.first;
+	const realtype trueymin = *yminmax.first;
 
-			const realtype ext0 = *xminmax.second - truexmin;
-			const realtype ext1 = *yminmax.second - trueymin;
+	const realtype ext0 = *xminmax.second - truexmin;
+	const realtype ext1 = *yminmax.second - trueymin;
 
-			const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
+	const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
 
-			ext = std::max(ext0, ext1) * (1 + 2 * eps);
-			xmin = truexmin - eps * ext;
-			ymin = trueymin - eps * ext;
+	ext = std::max(ext0, ext1) * (1 + 2 * eps);
+	xmin = truexmin - eps * ext;
+	ymin = trueymin - eps * ext;
 
-			generate_keys<<< (nsrc + 127)/128, 128>>>(device_xdata, device_ydata, nsrc,
-				xmin, ymin, ext, device_keys);
+	generate_keys<<< (nsrc + 127)/128, 128>>>(device_xdata, device_ydata, nsrc,
+			xmin, ymin, ext, device_keys);
 
-			CUDA_CHECK(cudaPeekAtLastError());
+	CUDA_CHECK(cudaPeekAtLastError());
 
-			thrust::sort_by_key(thrust::device_pointer_cast(device_keys),
-				thrust::device_pointer_cast(device_keys + nsrc),
-				thrust::make_zip_iterator(thrust::make_tuple(
+	thrust::sort_by_key(thrust::device_pointer_cast(device_keys),
+			thrust::device_pointer_cast(device_keys + nsrc),
+			thrust::make_zip_iterator(thrust::make_tuple(
 					thrust::device_pointer_cast(device_xdata),
 					thrust::device_pointer_cast(device_ydata),
 					thrust::device_pointer_cast(device_vdata)))); 
 
-			size_t textureoffset = 0;
+	size_t textureoffset = 0;
 
 	texKeys.channelDesc = cudaCreateChannelDesc<int>();
-texKeys.filterMode = cudaFilterModePoint;
-texKeys.mipmapFilterMode = cudaFilterModePoint;
+	texKeys.filterMode = cudaFilterModePoint;
+	texKeys.mipmapFilterMode = cudaFilterModePoint;
 	texKeys.normalized = 0;
 
-	    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
-				       sizeof(int) * nsrc));
-	    assert(textureoffset == 0);
+	CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
+				sizeof(int) * nsrc));
+	assert(textureoffset == 0);
 
-			CUDA_CHECK(cudaPeekAtLastError());
-			CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK(cudaPeekAtLastError());
+	CUDA_CHECK(cudaDeviceSynchronize());
 
-			CUDA_CHECK(cudaMemcpyToSymbol(sorted_keys, &device_keys, sizeof(device_keys)));
-			CUDA_CHECK(cudaMemcpyToSymbol(xsorted, &device_xdata, sizeof(device_xdata)));
-			CUDA_CHECK(cudaMemcpyToSymbol(ysorted, &device_ydata, sizeof(device_ydata)));
-			CUDA_CHECK(cudaMemcpyToSymbol(vsorted, &device_vdata, sizeof(device_vdata)));
-			CUDA_CHECK(cudaMemcpyToSymbol(bufsize, &device_bufsize, sizeof(device_bufsize)));
-			CUDA_CHECK(cudaMemcpyToSymbol(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
-			CUDA_CHECK(cudaMemcpyToSymbol(bufexpansion, &device_bufexpansions, sizeof(device_bufexpansions)));
-			CUDA_CHECK(cudaMemcpyToSymbol(order, &EXPANSIONORDER, sizeof(EXPANSIONORDER)));
-			CUDA_CHECK(cudaMemcpyToSymbol(queuesize, &device_queuesize, sizeof(device_queuesize)));
-			CUDA_CHECK(cudaMemcpyToSymbol(queue, &device_queue, sizeof(device_queue)));
+	CUDA_CHECK(cudaMemcpyToSymbol(xsorted, &device_xdata, sizeof(device_xdata)));
+	CUDA_CHECK(cudaMemcpyToSymbol(ysorted, &device_ydata, sizeof(device_ydata)));
+	CUDA_CHECK(cudaMemcpyToSymbol(vsorted, &device_vdata, sizeof(device_vdata)));
+	CUDA_CHECK(cudaMemcpyToSymbol(bufsize, &device_bufsize, sizeof(device_bufsize)));
+	CUDA_CHECK(cudaMemcpyToSymbol(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
+	CUDA_CHECK(cudaMemcpyToSymbol(bufexpansion, &device_bufexpansions, sizeof(device_bufexpansions)));
+	CUDA_CHECK(cudaMemcpyToSymbol(order, &EXPANSIONORDER, sizeof(EXPANSIONORDER)));
+	CUDA_CHECK(cudaMemcpyToSymbol(queuesize, &device_queuesize, sizeof(device_queuesize)));
+	CUDA_CHECK(cudaMemcpyToSymbol(queue, &device_queue, sizeof(device_queue)));
 
-			setup<<<1, 1>>>(nsrc);
-			build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
-			conclude<<<1, 1>>>(device_diag, device_diag + 1);
+	setup<<<1, 1>>>(nsrc);
+	build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
+	conclude<<<1, 1>>>(device_diag, device_diag + 1);
 
-			CUDA_CHECK(cudaPeekAtLastError());
-			CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK(cudaPeekAtLastError());
+	CUDA_CHECK(cudaDeviceSynchronize());
 
-			printf("device has found %d nodes, and max queue size was %d\n", device_diag[0], device_diag[1]);
+	printf("device has found %d nodes, and max queue size was %d\n", device_diag[0], device_diag[1]);
 
-			CUDA_CHECK(cudaMemcpy(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-			CUDA_CHECK(cudaMemcpy(ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-			CUDA_CHECK(cudaMemcpy(vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
 
-			CUDA_CHECK(cudaMemcpy(keys, device_keys, sizeof(int) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(keys, device_keys, sizeof(int) * nsrc, cudaMemcpyDeviceToHost));
 
 #ifndef NDEBUG
-			std::pair<int, int> * kv = NULL;
+	std::pair<int, int> * kv = NULL;
 
-			posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
+	posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
 
-			assert(truexmin == *std::min_element(xsrc, xsrc + nsrc));
-			assert(trueymin == *std::min_element(ysrc, ysrc + nsrc));
+	assert(truexmin == *std::min_element(xsrc, xsrc + nsrc));
+	assert(trueymin == *std::min_element(ysrc, ysrc + nsrc));
 
-			assert(ext0 == *std::max_element(xsrc, xsrc + nsrc) - truexmin);
-			assert(ext1 == *std::max_element(ysrc, ysrc + nsrc) - trueymin);
+	assert(ext0 == *std::max_element(xsrc, xsrc + nsrc) - truexmin);
+	assert(ext1 == *std::max_element(ysrc, ysrc + nsrc) - trueymin);
 
-			for(int i = 0; i < nsrc; ++i)
-			{
-				int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
-				int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
+	for(int i = 0; i < nsrc; ++i)
+	{
+		int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
+		int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
 
-				assert(x >= 0 && y >= 0);
-				assert(x < (1 << LMAX) && y < (1 << LMAX));
+		assert(x >= 0 && y >= 0);
+		assert(x < (1 << LMAX) && y < (1 << LMAX));
 
-				x = (x | (x << 8)) & 0x00FF00FF;
-				x = (x | (x << 4)) & 0x0F0F0F0F;
-				x = (x | (x << 2)) & 0x33333333;
-				x = (x | (x << 1)) & 0x55555555;
+		x = (x | (x << 8)) & 0x00FF00FF;
+		x = (x | (x << 4)) & 0x0F0F0F0F;
+		x = (x | (x << 2)) & 0x33333333;
+		x = (x | (x << 1)) & 0x55555555;
 
-				y = (y | (y << 8)) & 0x00FF00FF;
-				y = (y | (y << 4)) & 0x0F0F0F0F;
-				y = (y | (y << 2)) & 0x33333333;
-				y = (y | (y << 1)) & 0x55555555;
+		y = (y | (y << 8)) & 0x00FF00FF;
+		y = (y | (y << 4)) & 0x0F0F0F0F;
+		y = (y | (y << 2)) & 0x33333333;
+		y = (y | (y << 1)) & 0x55555555;
 
-				const int key = x | (y << 1);
+		const int key = x | (y << 1);
 
-				kv[i].first = key;
-				kv[i].second = i;
-			}
+		kv[i].first = key;
+		kv[i].second = i;
+	}
 
-			std::sort(kv, kv + nsrc);
+	std::sort(kv, kv + nsrc);
 
-			for(int i = 0; i < nsrc; ++i)
-			{
-	//const int key = kv[i].first;
+	for(int i = 0; i < nsrc; ++i)
+	{
+		//const int key = kv[i].first;
 
-				const int entry = kv[i].second;
-				assert(entry >= 0 && entry < nsrc);
+		const int entry = kv[i].second;
+		assert(entry >= 0 && entry < nsrc);
 
-				assert(xdata[i] == xsrc[entry]);
-				assert(ydata[i] == ysrc[entry]);
-				assert(vdata[i] == vsrc[entry]);
-			}
+		assert(xdata[i] == xsrc[entry]);
+		assert(ydata[i] == ysrc[entry]);
+		assert(vdata[i] == vsrc[entry]);
+	}
 
-			free(kv);
+	free(kv);
 #endif
 
 #pragma omp parallel //num_threads(24)
-			{
+	{
 #pragma omp single
-				{ _build(root, 0, 0, 0, 0, nsrc, 0); }
-			}
+		{ _build(root, 0, 0, 0, 0, nsrc, 0); }
+	}
 
 #ifndef NDEBUG
-			const int nnodes = device_diag[0];
-			std::vector<DeviceNode> allnodes(nnodes);
-			printf("nnodes: %d", nnodes);
-			CUDA_CHECK(cudaMemcpy(&allnodes.front(), device_bufnodes, sizeof(DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
+	const int nnodes = device_diag[0];
+	std::vector<DeviceNode> allnodes(nnodes);
+	printf("nnodes: %d", nnodes);
+	CUDA_CHECK(cudaMemcpy(&allnodes.front(), device_bufnodes, sizeof(DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
 
-			std::vector<realtype> allexpansions(nnodes * EXPANSIONORDER * 2);
-			CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * EXPANSIONORDER * nnodes, cudaMemcpyDeviceToHost));
-/*
-		printf("nonzero entries:\n");
-		for(int i = 0; i < allexpansions.size(); ++i)
-			if (allexpansions[i] != 0)
-				printf("ASD %d: %e\n", i, allexpansions[i]);
-*/
-			printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
-				allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
-				allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
+	std::vector<realtype> allexpansions(nnodes * EXPANSIONORDER * 2);
+	CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * EXPANSIONORDER * nnodes, cudaMemcpyDeviceToHost));
+	/*
+	   printf("nonzero entries:\n");
+	   for(int i = 0; i < allexpansions.size(); ++i)
+	   if (allexpansions[i] != 0)
+	   printf("ASD %d: %e\n", i, allexpansions[i]);
+	 */
+	printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
+			allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
+			allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
 
-    //ok let's check this
+	//ok let's check this
 
 
-			check_tree(EXPANSIONORDER, 0, &allexpansions.front(), &allnodes.front(), allnodes[0], *root);
+	check_tree(EXPANSIONORDER, 0, &allexpansions.front(), &allnodes.front(), allnodes[0], *root);
 #endif
 
-			printf("bye!\n");
-			//exit(0);
+	printf("bye!\n");
+	//exit(0);
 
-			CUDA_CHECK(cudaFree(device_xdata));
-			CUDA_CHECK(cudaFree(device_ydata));
-			CUDA_CHECK(cudaFree(device_vdata));
-			CUDA_CHECK(cudaFree(device_keys));
-			CUDA_CHECK(cudaFree(device_bufnodes));
-			CUDA_CHECK(cudaFree(device_queue));
-			CUDA_CHECK(cudaFree(device_bufexpansions));
-			CUDA_CHECK(cudaFreeHost(device_diag));
-		}
+	CUDA_CHECK(cudaFree(device_xdata));
+	CUDA_CHECK(cudaFree(device_ydata));
+	CUDA_CHECK(cudaFree(device_vdata));
+	CUDA_CHECK(cudaFree(device_keys));
+	CUDA_CHECK(cudaFree(device_bufnodes));
+	CUDA_CHECK(cudaFree(device_queue));
+	CUDA_CHECK(cudaFree(device_bufexpansions));
+	CUDA_CHECK(cudaFreeHost(device_diag));
+}
 
-		void Tree::dispose()
-		{
-			free(xdata);
-			free(ydata);
-			free(vdata);
-			free(keys);
-		}
+void Tree::dispose()
+{
+	free(xdata);
+	free(ydata);
+	free(vdata);
+	free(keys);
+}
