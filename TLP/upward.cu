@@ -481,8 +481,8 @@ __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
 
 			    node = parent;
 
-			    if (master && node->parent == -1)
-			    	printf("that was the root.\n");
+			    /*if (master && node->parent == -1)
+			    	printf("that was the root.\n");*/
 			}
 		}	
 		else
@@ -689,7 +689,7 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 			posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
 			posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
 
-			CUDA_CHECK(cudaDeviceReset());
+			//CUDA_CHECK(cudaDeviceReset());
 
 			const int device_queuesize = 8e4;
 			int * device_queue;
