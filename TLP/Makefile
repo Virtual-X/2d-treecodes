@@ -27,7 +27,7 @@ OBJS = treecode-potential.o treecode-force.o upward.o
 config ?=release
 
 TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
-NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp 
+NVCCFLAGS := $(TLPFLAGS) -arch=sm_35 -Xcompiler -fopenmp 
 #--resource-usage
 TLPFLAGS += -march=native -fopenmp
 

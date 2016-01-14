@@ -719,10 +719,10 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
 	thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
-		thrust::minmax_element(thrust::cuda::par.on(stream), thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
+		thrust::minmax_element(thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
 
 	thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > yminmax =
-		thrust::minmax_element(thrust::cuda::par.on(stream), thrust::device_pointer_cast(device_ydata), thrust::device_pointer_cast(device_ydata)  + nsrc);
+		thrust::minmax_element(thrust::device_pointer_cast(device_ydata), thrust::device_pointer_cast(device_ydata)  + nsrc);
 
 	const realtype truexmin = *xminmax.first;
 	const realtype trueymin = *yminmax.first;
@@ -741,7 +741,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
 	CUDA_CHECK(cudaPeekAtLastError());
 
-	thrust::sort_by_key(thrust::cuda::par.on(stream),
+	thrust::sort_by_key(
 			thrust::device_pointer_cast(device_keys),
 			thrust::device_pointer_cast(device_keys + nsrc),
 			thrust::make_zip_iterator(thrust::make_tuple(

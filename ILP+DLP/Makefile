@@ -41,7 +41,7 @@ KERNELSFLAGS = -std=c99 -O4 -DNDEBUG -ftree-vectorize -Wno-psabi \
 kernels: $(OBJS)
 
 $(UPWARDKERNELS_POTENTIAL).o : $(UPWARDKERNELS_POTENTIAL).cu
-	$(NVCC) -O3 --use_fast_math -arch=sm_30 -dc -c $^
+	$(NVCC) -O3 --use_fast_math -arch=sm_35 -dc -c $^
 
 %.o: %.c
 	$(CC) $(KERNELSFLAGS) -c $^
