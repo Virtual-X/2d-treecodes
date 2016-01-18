@@ -22,7 +22,7 @@
 typedef REAL realtype; 
 
 //#include "treecode-potential.h"
-#include "upward-kernels.h"
+
 #include "potential-kernels.h"
 #include "upward.h"
 
@@ -30,13 +30,12 @@ typedef REAL realtype;
 
 namespace EvaluatePotential
 {
-    struct NodePotential : Tree::NodeImplementation<ORDER> { }; 
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & root)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Tree::Node & root)
     {
-	const NodePotential * stack[15 * 4 * 2];
+	const Tree::Node * stack[15 * 4 * 2];
 
 	int stackentry = 0, maxentry = 0;
 
@@ -44,7 +43,7 @@ namespace EvaluatePotential
 	*result = 0;
 	while(stackentry > -1)
 	{
-	    const NodePotential * const node = stack[stackentry--];
+	    const Tree::Node * const node = stack[stackentry--];
 
 	    //realtype tmp[2];
 
@@ -63,7 +62,7 @@ namespace EvaluatePotential
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (NodePotential *)node->children[c];
+			stack[++stackentry] = (Tree::Node *)node->children[c];
 
 		    maxentry = std::max(maxentry, stackentry);
 		}
@@ -82,7 +81,7 @@ void treecode_potential_solve(const realtype theta,
 {
     thetasquared = theta * theta;
 
-    NodePotential root;
+    Tree::Node root;
     
     //CUDA_CHECK(cudaMemset(device_root, 0, sizeof(device_root)));
     

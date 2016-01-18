@@ -21,7 +21,7 @@
 #include "cuda-common.h"
 
 #include "treecode-force.h"
-#include "upward-kernels.h"
+
 #include "downward-kernels.h"
 #include "force-kernels.h"
 #include "upward.h"
@@ -40,14 +40,12 @@
 
 namespace EvaluateForce
 {
-    struct NodeForce : Tree::NodeImplementation<ORDER> { };
-
     realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
     float *xdata_fp32 = nullptr, *ydata_fp32 = nullptr, *vdata_fp32 = nullptr;
 
     struct PerfMon
     {
-      int64_t e2pcalls, e2lcalls, e2lcycles, e2pcycles, p2pcalls, p2pcycles, p2pinteractions;
+	int64_t e2pcalls, e2lcalls, e2lcycles, e2pcycles, p2pcalls, p2pcycles, p2pinteractions;
 	int64_t startc, endc;
 
 	int maxstacksize, evaluations;
@@ -56,10 +54,10 @@ namespace EvaluateForce
 
 	void setup()
 	    {
-	      e2lcalls = 0;
-	      e2lcycles = 0;
-	      e2pcalls = 0;
-	      e2pcycles = 0;
+		e2lcalls = 0;
+		e2lcycles = 0;
+		e2pcalls = 0;
+		e2pcycles = 0;
 		p2pcalls = 0;
 		p2pcycles = 0;
 		p2pinteractions = 0;
@@ -71,11 +69,11 @@ namespace EvaluateForce
 
 	double tot_cycles() { return (double)(endc - startc); }
 
-      std::tuple<double, double, double, double> e2l(const int instructions)
+	std::tuple<double, double, double, double> e2l(const int instructions)
 	    {
-	      return std::make_tuple((double)(e2lcycles),
+		return std::make_tuple((double)(e2lcycles),
 				       (double)(e2lcycles) / tot_cycles(),
-				     (double)(e2lcycles) / e2lcalls,
+				       (double)(e2lcycles) / e2lcalls,
 				       (double)(e2lcalls * instructions) / e2lcycles);
 	    }
 	std::tuple<double, double, double, double> e2p(const int instructions)
@@ -107,9 +105,9 @@ namespace EvaluateForce
 
     void evaluate(realtype * const xresult, realtype * const yresult,
 		  const realtype xt, const realtype yt,
-		  const NodeForce & root, const realtype thetasquared)
+		  const Tree::Node & root, const realtype thetasquared)
     {
-	const NodeForce * stack[15 * 4 * 2];
+	const Tree::Node * stack[15 * 4 * 2];
 
 	int stackentry = 0, maxentry = 0;
 
@@ -120,7 +118,7 @@ namespace EvaluateForce
 
 	while(stackentry > -1)
 	{
-	    const NodeForce * const node = stack[stackentry--];
+	    const Tree::Node * const node = stack[stackentry--];
 
 	    realtype tmp[2];
 
@@ -160,7 +158,7 @@ namespace EvaluateForce
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (NodeForce *)node->children[c];
+			stack[++stackentry] = (Tree::Node *)node->children[c];
 
 		    maxentry = std::max(maxentry, stackentry);
 		}
@@ -188,15 +186,15 @@ namespace EvaluateForce
 
 	void _flush()
 	    {
-	      const int64_t startc = MYRDTSC;
-	      downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
-	      const int64_t endc = MYRDTSC;
+		const int64_t startc = MYRDTSC;
+		downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+		const int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
-	      perfmon.e2lcycles += endc - startc;
-	      perfmon.e2lcalls += (count + 1) / 2;
+		perfmon.e2lcycles += endc - startc;
+		perfmon.e2lcalls += (count + 1) / 2;
 #endif
-	      count = 0;
+		count = 0;
 	    }
 
 	void push(const realtype x0, const realtype y0, const realtype mass,
@@ -224,12 +222,12 @@ namespace EvaluateForce
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
-		  const NodeForce & root, const realtype theta)
+		  const Tree::Node & root, const realtype theta)
     {
 	//const bool localexp = true;
 	int maxentry = 0;
 
-	const NodeForce * stack[15 * 4 * 2];
+	const Tree::Node * stack[15 * 4 * 2];
 
 	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 
@@ -262,12 +260,12 @@ namespace EvaluateForce
 
 #ifdef _MIXPREC_
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		  for(int ix = 0; ix < BRICKSIZE; ++ix)
-		    xresult_fp32[iy][ix] = 0;
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			xresult_fp32[iy][ix] = 0;
 		
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		  for(int ix = 0; ix < BRICKSIZE; ++ix)
-		    yresult_fp32[iy][ix] = 0;
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			yresult_fp32[iy][ix] = 0;
 #endif
 
 		int stackentry = 0;
@@ -275,7 +273,7 @@ namespace EvaluateForce
 
 		while(stackentry > -1)
 		{
-		    const NodeForce * const node = stack[stackentry--];
+		    const Tree::Node * const node = stack[stackentry--];
 
 		    const realtype xcom = node->xcom();
 		    const realtype ycom = node->ycom();
@@ -319,7 +317,7 @@ namespace EvaluateForce
 
 				for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				      {
+				    {
 #ifdef _MIXPREC_
 					force_p2p_tiled_mixprec(&xdata_fp32[s], &ydata_fp32[s], &vdata_fp32[s], node->e - s,
 								(float)(x0 + (bx + tx) * h), (float)(y0 + (by + ty) * h), (float)h, 
@@ -329,7 +327,7 @@ namespace EvaluateForce
 							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, 
 							&xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 #endif
-				      }
+				    }
 
 				int64_t endc = MYRDTSC;
 
@@ -342,7 +340,7 @@ namespace EvaluateForce
 			    else
 			    {
 				for(int c = 0; c < 4; ++c)
-				    stack[++stackentry] = (NodeForce *)node->children[c];
+				    stack[++stackentry] = (Tree::Node *)node->children[c];
 
 				maxentry = std::max(maxentry, stackentry);
 			    }
@@ -360,12 +358,12 @@ namespace EvaluateForce
 					   &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 #ifdef _MIXPREC_
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		  for(int ix = 0; ix < BRICKSIZE; ++ix)
-		    xresult[iy][ix] += xresult_fp32[iy][ix];
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			xresult[iy][ix] += xresult_fp32[iy][ix];
 		
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		  for(int ix = 0; ix < BRICKSIZE; ++ix)
-		    yresult[iy][ix] += yresult_fp32[iy][ix];	
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			yresult[iy][ix] += yresult_fp32[iy][ix];	
 #endif
 
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
@@ -384,23 +382,23 @@ namespace EvaluateForce
 #endif
     }
 
-  void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, 
-			      const int e2linstructions, const int e2pinstructions)
+    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, 
+				const int e2linstructions, const int e2pinstructions)
     {
 #ifdef _INSTRUMENTATION_
 #if _INSTRUMENTATION_ == 2
-      for(int i = 0; i < N; ++i)
-	if (perf[i].failed)
-	  {
-	    printf("oops there was an overflow in the computation\n");
-	    abort();
-	  }
+	for(int i = 0; i < N; ++i)
+	    if (perf[i].failed)
+	    {
+		printf("oops there was an overflow in the computation\n");
+		abort();
+	    }
 
-      printf("EVALUATION CYCLES ===============================\n");
+	printf("EVALUATION CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
 
-printf("DOWNWARD CYCLES ===============================\n");
+	printf("DOWNWARD CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	{
 	    auto p = perf[i].e2l(e2linstructions);
@@ -409,7 +407,7 @@ printf("DOWNWARD CYCLES ===============================\n");
 		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
 	}
 
-printf("E2P CYCLES ===============================\n");
+	printf("E2P CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	{
 	    auto p = perf[i].e2p(e2pinstructions);
@@ -418,7 +416,7 @@ printf("E2P CYCLES ===============================\n");
 		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
 	}
 
-printf("EVALUATION P2P CYCLES ===============================\n");
+	printf("EVALUATION P2P CYCLES ===============================\n");
 
 	for(int i = 0; i < N; ++i)
 	{
@@ -428,7 +426,7 @@ printf("EVALUATION P2P CYCLES ===============================\n");
 		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
 	}
 
-printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
+	printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	for(int i = 0; i < N; ++i)
 	{
 	    auto p = perf[i].traversal();
@@ -446,12 +444,12 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
     extern "C"
     __attribute__ ((visibility ("default")))
     void treecode_force_solve(const realtype theta,
-			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const xresult, realtype * const yresult)
+			      const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
+			      const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const xresult, realtype * const yresult)
     {
 	const realtype thetasquared = theta * theta;
 
-	NodeForce root;
+	Tree::Node root;
 	const double t0 = omp_get_wtime();
 	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128, ORDER);
 	const double t1 = omp_get_wtime();
@@ -485,21 +483,21 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
     extern "C"
     __attribute__ ((visibility ("default")))
     void treecode_force_mrag_solve(const realtype theta,
-			     const realtype * const xsrc,
-			     const realtype * const ysrc,
-			     const realtype * const vsrc,
-			     const int nsrc,
-			     const realtype * const x0s,
-			     const realtype * const y0s,
-			     const realtype * const hs,
-			     const int nblocks,
-			     realtype * const xdst,
-			     realtype * const ydst)
+				   const realtype * const xsrc,
+				   const realtype * const ysrc,
+				   const realtype * const vsrc,
+				   const int nsrc,
+				   const realtype * const x0s,
+				   const realtype * const y0s,
+				   const realtype * const hs,
+				   const int nblocks,
+				   realtype * const xdst,
+				   realtype * const ydst)
     {
-	NodeForce root;
+	Tree::Node root;
 
 	const double t0 = omp_get_wtime();
-	NodeForce* device_root;
+	Tree::Node* device_root;
 	CUDA_CHECK(cudaMalloc(&device_root, sizeof(*device_root)));
 	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192, ORDER); //before: 128
 	const double t1 = omp_get_wtime();
@@ -513,13 +511,13 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	posix_memalign((void **)&ydata_fp32, 32, sizeof(float) * nsrc);
 	posix_memalign((void **)&vdata_fp32, 32, sizeof(float) * nsrc);
 
-	#pragma omp parallel for
+#pragma omp parallel for
 	for(int i = 0; i < nsrc; ++i)
-	  {
+	{
 	    xdata_fp32[i] = (float)xdata[i];
 	    ydata_fp32[i] = (float)ydata[i];
 	    vdata_fp32[i] = (float)vdata[i];
-	  }
+	}
 #endif
 	PerfMon perf[omp_get_max_threads()];
 

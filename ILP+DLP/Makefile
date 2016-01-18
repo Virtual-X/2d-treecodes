@@ -13,8 +13,7 @@
 real ?= double
 order ?= 12
 
-OBJS = 	order$(order)-upward-kernels.gpu.o \
-	order$(order)-upward-kernels-reference.o 
+OBJS = 	order$(order)-upward-kernels-reference.o 
 
 ifeq "$(MAKECMDGOALS)" "potential"
 	OBJS += order$(order)-potential-kernels.o
@@ -24,10 +23,7 @@ else
 		order$(order)-downward-kernels.o 
 endif
 
-potential force: $(OBJS)
-
-%.gpu.o: %.cu Makefile
-	nvcc  -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -O4 -arch=sm_30 -use_fast_math -dc -c $< -o $@
+potential force: $(OBJS) upwardkernels
 
 %.o: %.c Makefile
 	gcc -fPIC -fvisibility=hidden -std=c99 -O4 -DNDEBUG -ftree-vectorize \
@@ -36,8 +32,11 @@ potential force: $(OBJS)
 order$(order)-%.c order$(order)-%.cu: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@
 
+upwardkernels: upward-kernels.m4
+	m4 -D realtype=$(real) -D ORDER=$(order) $< > upward-kernels.h
+
 clean:
-	rm -f *.o *kernels*.c *kernels*.cu
+	rm -f *.o *kernels*.c *kernels*.cu upward-kernels.h
 
 .PRECIOUS: order$(order)-%.c order$(order)-%.cu order$(order)-%.o order$(order)-%.o
 

@@ -336,8 +336,8 @@ int main(int argc, char ** argv)
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
 
-    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
-/*    file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
+/*    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+    file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
 
