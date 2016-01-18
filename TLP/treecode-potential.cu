@@ -19,7 +19,9 @@
 
 #include "cuda-common.h"
 
-#include "treecode.h"
+typedef REAL realtype; 
+
+//#include "treecode-potential.h"
 #include "upward-kernels.h"
 #include "potential-kernels.h"
 #include "upward.h"
@@ -73,7 +75,8 @@ namespace EvaluatePotential
 using namespace EvaluatePotential;
 
 extern "C"
-void treecode_potential(const realtype theta,
+__attribute__ ((visibility ("default")))
+void treecode_potential_solve(const realtype theta,
 			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {

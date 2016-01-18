@@ -20,7 +20,7 @@
 
 #include "cuda-common.h"
 
-#include "treecode.h"
+#include "treecode-force.h"
 #include "upward-kernels.h"
 #include "downward-kernels.h"
 #include "force-kernels.h"
@@ -444,7 +444,8 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
     }
 
     extern "C"
-    void treecode_force(const realtype theta,
+    __attribute__ ((visibility ("default")))
+    void treecode_force_solve(const realtype theta,
 			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const xresult, realtype * const yresult)
     {
@@ -482,7 +483,8 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
     }
 
     extern "C"
-    void treecode_force_mrag(const realtype theta,
+    __attribute__ ((visibility ("default")))
+    void treecode_force_mrag_solve(const realtype theta,
 			     const realtype * const xsrc,
 			     const realtype * const ysrc,
 			     const realtype * const vsrc,

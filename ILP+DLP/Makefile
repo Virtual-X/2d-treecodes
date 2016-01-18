@@ -13,28 +13,33 @@
 real ?= double
 order ?= 12
 
-OBJS = 	upward-kernels.cu.o \
-		upward-kernels-reference.o \
-		potential-kernels.o \
-		force-kernels.o \
-		force-kernels-tiled.o \
-		downward-kernels.o 
+OBJS = 	order$(order)-upward-kernels.gpu.o \
+	order$(order)-upward-kernels-reference.o 
 
-kernels: $(OBJS)
+ifeq "$(MAKECMDGOALS)" "potential"
+	OBJS += order$(order)-potential-kernels.o
+else
+	OBJS += order$(order)-force-kernels.o \
+		order$(order)-force-kernels-tiled.o \
+		order$(order)-downward-kernels.o 
+endif
 
-%.cu.o: %.cu Makefile
-	nvcc -O4 -arch=sm_30 -use_fast_math -dc -c $<
+potential force: $(OBJS)
+
+%.gpu.o: %.cu Makefile
+	nvcc  -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -O4 -arch=sm_30 -use_fast_math -dc -c $< -o $@
 
 %.o: %.c Makefile
-	gcc -std=c99 -O4 -DNDEBUG -ftree-vectorize \
+	gcc -fPIC -fvisibility=hidden -std=c99 -O4 -DNDEBUG -ftree-vectorize \
 	 -march=native -mtune=native -fassociative-math -ffast-math -c $<
 
-%.c %.cu: %.m4 Makefile
+order$(order)-%.c order$(order)-%.cu: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@
 
 clean:
 	rm -f *.o *kernels*.c *kernels*.cu
 
-.PRECIOUS: %.c %.cu
+.PRECIOUS: order$(order)-%.c order$(order)-%.cu order$(order)-%.o order$(order)-%.o
 
-.PHONY = clean
+.PHONY = clean potential force
+

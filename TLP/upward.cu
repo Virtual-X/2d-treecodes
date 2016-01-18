@@ -38,25 +38,7 @@
 #define WARPSIZE 32
 #define MFENCE __threadfence()
 #define LMAX 15
-#define NQUEUES 4
-
-extern __device__ void upward_p2e_order12(const realtype xcom,
-		const realtype ycom,
-		const realtype * __restrict__ const xsources,
-		const realtype * __restrict__ const ysources,
-		const realtype * __restrict__ const vsources,
-		const int nsources,
-		realtype * __restrict__ const rexpansions,
-		realtype * __restrict__ const iexpansions);
-
-extern __device__ void upward_e2e_order12(
-		const realtype  x0,
-		const realtype  y0,
-		const realtype  mass,
-		const realtype * const rsrcxp,
-		const realtype * const isrcxp,
-		realtype * __restrict__ const rdstxp,
-		realtype * __restrict__ const idstxp);	
+#define NQUEUES 4	
 
 namespace Tree
 {
@@ -239,7 +221,7 @@ namespace Tree
 		const realtype xcom = wsum ? wxsum / wsum : 0;
 		const realtype ycom = wsum ? wysum / wsum : 0;
 
-		upward_p2e_order12(xcom, ycom, 
+		upward_p2e(xcom, ycom, 
 				xsorted + s, ysorted + s, vsorted + s, e - s,
 				bufexpansion + order * (2 * nodeid + 0),
 				bufexpansion + order * (2 * nodeid + 1));
@@ -332,7 +314,7 @@ namespace Tree
 				{
 					const DeviceNode * chd = bufnodes + parent->children[tid];
 
-					upward_e2e_order12(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
+					upward_e2e(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
 							bufexpansion + order * (2 * parent->children[tid] + 0),
 							bufexpansion + order * (2 * parent->children[tid] + 1),
 							bufexpansion + order * (2 * node->parent + 0),
@@ -375,6 +357,9 @@ namespace Tree
 
 		qitems = 1;
 		qgood = true;
+
+		printf("hello from Tree with ORDER %d\n", ORDER);
+		print_message();
 	}
 
 	__global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
@@ -668,7 +653,7 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
 	assert(check_bits(a.r, b.r) >= 32);
-
+#ifndef NDEBUG
 	{
 		const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 		const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
@@ -677,6 +662,7 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 		assert(24 <= check_bits(resrexp, refrexp, EXPORD));
 		assert(24 <= check_bits(resiexp, refiexp, EXPORD));
 	}
+#endif
 
 	if (!b.leaf)
 		for(int c = 0; c < 4; ++c)

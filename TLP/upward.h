@@ -23,6 +23,8 @@
 
 typedef REAL realtype;
 
+#include "upward-kernels.h"
+
 namespace Tree
 {
 	struct Node
@@ -94,7 +96,7 @@ namespace Tree
 				const realtype * __restrict__ const vsources,
 				const double x0, const double y0, const double h) override
 		{
-			REFERENCE_P2E_KERNEL(xsources, ysources, vsources, e - s,
+			reference_upward_p2e(xsources, ysources, vsources, e - s,
 					x0, y0, h, &mass, &w, &wx, &wy, &r,
 					rexpansions, iexpansions);
 		}
@@ -115,7 +117,7 @@ namespace Tree
 				chldixp[c] = chd->iexpansions;
 			}
 
-			REFERENCE_E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+			reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
 #ifndef NDEBUG
 			{
 				for(int i = 0; i < ORDER; ++i)
