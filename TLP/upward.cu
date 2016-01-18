@@ -351,7 +351,7 @@ namespace Tree
 	    qtailnext[i] = 0;
 	}
 
-	const int qid = 1;	
+	const int qid = 0;	
 	queues[qid][0] = 0;
 	qtail[qid] = 1;
 	qtailnext[qid] = 1;
@@ -359,8 +359,8 @@ namespace Tree
 	qitems = 1;
 	qgood = true;
 
-	printf("hello from Tree with ORDER %d\n", ORDER);
-	print_message();
+	//printf("hello from Tree with ORDER %d\n", ORDER);
+	//print_message();
     }
 
     __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
