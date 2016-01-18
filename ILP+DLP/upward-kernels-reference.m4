@@ -33,7 +33,7 @@ define(E2E_KERNEL, reference_upward_e2e_order$1)
 #ifdef __cplusplus
 extern "C"
 #endif
-void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
+void reference_upward_p2e(const realtype * __restrict__ const xsources,
   const realtype * __restrict__ const ysources,
   const realtype * __restrict__ const sources,
   const int nsources,
@@ -177,7 +177,7 @@ void P2E_KERNEL(ORDER)(const realtype * __restrict__ const xsources,
           #ifdef __cplusplus
           extern "C"
           #endif
-          void E2E_KERNEL(ORDER)(
+          void reference_upward_e2e(
             const realtype * const x0s,
             const realtype * const y0s,
             const realtype * const masses,

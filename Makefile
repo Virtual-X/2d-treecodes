@@ -10,44 +10,31 @@
 # before getting a written permission from the author of this file.
 #
 
-NVCC = nvcc
-CC = gcc -std=c99
+potential-order=12
+force-order=24
+mrag-blocksize=32
 
-real ?= double
-treecode-potential-order ?= 12
-treecode-force-order ?= 24
-mrag-blocksize ?= 32
-config ?= release
-backend ?= sse
+TESTOPT = real=double mrag-blocksize=32
 
-NVCCFLAGS = -std=c++11  -Xcompiler -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize) -lcudart
+NVCCFLAGS = -std=c++11 -Xcompiler -fopenmp \
+	-Drealtype=double \
+	-DPOTENTIAL_ORDER=$(potential-order) \
+	-DFORCE_ORDER=$(force-order) \
+	-DBLOCKSIZE=$(mrag-blocksize) -lcudart
 
 ifeq "$(gprof)" "1"
 	TLPFLAGS += -pg
 endif
 
-test: main.cpp libtreecode.a
-	$(NVCC) $(NVCCFLAGS) -g $^ -o test
+test: main.cpp libraries
+	nvcc $(NVCCFLAGS) -g $< libtreecode-potential.so libtreecode-force.so  -o test 
 
-libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header
-	$(NVCC) -lib -o libtreecode.a TLP/*.o ILP+DLP/*.o 
-
-header:
-	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
-
-drivers: kernels
-	make -C TLP drivers \
-	treecode-potential-order=$(treecode-potential-order) \
-	treecode-force-order=$(treecode-force-order)
-
-kernels:
-	make -C ILP+DLP kernels backend="$(backend)" CC="$(CC)" \
-		treecode-potential-order=$(treecode-potential-order) \
-		treecode-force-order=$(treecode-force-order)
+libraries:
+	make -f libraries.Makefile order=$(potential-order) libtreecode-potential.so
+	make -f libraries.Makefile order=$(force-order) mrag-blocksize=32 libtreecode-force.so
 
 clean:
-	rm -f test libtreecode.a treecode.h
-	make -C TLP clean
-	make -C ILP+DLP clean
+	rm -f test
+	make -f libraries.Makefile clean
 
-.PHONY = clean header drivers kernels
+.PHONY = clean

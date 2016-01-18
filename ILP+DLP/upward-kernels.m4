@@ -3,8 +3,6 @@
 include(unroll.m4)
 divert(-1)
 define(WARPSIZE, 32)
-define(P2E_KERNEL, upward_p2e_order$1)
-define(E2E_KERNEL, upward_e2e_order$1)
 divert(0) dnl dnl dnl
 
 ifelse(eval(WARPSIZE >= ORDER), 1, ,`
@@ -13,7 +11,12 @@ ifelse(eval(WARPSIZE >= ORDER), 1, ,`
 #endif')dnl dnl
 #include <cstdio>
 
-__device__ void P2E_KERNEL(ORDER)(const realtype xcom,
+__device__ void print_message()
+{
+printf("hello again from ILPDLP order %d\n", ORDER);
+}
+
+__device__ void upward_p2e(const realtype xcom,
 	const realtype ycom,
 	const realtype * __restrict__ const xsources,
 	const realtype * __restrict__ const ysources,
@@ -84,7 +87,7 @@ __device__ void P2E_KERNEL(ORDER)(const realtype xcom,
 	
 }
 
-__device__ void E2E_KERNEL(ORDER)(
+__device__ void upward_e2e(
 	const realtype x0,
 	const realtype y0,
 	const realtype mass,

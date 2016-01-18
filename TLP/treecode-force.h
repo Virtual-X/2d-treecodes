@@ -18,17 +18,8 @@ typedef REAL realtype;
 extern "C"
 {
 #endif
-    void treecode_potential(const realtype theta,
-			    const realtype * const xsources,
-			    const realtype * const ysources,
-			    const realtype * const sourcevalues,
-			    const int nsources,
-			    const realtype * const xtargets,
-			    const realtype * const ytargets,
-			    const int ntargets,
-			    realtype * const targetvalues);
-
-    void treecode_force(const realtype theta,
+    __attribute__ ((visibility ("default")))
+    void treecode_force_solve(const realtype theta,
 			const realtype * const xsources,
 			const realtype * const ysources,
 			const realtype * const sourcevalues,
@@ -37,9 +28,10 @@ extern "C"
 			const realtype * const ytargets,
 			const int ntargets,
 			realtype * const xresult,
-			realtype * const yresult);
-
-    void treecode_force_mrag(const realtype theta,
+			      realtype * const yresult);
+    
+    __attribute__ ((visibility ("default")))
+    void treecode_force_mrag_solve(const realtype theta,
 			     const realtype * const xsources,
 			     const realtype * const ysources,
 			     const realtype * const sourcevalues,

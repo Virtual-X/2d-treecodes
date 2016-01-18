@@ -24,7 +24,8 @@
 #include <limits>
 #include <vector>
 
-#include "treecode.h"
+#include "treecode-potential.h"
+#include "treecode-force.h"
 
 double  tol = 1e-8;
 
@@ -187,15 +188,15 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
     printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
     const double tstart = omp_get_wtime();
     if (potential)
-	treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
+	treecode_potential_solve(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
     else
 	if (mrag)
 	{
 	    printf("MRAG LAYOUT\n");
-	    treecode_force_mrag(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
+	    treecode_force_mrag_solve(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
 	}
 	else
-	    treecode_force(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
+	    treecode_force_solve(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
     const double tend = omp_get_wtime();
 
     printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
@@ -334,8 +335,8 @@ int main(int argc, char ** argv)
     file2test("testDiego/diegoBinaryN400", false, P_TEST);
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
-/*
-    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+
+/*    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
     file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);

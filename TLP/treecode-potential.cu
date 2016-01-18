@@ -19,8 +19,10 @@
 
 #include "cuda-common.h"
 
-#include "treecode.h"
-#include "upward-kernels.h"
+typedef REAL realtype; 
+
+//#include "treecode-potential.h"
+
 #include "potential-kernels.h"
 #include "upward.h"
 
@@ -28,13 +30,12 @@
 
 namespace EvaluatePotential
 {
-    struct NodePotential : Tree::NodeImplementation<ORDER> { }; 
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & root)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Tree::Node & root)
     {
-	const NodePotential * stack[15 * 4 * 2];
+	const Tree::Node * stack[15 * 4 * 2];
 
 	int stackentry = 0, maxentry = 0;
 
@@ -42,7 +43,7 @@ namespace EvaluatePotential
 	*result = 0;
 	while(stackentry > -1)
 	{
-	    const NodePotential * const node = stack[stackentry--];
+	    const Tree::Node * const node = stack[stackentry--];
 
 	    //realtype tmp[2];
 
@@ -61,7 +62,7 @@ namespace EvaluatePotential
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (NodePotential *)node->children[c];
+			stack[++stackentry] = (Tree::Node *)node->children[c];
 
 		    maxentry = std::max(maxentry, stackentry);
 		}
@@ -73,13 +74,14 @@ namespace EvaluatePotential
 using namespace EvaluatePotential;
 
 extern "C"
-void treecode_potential(const realtype theta,
+__attribute__ ((visibility ("default")))
+void treecode_potential_solve(const realtype theta,
 			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {
     thetasquared = theta * theta;
 
-    NodePotential root;
+    Tree::Node root;
     
     //CUDA_CHECK(cudaMemset(device_root, 0, sizeof(device_root)));
     

@@ -18,11 +18,11 @@ printf "%d" "$RESULT"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-RES=$(IC_kernel ${DIR}/force-kernels.o "<force_e2p>" "<L_END_FORCE_E2P>")
+RES=$(IC_kernel ${DIR}/*force-kernels.o "<force_e2p>" "<L_END_FORCE_E2P>")
 printf " %b=%b" "-DE2P_IC" "$RES"
 
-RES=$(IC_kernel ${DIR}/force-kernels-tiled.o "<force_e2p_tiled>" "<L_END_FORCE_E2P_TILED>")
+RES=$(IC_kernel ${DIR}/*force-kernels-tiled.o "<force_e2p_tiled>" "<L_END_FORCE_E2P_TILED>")
 printf " %b=%b" "-DE2P_TILED_IC" "$RES" 
 
-RES=$(IC_kernel ${DIR}/downward-kernels.o "<L_DOWNWARD_E2L_ITERATION>" "<L_END_DOWNWARD_E2L_ITERATION>")
+RES=$(IC_kernel ${DIR}/*downward-kernels.o "<L_DOWNWARD_E2L_ITERATION>" "<L_END_DOWNWARD_E2L_ITERATION>")
 printf " %b=%b" "-DE2L_TILED_IC" "$RES" 

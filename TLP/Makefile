@@ -10,53 +10,43 @@
 # before getting a written permission from the author of this file.
 #
 
-NVCC ?= nvcc
 real ?= double
-
-treecode-potential-order ?= 12
-treecode-force-order ?= 24
+order ?= 12
 mrag-blocksize ?= 32
-
-UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
-UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
-
-
-OBJS = treecode-potential.o treecode-force.o upward.o
-
-
 config ?=release
 
-TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
-NVCCFLAGS := $(TLPFLAGS) -arch=sm_35 -Xcompiler -fopenmp 
-#--resource-usage
-TLPFLAGS += -march=native -fopenmp
-
+TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order)
+NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'
+TLPFLAGS += -march=native -fopenmp -fvisibility=hidden
 
 ifeq "$(config)" "release"
 	TLPFLAGS += -O3 -DNDEBUG
-	NVCCFLAGS += -O3 -DNDEBUG
+	NVCCFLAGS += -O4 -DNDEBUG
 else
 	TLPFLAGS += -g -G
 endif
 
-ifeq "$(gprof)" "1"
+ifeq "$(profiling)" "1"
 	TLPFLAGS += -pg
+	NVCCFLAGS += -lineinfo
 endif
 
-drivers: $(OBJS)
+potential: treecode-potential.o order$(order)-upward.o
 
-treecode-potential.o: treecode-potential.cu treecode.h Makefile
-	$(NVCC) $(NVCCFLAGS) -DORDER=$(treecode-potential-order) -c $<
+force: treecode-force.o order$(order)-upward.o
 
-treecode-force.o: treecode-force.cu treecode.h Makefile
-	$(NVCC) $(NVCCFLAGS) \
-	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
-	-DORDER=$(treecode-force-order) -c $<
+treecode-potential.o: treecode-potential.cu treecode-potential.h Makefile
+	nvcc $(NVCCFLAGS) -c $<
 
-upward.o: upward.cu upward.h Makefile
-	$(NVCC) $(NVCCFLAGS) -dc -c $< 
+treecode-force.o: treecode-force.cu treecode-force.h Makefile
+	nvcc $(NVCCFLAGS) \
+	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/order$(order)-force-kernels-tiled.o) \
+	-c $<
+
+order$(order)-upward.o: upward.cu upward.h Makefile
+	nvcc $(NVCCFLAGS) -dc -c $< -o $@
 
 clean:
 	rm -f *.o 
 
-.PHONY = clean
+.PHONY = clean potential force
