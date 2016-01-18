@@ -718,6 +718,11 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
+	cudaEvent_t evstart, evstop;
+	CUDA_CHECK(cudaEventCreate(&evstart));
+	CUDA_CHECK(cudaEventCreate(&evstop));
+
+	CUDA_CHECK(cudaEventRecord(evstart));
 	thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
 		thrust::minmax_element(thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
 
@@ -773,9 +778,15 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
 
 	conclude<<<1, 1>>>(device_diag, device_diag + 1, (bool *)(device_diag + 2));
-
+	CUDA_CHECK(cudaEventRecord(evstop));
 	CUDA_CHECK(cudaPeekAtLastError());
 	CUDA_CHECK(cudaStreamSynchronize(0));
+	CUDA_CHECK(cudaEventSynchronize(evstop));
+	float timems;
+	CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
+	printf("timems: %f\n", timems);
+
+	system("sleep 1");
 	//assert(device_diag[3]);
 
 	printf("device has found %d nodes, and max queue size was %d\n", device_diag[0], device_diag[1]);
