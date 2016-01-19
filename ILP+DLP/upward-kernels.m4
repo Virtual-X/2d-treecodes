@@ -25,7 +25,6 @@ __device__ void upward_p2e(const realtype xcom,
 	realtype * __restrict__ const rexpansions,
 	realtype * __restrict__ const iexpansions)
 {
-	
 	realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
 		TMP(rxp, n) = 0')
 	LUNROLL(n, 0, eval(ORDER - 1),`,
@@ -80,6 +79,9 @@ __device__ void upward_p2e(const realtype xcom,
 	
 }
 
+define(`ARY', `$1[tid + 4 * eval($2 - 1)]')
+define(`ARYFP', eval(4 * (ORDER )))
+
 __device__ void upward_e2e(
 	const realtype x0,
 	const realtype y0,
@@ -91,31 +93,38 @@ __device__ void upward_e2e(
 {
 	const int tid = threadIdx.x;
 	assert(tid < 4);
+
+	const int slot = threadIdx.y;
+	extern __shared__ realtype ary[];
+	realtype * const rinvz = ary + ARYFP * (0 + 4 * slot);
+	realtype * const iinvz = ary + ARYFP * (1 + 4 * slot);
+	realtype * const rcoeff = ary + ARYFP * (2 + 4 * slot);
+	realtype * const icoeff = ary + ARYFP * (3 + 4 * slot);
 	
 	const realtype r2z0 = x0 * x0 + y0 * y0;
-	const realtype rinvz_1 = x0 / r2z0;
-	const realtype iinvz_1 = - y0 / r2z0;
+	ARY(rinvz, 1) = x0 / r2z0;
+	ARY(iinvz, 1) = - y0 / r2z0;
 	dnl
 	LUNROLL(j, 1, eval(ORDER),`
 	ifelse(j, 1, , `
-	const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
-	const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
-	const realtype TMP(rcoeff, j) = rsrcxp[eval(j - 1)] * TMP(rinvz, j) - isrcxp[eval(j - 1)] * TMP(iinvz, j);
-	const realtype TMP(icoeff, j) = rsrcxp[eval(j - 1)] * TMP(iinvz, j) + isrcxp[eval(j - 1)] * TMP(rinvz, j);
+	ARY(rinvz, j) = ARY(rinvz, eval(j - 1)) * ARY(rinvz, 1) - ARY(iinvz, eval(j - 1)) * ARY(iinvz, 1);
+	ARY(iinvz, j) = ARY(rinvz, eval(j - 1)) * ARY(iinvz, 1) + ARY(iinvz, eval(j - 1)) * ARY(rinvz, 1);')
+	ARY(rcoeff, j) = rsrcxp[eval(j - 1)] * ARY(rinvz, j) - isrcxp[eval(j - 1)] * ARY(iinvz, j);
+	ARY(icoeff, j) = rsrcxp[eval(j - 1)] * ARY(iinvz, j) + isrcxp[eval(j - 1)] * ARY(rinvz, j);
 	')
 
 	LUNROLL(l, 1, eval(ORDER),`
 	{
 		const realtype TMP(prefac, l) = ifelse(l, 1, `- mass',`mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
 		pushdef(`BINFAC', `BINOMIAL(eval(l - 1), eval(k - 1)).f')
-		const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,` + ifelse(BINFAC,1.f,,`BINFAC * ') TMP(rcoeff, k)');
-		const realtype TMP(itmp, l) = LUNROLL(k, 1, l,` ifelse(k,1,,+) ifelse(BINFAC,1.f,,`BINFAC * ') TMP(icoeff, k)');
+		const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,` + ifelse(BINFAC,1.f,,`BINFAC * ') ARY(rcoeff, k)');
+		const realtype TMP(itmp, l) = LUNROLL(k, 1, l,` ifelse(k,1,,+) ifelse(BINFAC,1.f,,`BINFAC * ') ARY(icoeff, k)');
 		popdef(`BINFAC')dnl
 
-		const realtype TMP(invz2, l) = TMP(rinvz, l) * TMP(rinvz, l) + TMP(iinvz, l) * TMP(iinvz, l);
+		const realtype TMP(invz2, l) = ARY(rinvz, l) * ARY(rinvz, l) + ARY(iinvz, l) * ARY(iinvz, l);
 		const realtype TMP(invinvz2, l) = TMP(invz2, l) ? 1 / TMP(invz2, l) : 0;
-		const realtype TMP(rz, l) = TMP(rinvz, l) * TMP(invinvz2, l);
-		const realtype TMP(iz, l) = - TMP(iinvz, l) * TMP(invinvz2, l);
+		const realtype TMP(rz, l) = ARY(rinvz, l) * TMP(invinvz2, l);
+		const realtype TMP(iz, l) = - ARY(iinvz, l) * TMP(invinvz2, l);
 
 		realtype rpartial = TMP(rtmp, l) * TMP(rz, l) - TMP(itmp, l) * TMP(iz, l);
 		realtype ipartial = TMP(rtmp, l) * TMP(iz, l) + TMP(itmp, l) * TMP(rz, l);

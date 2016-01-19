@@ -806,7 +806,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
     CUDA_CHECK(cudaEventRecord(evstart));
 
-    build_tree<<<nsmxs * 2, dim3(32, 16)>>>(LEAF_MAXCOUNT, ext);
+    const int ysize = 16;
+    build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, ext);
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaEventRecord(evstop));
 
