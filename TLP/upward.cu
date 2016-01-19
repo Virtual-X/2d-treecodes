@@ -25,7 +25,6 @@
 
 #include "upward.h"
 #include "upward-kernels.h"
-#include "reference-upward-kernels.h"
 #include "cuda-common.h"
 
 #define  _INSTRUMENTATION_
@@ -43,6 +42,42 @@
 
 namespace Tree
 {
+    	
+    void Node::p2e(const realtype * __restrict__ const xsources,
+		 const realtype * __restrict__ const ysources,
+		 const realtype * __restrict__ const vsources,
+		 const double x0, const double y0, const double h) 
+	    {
+		reference_upward_p2e(xsources, ysources, vsources, e - s,
+				     x0, y0, h, &mass, &w, &wx, &wy, &r,
+				     rexpansions, iexpansions);
+	    }
+
+    void Node::e2e() 
+	    {
+		realtype srcmass[4], rx[4], ry[4];
+		realtype * chldrxp[4], *chldixp[4];
+
+		for(int c = 0; c < 4; ++c)
+		{
+		    Node * chd = children[c];
+
+		    srcmass[c] = chd->mass;
+		    rx[c] = chd->xcom() - xcom();
+		    ry[c] = chd->ycom() - ycom();
+		    chldrxp[c] = chd->rexpansions;
+		    chldixp[c] = chd->iexpansions;
+		}
+
+		reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+#ifndef NDEBUG
+		{
+		    for(int i = 0; i < ORDER; ++i)
+			assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
+		}
+#endif
+	    }
+    
     __global__ void generate_keys(const realtype * const xsrc, const realtype * const ysrc, const int n,
 				  const realtype xmin, const realtype ymin, const realtype ext,
 				  int * const keys)
@@ -580,6 +615,8 @@ namespace Tree
     }
 }
 
+bool verbose = false;
+
 int check_bits(double x, double y)
 {
     union ASD
@@ -601,7 +638,7 @@ int check_bits(double x, double y)
 	{
 	    if (((c1 >> b) & 1) != ((c2 >> b) & 1))
 	    {
-		printf("numbers differ from the %d most-significant bit\n", currbit);
+		if (verbose) printf("numbers differ from the %d most-significant bit\n", currbit);
 		return currbit;
 	    }
 	}
@@ -612,7 +649,7 @@ int check_bits(double x, double y)
 
 int check_bits(const double *a , const double *b, const int n)
 {
-    printf("*******************************\n");
+    if (verbose) printf("*******************************\n");
     int r = 64;
 
     for(int i = 0; i < n; ++i)
@@ -623,12 +660,12 @@ int check_bits(const double *a , const double *b, const int n)
 	    const double x = a[i];
 	    const double y = b[i];
 	    if (l < 48 )
-		printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
+		if (verbose) printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
 	    r= min(r, l );
 	}
     }
 
-    printf("********** end ***************\n");
+    if (verbose) printf("********** end ***************\n");
     return r;
 }
 
@@ -640,6 +677,8 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
     assert(a.s == b.s);
     assert(a.e == b.e);
     //assert(a.mask == b.mask);
+    if (verbose)
+    {
     printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
     printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 
@@ -647,7 +686,7 @@ void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::De
 	   a.mass, a.w, a.wx, a.wy, a.r);
     printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
 	   b.mass, b.w, b.wx, b.wy, b.r);
-
+    }
     assert(check_bits(a.mass, b.mass) >= 40);
     assert(check_bits(a.w, b.w) >= 40);
     assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
@@ -709,7 +748,10 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 
     int * device_keys;
     CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
-
+    cudaEvent_t evstart, evstop;
+    CUDA_CHECK(cudaEventCreate(&evstart));
+    CUDA_CHECK(cudaEventCreate(&evstop));
+    
     CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
     CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
 
@@ -720,6 +762,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaEventRecord(evstart));
 
     thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
 	thrust::minmax_element(thrust::cuda::par.on(stream), thrust::device_pointer_cast(device_xdata), thrust::device_pointer_cast(device_xdata)  + nsrc);
@@ -783,13 +827,21 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     setup<<<1, 1>>>(nsrc);
 
     build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
+    CUDA_CHECK(cudaPeekAtLastError());
 
     conclude<<<1, 1>>>(device_diag, device_diag + 1, (bool *)(device_diag + 2));
-
+    CUDA_CHECK(cudaEventRecord(evstop));
+    
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaStreamSynchronize(0));
     //assert(device_diag[3]);
-
+    CUDA_CHECK(cudaStreamSynchronize(0));
+    CUDA_CHECK(cudaEventSynchronize(evstop));
+    
+    float timems;
+    CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
+    printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
+    
     printf("device has found %d nodes, and max queue size was %d\n", device_diag[0], device_diag[1]);
 
     CUDA_CHECK(cudaMemcpyAsync(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
@@ -878,6 +930,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaFree(device_queue));
     CUDA_CHECK(cudaFree(device_bufexpansions));
     CUDA_CHECK(cudaFreeHost(device_diag));
+    CUDA_CHECK(cudaEventDestroy(evstart));
+    CUDA_CHECK(cudaEventDestroy(evstop));
 }
 
 void Tree::dispose()

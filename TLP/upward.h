@@ -23,8 +23,6 @@
 
 typedef REAL realtype;
 
-#include "reference-upward-kernels.h"
-
 namespace Tree
 {
     struct Node
@@ -74,37 +72,8 @@ namespace Tree
 	void p2e(const realtype * __restrict__ const xsources,
 		 const realtype * __restrict__ const ysources,
 		 const realtype * __restrict__ const vsources,
-		 const double x0, const double y0, const double h) 
-	    {
-		reference_upward_p2e(xsources, ysources, vsources, e - s,
-				     x0, y0, h, &mass, &w, &wx, &wy, &r,
-				     rexpansions, iexpansions);
-	    }
-
-	void e2e() 
-	    {
-		realtype srcmass[4], rx[4], ry[4];
-		realtype * chldrxp[4], *chldixp[4];
-
-		for(int c = 0; c < 4; ++c)
-		{
-		    Node * chd = children[c];
-
-		    srcmass[c] = chd->mass;
-		    rx[c] = chd->xcom() - xcom();
-		    ry[c] = chd->ycom() - ycom();
-		    chldrxp[c] = chd->rexpansions;
-		    chldixp[c] = chd->iexpansions;
-		}
-
-		reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
-#ifndef NDEBUG
-		{
-		    for(int i = 0; i < ORDER; ++i)
-			assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
-		}
-#endif
-	    }
+		 const double x0, const double y0, const double h) ;
+	void e2e();
 
 	~Node() 
 	    {
