@@ -72,13 +72,6 @@ __device__ void upward_p2e(const realtype xcom,
 		break;
 	}
 
-	/*if (tid == 0)
-	{
-	LUNROLL(n, 0, eval(ORDER - 1),`
-		rexpansions[n] = TMP(rxp, n);
-		iexpansions[n] = TMP(ixp, n);
-		');
-	}*/
 	if (tid < ORDER)
 	{
 		rexpansions[tid] = rval;

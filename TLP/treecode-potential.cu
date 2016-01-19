@@ -86,7 +86,7 @@ void treecode_potential_solve(const realtype theta,
     //CUDA_CHECK(cudaMemset(device_root, 0, sizeof(device_root)));
     
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, &root,  32 * 16, ORDER); //before: 64
+    Tree::build(xsrc, ysrc, vsrc, nsrc, &root,  32 * 16 , ORDER); //before: 64
     const double t1 = omp_get_wtime();
     
     

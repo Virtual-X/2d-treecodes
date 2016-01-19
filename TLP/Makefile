@@ -13,18 +13,17 @@
 real ?= double
 order ?= 12
 mrag-blocksize ?= 32
-config ?=release
+#config ?=release
 
-TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15
+TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15 -O3
 NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'
 TLPFLAGS += -march=native -fopenmp -fvisibility=hidden
 
 ifeq "$(config)" "release"
-	TLPFLAGS += -O3 -DNDEBUG
-	NVCCFLAGS += -O3
-#-DNDEBUG
+	TLPFLAGS +=  -DNDEBUG
+	NVCCFLAGS += -DNDEBUG
 else
-	TLPFLAGS += -g -G
+#TLPFLAGS += -g -G
 endif
 
 ifeq "$(profiling)" "1"

@@ -27,28 +27,27 @@
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
 #else
-#define MYRDTSC  
+#define MYRDTSC
 //_rdtsc()
 #endif
 
 #define WARPSIZE 32
 #define MFENCE __threadfence()
-//#define LMAX 15
-#define NQUEUES 4	
+#define NQUEUES 4
 
 namespace Tree
-{   	
+{
     void Node::p2e(const realtype * __restrict__ const xsources,
 		   const realtype * __restrict__ const ysources,
 		   const realtype * __restrict__ const vsources,
-		   const double x0, const double y0, const double h) 
+		   const double x0, const double y0, const double h)
     {
 	reference_upward_p2e(xsources, ysources, vsources, e - s,
 			     x0, y0, h, &mass, &w, &wx, &wy, &r,
 			     rexpansions, iexpansions);
     }
 
-    void Node::e2e() 
+    void Node::e2e()
     {
 	realtype srcmass[4], rx[4], ry[4];
 	realtype * chldrxp[4], *chldixp[4];
@@ -72,7 +71,7 @@ namespace Tree
 	}
 #endif
     }
-    
+
     texture<int, cudaTextureType1D> texKeys;
 
     __device__ int lower_bound(int s, int e, const int val)
@@ -104,7 +103,7 @@ namespace Tree
 	    }
 
 	    s = candidate_s;
-	    e = candidate_e; 
+	    e = candidate_e;
 	    c = min(c / 32, e - s);
 	}
 
@@ -140,7 +139,7 @@ namespace Tree
 	    }
 
 	    s = candidate_s;
-	    e = candidate_e; 
+	    e = candidate_e;
 	    c = min(c / 32, e - s);
 	}
 
@@ -169,7 +168,7 @@ namespace Tree
 		this->validchildren = 0;
 		this->r = 0;
 
-		for (int i = 0; i < 4; ++i) 
+		for (int i = 0; i < 4; ++i)
 		    children[i] = 0;
 	    }
 
@@ -222,7 +221,7 @@ namespace Tree
 	const realtype xcom = wsum ? wxsum / wsum : 0;
 	const realtype ycom = wsum ? wysum / wsum : 0;
 
-	upward_p2e(xcom, ycom, 
+	upward_p2e(xcom, ycom,
 		   xsorted + s, ysorted + s, vsorted + s, e - s,
 		   bufexpansion + order * (2 * nodeid + 0),
 		   bufexpansion + order * (2 * nodeid + 1));
@@ -261,7 +260,7 @@ namespace Tree
 	    bool e2e = false;
 
 	    if (master)
-		e2e = 3 == atomicAdd(&parent->validchildren, 1); 
+		e2e = 3 == atomicAdd(&parent->validchildren, 1);
 
 	    e2e = __shfl(e2e, 0);
 
@@ -315,7 +314,7 @@ namespace Tree
 		{
 		    const DeviceNode * chd = bufnodes + parent->children[tid];
 
-		    upward_e2e(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass, 
+		    upward_e2e(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass,
 			       bufexpansion + order * (2 * parent->children[tid] + 0),
 			       bufexpansion + order * (2 * parent->children[tid] + 1),
 			       bufexpansion + order * (2 * node->parent + 0),
@@ -351,7 +350,7 @@ namespace Tree
 	    qtailnext[i] = 0;
 	}
 
-	const int qid = 0;	
+	const int qid = 0;
 	queues[qid][0] = 0;
 	qtail[qid] = 1;
 	qtailnext[qid] = 1;
@@ -361,20 +360,20 @@ namespace Tree
     }
 
 #define LQSIZE 16
-     
+
     __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
     {
 	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
 
 #if LQSIZE > 0
 	__shared__ int ltasks[LQSIZE];
-	
+
 	{
             const int tid2d = threadIdx.x + blockDim.x * threadIdx.y;
- 
+
             for(int i = tid2d; i < LQSIZE; i += blockDim.x * blockDim.y)
 		ltasks[i] = -1;
-             
+
             __syncthreads();
         }
 #endif
@@ -386,7 +385,7 @@ namespace Tree
 
 	int iteration = -1;
 
-	while(qitems && qgood) 
+	while(qitems && qgood)
 	{
 	    const int qid = (++iteration + blockIdx.x) % NQUEUES;
 
@@ -399,7 +398,7 @@ namespace Tree
 		    for(int i = 0; i < LQSIZE && currid == -1; ++i)
 			currid = atomicExch(ltasks + i, -1);
 #endif
-		    
+
 		    //check in one of the global queues
 		    if (currid == -1)
 			if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
@@ -414,7 +413,7 @@ namespace Tree
 
 				qhead[qid] = currhead + 1;
 
-				MFENCE;			
+				MFENCE;
 			    }
 
 			    qlock[qid] = 1;
@@ -442,7 +441,7 @@ namespace Tree
 			atomicSub(&qitems, 1);
 
 		    currid = -1;
-		}	
+		}
 		else
 		{
 		    if (master) //children allocation
@@ -474,7 +473,7 @@ namespace Tree
 			const size_t indexsup = c == 3 ? e : upper_bound(s, e, key2);
 
 			if (master)
-			{    
+			{
 			    DeviceNode * child = bufnodes + node->children[c];
 			    child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, currid);
 			}
@@ -490,11 +489,11 @@ namespace Tree
 #if (LQSIZE > 0)
 			for(int i = 0; i < LQSIZE && !placed_locally; ++i)
 			    placed_locally = atomicCAS(ltasks + i, -1, localtask) == -1;
-#endif	
+#endif
 			const int ngtasks = 3 - placed_locally;
-			
+
 			const int base = atomicAdd(&qtailnext[qid], ngtasks);
-			
+
 			if (base + ngtasks - qhead[qid] >= queuesize)
 			{
 			    qgood = false;
@@ -508,7 +507,7 @@ namespace Tree
 			    atomicAdd(&qitems, 3);
 
 			    MFENCE;
-			    
+
 			    atomicAdd(&qtail[qid], ngtasks);
 			}
 
@@ -521,11 +520,11 @@ namespace Tree
 	}
     }
 
-struct BuildResult
-{
-    int ntreenodes, queuesize, nqueueitems;
-    bool good;
-};
+    struct BuildResult
+    {
+	int ntreenodes, queuesize, nqueueitems;
+	bool good;
+    };
 
     __global__ void conclude(BuildResult * result)
     {
@@ -744,7 +743,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
 
     realtype * device_bufexpansions;
-    CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));    
+    CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));
 
     BuildResult * device_diag;
     CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
@@ -787,7 +786,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	//printf("sizeof(ptrs) = %d\n", sizeof(ptrs));
 	//exit(0);
     }
-    
+
     CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
     CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
 
@@ -799,31 +798,31 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
-    
+
 
     sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &ext);
-    
+
     setup<<<1, 1>>>(nsrc);
 
     CUDA_CHECK(cudaEventRecord(evstart));
-    
+
     build_tree<<<nsmxs * 2, dim3(32, 16)>>>(LEAF_MAXCOUNT, ext);
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaEventRecord(evstop));
-    
+
     conclude<<<1, 1>>>(device_diag);
-    
-    
+
+
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaStreamSynchronize(0));
     //assert(device_diag[3]);
     CUDA_CHECK(cudaStreamSynchronize(0));
     CUDA_CHECK(cudaEventSynchronize(evstop));
-    
+
     float timems;
     CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
     printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
-    
+
     printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
 	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good);
 
@@ -885,7 +884,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     free(kv);
 #endif
 
-    _build(root, 0, 0, 0, 0, nsrc, 0); 
+    _build(root, 0, 0, 0, 0, nsrc, 0);
 
 #ifndef NDEBUG
     const int nnodes = device_diag->ntreenodes;
