@@ -358,14 +358,26 @@ namespace Tree
 
 	qitems = 1;
 	qgood = true;
-
-	//printf("hello from Tree with ORDER %d\n", ORDER);
-	//print_message();
     }
 
+#define LQSIZE 16
+     
     __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
     {
 	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
+
+#if LQSIZE > 0
+	__shared__ int ltasks[LQSIZE];
+	
+	{
+            const int tid2d = threadIdx.x + blockDim.x * threadIdx.y;
+ 
+            for(int i = tid2d; i < LQSIZE; i += blockDim.x * blockDim.y)
+		ltasks[i] = -1;
+             
+            __syncthreads();
+        }
+#endif
 
 	const int tid = threadIdx.x;
 	const bool master = tid == 0;
@@ -382,23 +394,31 @@ namespace Tree
 	    {
 		if (master)
 		{
-		    if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
-		    {
-			const int currhead = qhead[qid];
-
-			if (currhead < qtail[qid])
+#if LQSIZE > 0
+		    //get a task fromthe local pool if possible
+		    for(int i = 0; i < LQSIZE && currid == -1; ++i)
+			currid = atomicExch(ltasks + i, -1);
+#endif
+		    
+		    //check in one of the global queues
+		    if (currid == -1)
+			if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
 			{
-			    const int entry = currhead % queuesize;
+			    const int currhead = qhead[qid];
 
-			    currid = queues[qid][entry];
+			    if (currhead < qtail[qid])
+			    {
+				const int entry = currhead % queuesize;
 
-			    qhead[qid] = currhead + 1;
+				currid = queues[qid][entry];
 
-			    MFENCE;			
+				qhead[qid] = currhead + 1;
+
+				MFENCE;			
+			    }
+
+			    qlock[qid] = 1;
 			}
-
-			qlock[qid] = 1;
-		    }
 		}
 
 		currid = __shfl(currid, 0);
@@ -462,20 +482,34 @@ namespace Tree
 
 		    if (master) //enqueue new tasks
 		    {
-			const int base = atomicAdd(&qtailnext[qid], 3);
+			bool placed_locally = false;
 
-			if (base + 4 - qhead[qid] >= queuesize)
+			const int localtask = node->children[2];
+
+			//try to put a small task in the local queue
+#if (LQSIZE > 0)
+			for(int i = 0; i < LQSIZE && !placed_locally; ++i)
+			    placed_locally = atomicCAS(ltasks + i, -1, localtask) == -1;
+#endif	
+			const int ngtasks = 3 - placed_locally;
+			
+			const int base = atomicAdd(&qtailnext[qid], ngtasks);
+			
+			if (base + ngtasks - qhead[qid] >= queuesize)
+			{
 			    qgood = false;
+			    break;
+			}
 			else
 			{
-			    for(int c = 0; c < 3; ++c)
+			    for(int c = 0; c < ngtasks; ++c)
 				queues[qid][(base + c) % queuesize] = node->children[c];
 
 			    atomicAdd(&qitems, 3);
 
 			    MFENCE;
-
-			    atomicAdd(&qtail[qid], 3);
+			    
+			    atomicAdd(&qtail[qid], ngtasks);
 			}
 
 			currid = node->children[3];
@@ -685,7 +719,9 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 		 Node * const root, const int LEAF_MAXCOUNT, const int EXPANSIONORDER)
 {
     Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
-
+    int nsmxs = -1;
+    CUDA_CHECK(cudaDeviceGetAttribute (&nsmxs, cudaDevAttrMultiProcessorCount, 0));
+    printf("i have found %d smxs\n", nsmxs);
     CUDA_CHECK(cudaMallocHost(&xdata, sizeof(*xdata) * nsrc));
     CUDA_CHECK(cudaMallocHost(&ydata, sizeof(*ydata) * nsrc));
     CUDA_CHECK(cudaMallocHost(&vdata, sizeof(*vdata) * nsrc));
@@ -723,22 +759,7 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     cudaEvent_t evstart, evstop;
     CUDA_CHECK(cudaEventCreate(&evstart));
     CUDA_CHECK(cudaEventCreate(&evstop));
-    
-    CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
-    CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
 
-#ifndef NDEBUG
-    CUDA_CHECK(cudaMemsetAsync(device_keys, 0xff, sizeof(int) * nsrc));
-#endif
-
-    CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-
-    CUDA_CHECK(cudaEventRecord(evstart));
-
-    sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &ext);
-    
     size_t textureoffset = 0;
 
     CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
@@ -766,14 +787,32 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	//printf("sizeof(ptrs) = %d\n", sizeof(ptrs));
 	//exit(0);
     }
+    
+    CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
+    CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
 
+#ifndef NDEBUG
+    CUDA_CHECK(cudaMemsetAsync(device_keys, 0xff, sizeof(int) * nsrc));
+#endif
+
+    CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+
+    
+
+    sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &ext);
+    
     setup<<<1, 1>>>(nsrc);
 
-    build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
+    CUDA_CHECK(cudaEventRecord(evstart));
+    
+    build_tree<<<nsmxs * 2, dim3(32, 16)>>>(LEAF_MAXCOUNT, ext);
     CUDA_CHECK(cudaPeekAtLastError());
-
-    conclude<<<1, 1>>>(device_diag);
     CUDA_CHECK(cudaEventRecord(evstop));
+    
+    conclude<<<1, 1>>>(device_diag);
+    
     
     CUDA_CHECK(cudaPeekAtLastError());
     CUDA_CHECK(cudaStreamSynchronize(0));
