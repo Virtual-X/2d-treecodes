@@ -15,7 +15,7 @@ order ?= 12
 mrag-blocksize ?= 32
 config ?=release
 
-TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order)
+TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15
 NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'
 TLPFLAGS += -march=native -fopenmp -fvisibility=hidden
 
@@ -32,7 +32,7 @@ ifeq "$(profiling)" "1"
 	NVCCFLAGS += -lineinfo
 endif
 
-potential: treecode-potential.o order$(order)-upward.o
+potential: treecode-potential.o order$(order)-upward.o sort-sources.o
 
 force: treecode-force.o order$(order)-upward.o
 
@@ -45,6 +45,9 @@ treecode-force.o: treecode-force.cu treecode-force.h Makefile
 	-c $<
 
 order$(order)-upward.o: upward.cu upward.h Makefile
+	nvcc $(NVCCFLAGS) -dc -c $< -o $@
+
+sort-sources.o: sort-sources.cu sort-sources.h Makefile
 	nvcc $(NVCCFLAGS) -dc -c $< -o $@
 
 clean:
