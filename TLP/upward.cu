@@ -363,10 +363,71 @@ namespace Tree
 	//print_message();
     }
 
-    __launch_bounds__(128, 8)
+#define LQSIZE 128
+    
+    __device__ inline bool lput(int * ll, int * lt, int t)
+    {
+	for(int i = 0; i < 1 + 0*LQSIZE; ++i)
+	{
+	    bool ok = false;
+
+	    if (atomicCAS(ll + i, 1, 0))
+	    {
+		ok = lt[i] == -1;
+
+		if (ok)
+		{
+		    lt[i] = t;
+		
+		    __threadfence_block();
+
+		    //printf("PUT something from the local queue! %d\n", t);
+		}
+
+		ll[i] = 1;
+	    }
+
+	    if (ok)
+		return true;
+	}
+	
+	return false;
+    }
+
+    __device__ inline int lget(int * ll, int * lt)
+    {
+	for(int i = 0; i < LQSIZE; ++i)
+	{
+	    int t = -1;
+
+	    if (atomicCAS(ll + i, 1, 0))
+	    {
+		if (lt[i] != -1)
+		{
+		    t = lt[i];
+		    lt[i] = -1;
+
+		    __threadfence_block();
+
+		    //printf("got something from the local queue! %d\n", t);
+		}
+
+		ll[i] = 1;
+	    }
+
+	    if (t != -1)
+		return t;
+	}
+	
+	return -1;
+    } 
+
+    //__launch_bounds__(128, 8)
     __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
     {
 	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
+
+	__shared__ int llocks[LQSIZE], ltasks[LQSIZE];
 
 	const int tid = threadIdx.x;
 	const bool master = tid == 0;
@@ -375,7 +436,19 @@ namespace Tree
 
 	int iteration = -1;
 
-	while(qitems && qgood) 
+	{
+	    const int tid2d = threadIdx.x + blockDim.x * threadIdx.y;
+
+	    if (tid2d < LQSIZE)
+	    {
+		llocks[tid2d] = 1;
+		ltasks[tid2d] = -1;
+	    }
+
+	    __syncthreads();
+	}
+
+	while(qitems && qgood /*&& iteration < 100000*/) 
 	{
 	    const int qid = (++iteration + blockIdx.x) % NQUEUES;
 
@@ -383,25 +456,28 @@ namespace Tree
 	    {
 		if (master)
 		{
-		    if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
-		    {
-			const int currhead = qhead[qid];
+		    // currid = lget(llocks, ltasks);
 
-			if (currhead < qtail[qid])
+		    if (currid == -1)
+			if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
 			{
-			    const int entry = currhead % queuesize;
+			    const int currhead = qhead[qid];
 
-			    currid = queues[qid][entry];
+			    if (currhead < qtail[qid])
+			    {
+				const int entry = currhead % queuesize;
 
-			    qhead[qid] = currhead + 1;
+				currid = queues[qid][entry];
 
-			    MFENCE;			
+				qhead[qid] = currhead + 1;
+
+				MFENCE;			
+			    }
+
+			    qlock[qid] = 1;
 			}
-
-			qlock[qid] = 1;
-		    }
 		}
-
+		
 		currid = __shfl(currid, 0);
 	    }
 
@@ -463,20 +539,32 @@ namespace Tree
 
 		    if (master) //enqueue new tasks
 		    {
-			const int base = atomicAdd(&qtailnext[qid], 3);
+			MFENCE;
 
-			if (base + 4 - qhead[qid] >= queuesize)
+			bool placed_locally = false;
+
+			//if (e - s < LEAF_MAXCOUNT * 8 || l + 1 >= LMAX)
+			//  placed_locally = lput(llocks, ltasks, node->children[2]);
+			
+			const int ngtasks = 3 - placed_locally;
+
+			const int base = atomicAdd(&qtailnext[qid], ngtasks);
+
+			if (base + ngtasks - qhead[qid] >= queuesize)
+			{
 			    qgood = false;
+			    break;
+			}
 			else
 			{
-			    for(int c = 0; c < 3; ++c)
+			    for(int c = 0; c < ngtasks; ++c)
 				queues[qid][(base + c) % queuesize] = node->children[c];
 
 			    atomicAdd(&qitems, 3);
 
 			    MFENCE;
 
-			    atomicAdd(&qtail[qid], 3);
+			    atomicAdd(&qtail[qid], ngtasks);
 			}
 
 			currid = node->children[3];
@@ -491,7 +579,7 @@ namespace Tree
     __global__ void conclude(int * treenodes, int * queuesize, bool * good)
     {
 	*treenodes = nnodes;
-	*queuesize = qtail - qhead;
+	*queuesize = qitems;//qtail - qhead;
 	*good = qgood;
     }
 
@@ -788,9 +876,11 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     }
 
     setup<<<1, 1>>>(nsrc);
-
-    build_tree<<<14 * 16, dim3(32, 4)>>>(LEAF_MAXCOUNT, ext);
-
+	CUDA_CHECK(cudaEventRecord(evstop));
+	CUDA_CHECK(cudaPeekAtLastError());
+    build_tree<<<14 * 16, dim3(32, 1)>>>(LEAF_MAXCOUNT, ext);
+	CUDA_CHECK(cudaEventRecord(evstop));
+	CUDA_CHECK(cudaPeekAtLastError());
 //<<<<<<< HEAD
 	 conclude<<<1, 1>>>(device_diag, device_diag + 1, (bool *)(device_diag + 2));
 //conclude<<<1, 1>>>(device_diag, device_diag + 1, (bool *)(device_diag + 2));

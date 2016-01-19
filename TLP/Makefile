@@ -21,7 +21,8 @@ TLPFLAGS += -march=native -fopenmp -fvisibility=hidden
 
 ifeq "$(config)" "release"
 	TLPFLAGS += -O3 -DNDEBUG
-	NVCCFLAGS += -O4 -DNDEBUG
+	NVCCFLAGS += -O3
+#-DNDEBUG
 else
 	TLPFLAGS += -g -G
 endif
