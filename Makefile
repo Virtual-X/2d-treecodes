@@ -27,11 +27,13 @@ ifeq "$(gprof)" "1"
 endif
 
 test: main.cpp libraries
-	nvcc $(NVCCFLAGS) -g $< libtreecode-potential.so libtreecode-force.so  -o test 
+	nvcc $(NVCCFLAGS) -g $< libtreecode-potential.so   -o test 
+
+#libtreecode-force.so
 
 libraries:
 	make -f libraries.Makefile order=$(potential-order) libtreecode-potential.so
-	make -f libraries.Makefile order=$(force-order) mrag-blocksize=32 libtreecode-force.so
+#make -f libraries.Makefile order=$(force-order) mrag-blocksize=32 libtreecode-force.so
 
 clean:
 	rm -f test

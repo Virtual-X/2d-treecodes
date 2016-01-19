@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "treecode-potential.h"
-#include "treecode-force.h"
+//#include "treecode-force.h"
 
 double  tol = 1e-8;
 
@@ -193,10 +193,10 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	if (mrag)
 	{
 	    printf("MRAG LAYOUT\n");
-	    treecode_force_mrag_solve(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
+	    //treecode_force_mrag_solve(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
 	}
 	else
-	    treecode_force_solve(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
+	    ;//treecode_force_solve(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
     const double tend = omp_get_wtime();
 
     printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);

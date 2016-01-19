@@ -17,61 +17,18 @@
 #include <limits>
 #include <utility>
 
-
 #include "upward.h"
 #include "sort-sources.h"
 #include "upward-kernels.h"
 #include "cuda-common.h"
 
-#define  _INSTRUMENTATION_
-#ifndef _INSTRUMENTATION_
-#define MYRDTSC 0
-#else
-#define MYRDTSC
-//_rdtsc()
-#endif
-
 #define WARPSIZE 32
 #define MFENCE __threadfence()
 #define NQUEUES 4
+#define LQSIZE 16
 
 namespace Tree
 {
-    void Node::p2e(const realtype * __restrict__ const xsources,
-		   const realtype * __restrict__ const ysources,
-		   const realtype * __restrict__ const vsources,
-		   const double x0, const double y0, const double h)
-    {
-	reference_upward_p2e(xsources, ysources, vsources, e - s,
-			     x0, y0, h, &mass, &w, &wx, &wy, &r,
-			     rexpansions, iexpansions);
-    }
-
-    void Node::e2e()
-    {
-	realtype srcmass[4], rx[4], ry[4];
-	realtype * chldrxp[4], *chldixp[4];
-
-	for(int c = 0; c < 4; ++c)
-	{
-	    Node * chd = children[c];
-
-	    srcmass[c] = chd->mass;
-	    rx[c] = chd->xcom() - xcom();
-	    ry[c] = chd->ycom() - ycom();
-	    chldrxp[c] = chd->rexpansions;
-	    chldixp[c] = chd->iexpansions;
-	}
-
-	reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
-#ifndef NDEBUG
-	{
-	    for(int i = 0; i < ORDER; ++i)
-		assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
-	}
-#endif
-    }
-
     texture<int, cudaTextureType1D> texKeys;
 
     __device__ int lower_bound(int s, int e, const int val)
@@ -177,11 +134,10 @@ namespace Tree
 	__device__ realtype ycom() const { return w ? wy / w : 0; }
     };
 
-    //TREE info
+//TREE info
     __constant__ int bufsize;
     __device__ int nnodes;
     __constant__ DeviceNode * bufnodes;
-    __constant__ int order;
     __constant__ realtype * bufexpansion;
 
     __device__ void process_leaf(const int nodeid, realtype extent)
@@ -223,8 +179,8 @@ namespace Tree
 
 	upward_p2e(xcom, ycom,
 		   xsorted + s, ysorted + s, vsorted + s, e - s,
-		   bufexpansion + order * (2 * nodeid + 0),
-		   bufexpansion + order * (2 * nodeid + 1));
+		   bufexpansion + ORDER * (2 * nodeid + 0),
+		   bufexpansion + ORDER * (2 * nodeid + 1));
 
 	realtype r2 = 0;
 	for(int i = s + tid; i < e; i += WARPSIZE)
@@ -315,10 +271,10 @@ namespace Tree
 		    const DeviceNode * chd = bufnodes + parent->children[tid];
 
 		    upward_e2e(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass,
-			       bufexpansion + order * (2 * parent->children[tid] + 0),
-			       bufexpansion + order * (2 * parent->children[tid] + 1),
-			       bufexpansion + order * (2 * node->parent + 0),
-			       bufexpansion + order * (2 * node->parent + 1));
+			       bufexpansion + ORDER * (2 * parent->children[tid] + 0),
+			       bufexpansion + ORDER * (2 * parent->children[tid] + 1),
+			       bufexpansion + ORDER * (2 * node->parent + 0),
+			       bufexpansion + ORDER * (2 * node->parent + 1));
 		}
 
 		if (master)
@@ -331,10 +287,9 @@ namespace Tree
 	}
     }
 
-    //QUEUE info
+//QUEUE info
     __constant__ int queuesize, * queues[NQUEUES];
     __device__  int qlock[NQUEUES], qhead[NQUEUES], qtail[NQUEUES], qtailnext[NQUEUES], qitems;
-
     __device__ bool qgood;
 
     __global__ void setup(const int nsrc)
@@ -359,8 +314,6 @@ namespace Tree
 	qgood = true;
     }
 
-#define LQSIZE 16
-
     __global__ void build_tree(const int LEAF_MAXCOUNT, const double extent)
     {
 	assert(blockDim.x == warpSize && WARPSIZE == warpSize);
@@ -369,13 +322,13 @@ namespace Tree
 	__shared__ int ltasks[LQSIZE];
 
 	{
-            const int tid2d = threadIdx.x + blockDim.x * threadIdx.y;
+	    const int tid2d = threadIdx.x + blockDim.x * threadIdx.y;
 
-            for(int i = tid2d; i < LQSIZE; i += blockDim.x * blockDim.y)
+	    for(int i = tid2d; i < LQSIZE; i += blockDim.x * blockDim.y)
 		ltasks[i] = -1;
 
-            __syncthreads();
-        }
+	    __syncthreads();
+	}
 #endif
 
 	const int tid = threadIdx.x;
@@ -394,14 +347,14 @@ namespace Tree
 		if (master)
 		{
 #if LQSIZE > 0
-		    //get a task fromthe local pool if possible
+		    //get a task from the local pool if possible
 		    for(int i = 0; i < LQSIZE && currid == -1; ++i)
 			currid = atomicExch(ltasks + i, -1);
 #endif
 
-		    //check in one of the global queues
+		    //or take one task from the global queues (if any)
 		    if (currid == -1)
-			if (atomicCAS(&qlock[qid], 1, 0)) //then take one task if available
+			if (atomicCAS(&qlock[qid], 1, 0)) 
 			{
 			    const int currhead = qhead[qid];
 
@@ -484,9 +437,9 @@ namespace Tree
 			bool placed_locally = false;
 
 			const int localtask = node->children[2];
-
-			//try to put a small task in the local queue
+			
 #if (LQSIZE > 0)
+			//try to put a task in the local queue
 			for(int i = 0; i < LQSIZE && !placed_locally; ++i)
 			    placed_locally = atomicCAS(ltasks + i, -1, localtask) == -1;
 #endif
@@ -534,31 +487,307 @@ namespace Tree
 	result->good = qgood;
     }
 
+    realtype xmin, ymin, extent, *xdata, *ydata, *vdata;
+    
+    realtype * host_expansions = NULL;
+    Node * host_nodes = NULL;
+    int host_nnodes = 0;
+    
+    realtype *device_xdata = NULL, *device_ydata = NULL, *device_vdata = NULL;
+    DeviceNode * device_bufnodes = NULL;
+    realtype * device_bufexpansions = NULL;
+    int * device_keys = NULL;
+}
+
+namespace TreeCheck
+{
+    void verify_all(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc, const int LEAF_MAXCOUNT);
+}
+
+void Tree::build(const realtype * const xsrc,
+		 const realtype * const ysrc,
+		 const realtype * const vsrc,
+		 const int nsrc,
+		 const int LEAF_MAXCOUNT)
+{
+    cudaStream_t stream = 0;
+    //CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
+    
+    texKeys.channelDesc = cudaCreateChannelDesc<int>();
+    texKeys.filterMode = cudaFilterModePoint;
+    texKeys.mipmapFilterMode = cudaFilterModePoint;
+    texKeys.normalized = 0;
+
+    cudaEvent_t evstart, evstop;
+    CUDA_CHECK(cudaEventCreate(&evstart));
+    CUDA_CHECK(cudaEventCreate(&evstop));
+    
+    int nsmxs = -1;
+    CUDA_CHECK(cudaDeviceGetAttribute (&nsmxs, cudaDevAttrMultiProcessorCount, 0));
+    printf("i have found %d smxs\n", nsmxs);
+   
+    const int device_queuesize = 8e4;
+    const int device_bufsize = 8e4;
+
+    int * device_queue;
+    CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize * NQUEUES));
+
+    CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));    
+    CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * ORDER * 2 * device_bufsize));
+    
+    CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
+    CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
+    CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
+
+    posix_memalign((void **)&xdata, 32, sizeof(realtype) * nsrc);
+    posix_memalign((void **)&ydata, 32, sizeof(realtype) * nsrc);
+    posix_memalign((void **)&vdata, 32, sizeof(realtype) * nsrc);
+    
+    BuildResult * device_diag;
+    CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
+
+    
+    CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
+   
+    size_t textureoffset = 0;
+    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
+			       sizeof(int) * nsrc));
+    assert(textureoffset == 0);
+
+    CUDA_CHECK(cudaPeekAtLastError());
+
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(xsorted, &device_xdata, sizeof(device_xdata)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(ysorted, &device_ydata, sizeof(device_ydata)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(vsorted, &device_vdata, sizeof(device_vdata)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufsize, &device_bufsize, sizeof(device_bufsize)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufexpansion, &device_bufexpansions, sizeof(device_bufexpansions)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(queuesize, &device_queuesize, sizeof(device_queuesize)));
+
+    {
+	int * ptrs[NQUEUES];
+	for(int i = 0; i < NQUEUES; ++i)
+	    ptrs[i] = device_queue + device_queuesize * i;
+
+	CUDA_CHECK(cudaMemcpyToSymbolAsync(queues, &ptrs, sizeof(ptrs)));
+    }
+
+    //mi serve?
+    CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
+    CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* ORDER * 2 * device_bufsize));
+
+#ifndef NDEBUG
+    CUDA_CHECK(cudaMemsetAsync(device_keys, 0xff, sizeof(int) * nsrc));
+#endif
+
+    CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
+
+    sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &extent);
+
+    setup<<<1, 1>>>(nsrc);
+
+    CUDA_CHECK(cudaEventRecord(evstart));
+
+    const int ysize = 16;
+    build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
+    CUDA_CHECK(cudaPeekAtLastError());
+    
+    CUDA_CHECK(cudaEventRecord(evstop));
+
+    conclude<<<1, 1>>>(device_diag);
+
+    CUDA_CHECK(cudaPeekAtLastError());
+
+    CUDA_CHECK(cudaMemcpyAsync(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+
+    //CUDA_CHECK(cudaStreamSynchronize(0));
+    //assert(device_diag[3]);
+    CUDA_CHECK(cudaStreamSynchronize(0));
+
+    CUDA_CHECK(cudaEventSynchronize(evstop));
+
+    float timems;
+    CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
+    printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
+
+    printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
+	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good);
+
+    host_nnodes = device_diag->ntreenodes;
+    const size_t expansionsbytes = sizeof(realtype) * 2 * ORDER * host_nnodes;
+ 
+    posix_memalign((void **)&host_expansions, 32, expansionsbytes);
+    posix_memalign((void **)&host_nodes, 32, sizeof(Node) * host_nnodes);
+
+    CUDA_CHECK(cudaMemcpyAsync(host_expansions, device_bufexpansions, expansionsbytes, cudaMemcpyDeviceToHost));
+    
+    std::vector<DeviceNode> devnodes(host_nnodes);
+    CUDA_CHECK(cudaMemcpyAsync(&devnodes.front(), device_bufnodes, sizeof(DeviceNode) * host_nnodes, cudaMemcpyDeviceToHost));
+
+    for(int i = 0; i < host_nnodes; ++i)
+    {
+	host_nodes[i].s = devnodes[i].s;
+	host_nodes[i].e = devnodes[i].e;
+	host_nodes[i].mass = devnodes[i].mass;
+	const realtype w = devnodes[i].w;
+	host_nodes[i].xcom = w == 0 ? 0 : devnodes[i].wx / devnodes[i].w;
+	host_nodes[i].ycom = w == 0 ? 0 : devnodes[i].wy / devnodes[i].w;
+	host_nodes[i].r = devnodes[i].r;
+	const bool leaf = devnodes[i].e - devnodes[i].s <= LEAF_MAXCOUNT || devnodes[i].l + 1 > LMAX;
+	
+	//host_nodes[i].leaf = leaf;
+	for(int c = 0; c < 4; ++c)
+	    host_nodes[i].state.children[c] = devnodes[i].children[c];
+    }
+    
+#ifndef NDEBUG
+    TreeCheck::verify_all(xsrc, ysrc, vsrc, nsrc, LEAF_MAXCOUNT);
+#endif
+  
+    CUDA_CHECK(cudaFree(device_queue));
+    
+    CUDA_CHECK(cudaFreeHost(device_diag));
+    CUDA_CHECK(cudaEventDestroy(evstart));
+    CUDA_CHECK(cudaEventDestroy(evstop));
+}
+
+void Tree::dispose()
+{
+    CUDA_CHECK(cudaFree(device_xdata));
+    CUDA_CHECK(cudaFree(device_ydata));
+    CUDA_CHECK(cudaFree(device_vdata));
+    CUDA_CHECK(cudaFree(device_bufnodes));
+    CUDA_CHECK(cudaFree(device_bufexpansions));
+    CUDA_CHECK(cudaFree(device_keys));
+    
+    free(host_nodes);
+    free(host_expansions);
+    free(xdata);
+    free(ydata);
+    free(vdata);
+}
+
+namespace TreeCheck
+{   
     int LEAF_MAXCOUNT;
 
-    realtype ext, xmin, ymin;
+    //realtype debug_ext, debug_xmin, debug_ymin;
 
-    int * keys = NULL;
+    int * debug_keys = NULL;
 
-    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
+    //realtype *debug_xdata = NULL, *debug_ydata = NULL, *debug_vdata = NULL;
 
-    Node * root = NULL;
-
-    void _build(Node * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
+    struct DebugNode
     {
-	const double h = ext / (1 << l);
-	const double x0 = xmin + h * x, y0 = ymin + h * y;
+	int x, y, l, s, e;
+	bool leaf;
+	realtype w, wx, wy, mass, r;
+
+	DebugNode * children[4];
+
+	void setup(int x, int y, int l, int s, int e, bool leaf)
+	    {
+		this->x = x;
+		this->y = y;
+		this->l = l;
+		this->s = s;
+		this->e = e;
+		this->leaf = leaf;
+
+	    }
+
+	realtype xcom() const { return wx / w; }
+	realtype ycom() const { return wy / w; }
+
+	DebugNode() 
+	    { 
+		for (int i = 0; i < 4; ++i) 
+		    children[i] = nullptr; 
+
+		w = wx = wy = mass = r = 0; 
+	    }
+		
+	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
+
+	alignedvec rexpansions;
+	alignedvec iexpansions;
+
+	void allocate_children()
+	    {
+		for(int i = 0; i < 4; ++i)
+		    children[i] = new DebugNode;
+	    }
+	
+	realtype * rexp(){return &rexpansions[0];} 
+	realtype * iexp(){return &iexpansions[0];}
+	
+	void p2e(const realtype * __restrict__ const xsources,
+		 const realtype * __restrict__ const ysources,
+		 const realtype * __restrict__ const vsources,
+		 const double x0, const double y0, const double h)
+	    {
+		reference_upward_p2e(xsources, ysources, vsources, e - s,
+				     x0, y0, h, &mass, &w, &wx, &wy, &r,
+				     rexpansions, iexpansions);
+	    }
+	void e2e()
+	    {
+		realtype srcmass[4], rx[4], ry[4];
+		realtype * chldrxp[4], *chldixp[4];
+
+		for(int c = 0; c < 4; ++c)
+		{
+		    DebugNode * chd = children[c];
+
+		    srcmass[c] = chd->mass;
+		    rx[c] = chd->xcom() - xcom();
+		    ry[c] = chd->ycom() - ycom();
+		    chldrxp[c] = chd->rexpansions;
+		    chldixp[c] = chd->iexpansions;
+		}
+
+		reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+#ifndef NDEBUG
+		{
+		    for(int i = 0; i < ORDER; ++i)
+			assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
+		}
+#endif
+	    }
+
+	~DebugNode() 
+	    {
+		for(int i = 0; i < 4; ++i)
+		    if (children[i])
+		    {
+			delete children[i];
+
+			children[i] = nullptr;
+		    }
+	    }
+    };
+
+    DebugNode * debugroot = NULL;
+
+    void _build(DebugNode * const node, const int x, const int y, const int l, const int s, const int e, const int mask)
+    {
+	const double h = Tree::extent / (1 << l);
+	const double x0 = Tree::xmin + h * x, y0 = Tree::ymin + h * y;
 
 	assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
 
 	for(int i = s; i < e; ++i)
-	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
+	    assert(Tree::xdata[i] >= x0 && Tree::xdata[i] < x0 + h && Tree::ydata[i] >= y0 && Tree::ydata[i] < y0 + h);
 
 	node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
 
 	if (node->leaf)
 	{
-	    node->p2e(&xdata[s], &ydata[s], &vdata[s], x0, y0, h);
+	    node->p2e(&Tree::xdata[s], &Tree::ydata[s], &Tree::vdata[s], x0, y0, h);
 
 	    assert(node->r < 1.5 * h);
 	}
@@ -573,17 +802,17 @@ namespace Tree
 		const int key1 = mask | (c << shift);
 		const int key2 = key1 + (1 << shift) - 1;
 
-		const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
-		const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
+		const size_t indexmin = c == 0 ? s : std::lower_bound(debug_keys + s, debug_keys + e, key1) - debug_keys;
+		const size_t indexsup = c == 3 ? e : std::upper_bound(debug_keys + s, debug_keys + e, key2) - debug_keys;
 
-		Node * chd = node->children[c];
+		DebugNode * chd = node->children[c];
 
 		_build(chd, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1);
 	    }
 
 	    for(int c = 0; c < 4; ++c)
 	    {
-		Node * chd = node->children[c];
+		DebugNode * chd = node->children[c];
 		node->mass += chd->mass;
 		node->w += chd->w;
 		node->wx += chd->wx;
@@ -608,7 +837,7 @@ namespace Tree
 		realtype r = 0;
 
 		for(int i = s; i < e; ++i)
-		    r = std::max(r, pow(xdata[i] - node->xcom(), (realtype)2) + pow(ydata[i] - node->ycom(), (realtype)2));
+		    r = std::max(r, pow(Tree::xdata[i] - node->xcom(), (realtype)2) + pow(Tree::ydata[i] - node->ycom(), (realtype)2));
 
 		assert (sqrt(r) <= node->r);
 	    }
@@ -618,308 +847,183 @@ namespace Tree
 
 	assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
-}
 
-bool verbose = false;
+    bool verbose = false;
 
-int check_bits(double x, double y)
-{
-    union ASD
+    int check_bits(double x, double y)
     {
-	unsigned char c[8];
-	double d;
-    };
-
-    ASD a, b;
-    a.d = x;
-    b.d = y;
-
-    int currbit = 0;
-    for(int i = 0; i < 8; ++i)
-    {
-	unsigned char c1 = a.c[7 - i], c2 = b.c[7 - i];
-
-	for(int b = 0; b < 8; ++b, ++currbit)
+	union ASD
 	{
-	    if (((c1 >> b) & 1) != ((c2 >> b) & 1))
+	    unsigned char c[8];
+	    double d;
+	};
+
+	ASD a, b;
+	a.d = x;
+	b.d = y;
+
+	int currbit = 0;
+	for(int i = 0; i < 8; ++i)
+	{
+	    unsigned char c1 = a.c[7 - i], c2 = b.c[7 - i];
+
+	    for(int b = 0; b < 8; ++b, ++currbit)
 	    {
-		if (verbose) printf("numbers differ from the %d most-significant bit\n", currbit);
-		return currbit;
+		if (((c1 >> b) & 1) != ((c2 >> b) & 1))
+		{
+		    if (verbose) printf("numbers differ from the %d most-significant bit\n", currbit);
+		    return currbit;
+		}
 	    }
 	}
+
+	return currbit;
     }
 
-    return currbit;
-}
-
-int check_bits(const double *a , const double *b, const int n)
-{
-    if (verbose) printf("*******************************\n");
-    int r = 64;
-
-    for(int i = 0; i < n; ++i)
+    int check_bits(const double *a , const double *b, const int n)
     {
-	if (fabs(a[i]) > 1.11e-16 || fabs(b[i]) > 1.11e-16)
+	if (verbose) printf("*******************************\n");
+	int r = 64;
+
+	for(int i = 0; i < n; ++i)
 	{
-	    int l = check_bits(a[i], b[i]);
-	    const double x = a[i];
-	    const double y = b[i];
-	    if (l < 48 )
-		if (verbose) printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
-	    r= min(r, l );
+	    if (fabs(a[i]) > 1.11e-16 || fabs(b[i]) > 1.11e-16)
+	    {
+		int l = check_bits(a[i], b[i]);
+		const double x = a[i];
+		const double y = b[i];
+		if (l < 48 )
+		    if (verbose) printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
+		r= min(r, l );
+	    }
 	}
+
+	if (verbose) printf("********** end ***************\n");
+	return r;
     }
 
-    if (verbose) printf("********** end ***************\n");
-    return r;
-}
-
-void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::DeviceNode * allnodes, Tree::DeviceNode& a, Tree::Node& b)
-{
-    assert(a.x == b.x);
-    assert(a.y == b.y);
-    assert(a.l == b.l);
-    assert(a.s == b.s);
-    assert(a.e == b.e);
-    //assert(a.mask == b.mask);
-    if (verbose)
+    void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::DeviceNode * allnodes, Tree::DeviceNode& a, TreeCheck::DebugNode& b)
     {
-	printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
-	printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
+	assert(a.x == b.x);
+	assert(a.y == b.y);
+	assert(a.l == b.l);
+	assert(a.s == b.s);
+	assert(a.e == b.e);
+	//assert(a.mask == b.mask);
+	if (verbose)
+	{
+	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
+	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 
-	printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-	       a.mass, a.w, a.wx, a.wy, a.r);
-	printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-	       b.mass, b.w, b.wx, b.wy, b.r);
-    }
-    assert(check_bits(a.mass, b.mass) >= 40);
-    assert(check_bits(a.w, b.w) >= 40);
-    assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
-    assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
+	    printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+		   a.mass, a.w, a.wx, a.wy, a.r);
+	    printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+		   b.mass, b.w, b.wx, b.wy, b.r);
+	}
+	assert(check_bits(a.mass, b.mass) >= 40);
+	assert(check_bits(a.w, b.w) >= 40);
+	assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
+	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
-    assert(check_bits(a.r, b.r) >= 32);
+	assert(check_bits(a.r, b.r) >= 32);
 #ifndef NDEBUG
-    {
-	const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
-	const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
-	const realtype * refrexp = b.rexp();
-	const realtype * refiexp = b.iexp();
-	assert(24 <= check_bits(resrexp, refrexp, EXPORD));
-	assert(24 <= check_bits(resiexp, refiexp, EXPORD));
-    }
+	{
+	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
+	    const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
+	    const realtype * refrexp = b.rexp();
+	    const realtype * refiexp = b.iexp();
+	    assert(24 <= check_bits(resrexp, refrexp, EXPORD));
+	    assert(24 <= check_bits(resiexp, refiexp, EXPORD));
+	}
 #endif
 
-    if (!b.leaf)
-	for(int c = 0; c < 4; ++c)
-	    check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
-}
-
-void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-		 Node * const root, const int LEAF_MAXCOUNT, const int EXPANSIONORDER)
-{
-    Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
-    int nsmxs = -1;
-    CUDA_CHECK(cudaDeviceGetAttribute (&nsmxs, cudaDevAttrMultiProcessorCount, 0));
-    printf("i have found %d smxs\n", nsmxs);
-    CUDA_CHECK(cudaMallocHost(&xdata, sizeof(*xdata) * nsrc));
-    CUDA_CHECK(cudaMallocHost(&ydata, sizeof(*ydata) * nsrc));
-    CUDA_CHECK(cudaMallocHost(&vdata, sizeof(*vdata) * nsrc));
-    CUDA_CHECK(cudaMallocHost(&keys, sizeof(int) * nsrc));
-
-    cudaStream_t stream = 0;
-    //CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
-    texKeys.channelDesc = cudaCreateChannelDesc<int>();
-    texKeys.filterMode = cudaFilterModePoint;
-    texKeys.mipmapFilterMode = cudaFilterModePoint;
-    texKeys.normalized = 0;
-
-    const int device_queuesize = 8e4;
-    const int device_bufsize = 8e4;
-
-    int * device_queue;
-    CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize * NQUEUES));
-
-    DeviceNode * device_bufnodes;
-    CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));
-
-    realtype * device_bufexpansions;
-    CUDA_CHECK(cudaMalloc(&device_bufexpansions, sizeof(realtype) * EXPANSIONORDER * 2 * device_bufsize));
-
-    BuildResult * device_diag;
-    CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
-
-    realtype *device_xdata, *device_ydata, *device_vdata;
-    CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
-    CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
-    CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
-
-    int * device_keys;
-    CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
-    cudaEvent_t evstart, evstop;
-    CUDA_CHECK(cudaEventCreate(&evstart));
-    CUDA_CHECK(cudaEventCreate(&evstop));
-
-    size_t textureoffset = 0;
-
-    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
-			       sizeof(int) * nsrc));
-    assert(textureoffset == 0);
-
-    CUDA_CHECK(cudaPeekAtLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(xsorted, &device_xdata, sizeof(device_xdata)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(ysorted, &device_ydata, sizeof(device_ydata)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(vsorted, &device_vdata, sizeof(device_vdata)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufsize, &device_bufsize, sizeof(device_bufsize)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufexpansion, &device_bufexpansions, sizeof(device_bufexpansions)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(order, &EXPANSIONORDER, sizeof(EXPANSIONORDER)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(queuesize, &device_queuesize, sizeof(device_queuesize)));
-
-    {
-	int * ptrs[NQUEUES];
-	for(int i = 0; i < NQUEUES; ++i)
-	    ptrs[i] = device_queue + device_queuesize * i;
-
-	CUDA_CHECK(cudaMemcpyToSymbolAsync(queues, &ptrs, sizeof(ptrs)));
-	//printf("sizeof(ptrs) = %d\n", sizeof(ptrs));
-	//exit(0);
+	if (!b.leaf)
+	    for(int c = 0; c < 4; ++c)
+		check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
     }
 
-    CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
-    CUDA_CHECK(cudaMemsetAsync(device_bufexpansions, 0, sizeof(realtype)* EXPANSIONORDER * 2 * device_bufsize));
-
-#ifndef NDEBUG
-    CUDA_CHECK(cudaMemsetAsync(device_keys, 0xff, sizeof(int) * nsrc));
-#endif
-
-    CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
-
-
-
-    sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &ext);
-
-    setup<<<1, 1>>>(nsrc);
-
-    CUDA_CHECK(cudaEventRecord(evstart));
-
-    const int ysize = 16;
-    build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, ext);
-    CUDA_CHECK(cudaPeekAtLastError());
-    CUDA_CHECK(cudaEventRecord(evstop));
-
-    conclude<<<1, 1>>>(device_diag);
-
-
-    CUDA_CHECK(cudaPeekAtLastError());
-    CUDA_CHECK(cudaStreamSynchronize(0));
-    //assert(device_diag[3]);
-    CUDA_CHECK(cudaStreamSynchronize(0));
-    CUDA_CHECK(cudaEventSynchronize(evstop));
-
-    float timems;
-    CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
-    printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
-
-    printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
-	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good);
-
-    CUDA_CHECK(cudaMemcpyAsync(xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpyAsync(ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpyAsync(vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-
-    CUDA_CHECK(cudaMemcpy(keys, device_keys, sizeof(int) * nsrc, cudaMemcpyDeviceToHost));
-
-#ifndef NDEBUG
-    std::pair<int, int> * kv = NULL;
-
-    posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
-
-    //assert(truexmin == *std::min_element(xsrc, xsrc + nsrc));
-    //assert(trueymin == *std::min_element(ysrc, ysrc + nsrc));
-
-    //assert(ext0 == *std::max_element(xsrc, xsrc + nsrc) - truexmin);
-    //assert(ext1 == *std::max_element(ysrc, ysrc + nsrc) - trueymin);
-
-    for(int i = 0; i < nsrc; ++i)
+    void verify_all(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc, const int LEAF_MAXCOUNT)
     {
-	int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
-	int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
+	printf("VERIFICATION _______________________________________\n");
+	
+	TreeCheck::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
 
-	assert(x >= 0 && y >= 0);
-	assert(x < (1 << LMAX) && y < (1 << LMAX));
+       	CUDA_CHECK(cudaMallocHost(&debug_keys, sizeof(int) * nsrc));
 
-	x = (x | (x << 8)) & 0x00FF00FF;
-	x = (x | (x << 4)) & 0x0F0F0F0F;
-	x = (x | (x << 2)) & 0x33333333;
-	x = (x | (x << 1)) & 0x55555555;
+	CUDA_CHECK(cudaMemcpy(debug_keys, Tree::device_keys, sizeof(int) * nsrc, cudaMemcpyDeviceToHost));
+	
+	std::pair<int, int> * kv = NULL;
+	posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
 
-	y = (y | (y << 8)) & 0x00FF00FF;
-	y = (y | (y << 4)) & 0x0F0F0F0F;
-	y = (y | (y << 2)) & 0x33333333;
-	y = (y | (y << 1)) & 0x55555555;
+	//assert(truexmin == *std::min_element(xsrc, xsrc + nsrc));
+	//assert(trueymin == *std::min_element(ysrc, ysrc + nsrc));
 
-	const int key = x | (y << 1);
+	//assert(ext0 == *std::max_element(xsrc, xsrc + nsrc) - truexmin);
+	//assert(ext1 == *std::max_element(ysrc, ysrc + nsrc) - trueymin);
 
-	kv[i].first = key;
-	kv[i].second = i;
+	for(int i = 0; i < nsrc; ++i)
+	{
+	    int x = floor((xsrc[i] - Tree::xmin) / Tree::extent * (1 << LMAX));
+	    int y = floor((ysrc[i] - Tree::ymin) / Tree::extent * (1 << LMAX));
+
+	    assert(x >= 0 && y >= 0);
+	    assert(x < (1 << LMAX) && y < (1 << LMAX));
+
+	    x = (x | (x << 8)) & 0x00FF00FF;
+	    x = (x | (x << 4)) & 0x0F0F0F0F;
+	    x = (x | (x << 2)) & 0x33333333;
+	    x = (x | (x << 1)) & 0x55555555;
+
+	    y = (y | (y << 8)) & 0x00FF00FF;
+	    y = (y | (y << 4)) & 0x0F0F0F0F;
+	    y = (y | (y << 2)) & 0x33333333;
+	    y = (y | (y << 1)) & 0x55555555;
+
+	    const int key = x | (y << 1);
+
+	    kv[i].first = key;
+	    kv[i].second = i;
+	}
+
+	std::sort(kv, kv + nsrc);
+
+	for(int i = 0; i < nsrc; ++i)
+	{
+	    //const int key = kv[i].first;
+
+	    const int entry = kv[i].second;
+	    assert(entry >= 0 && entry < nsrc);
+
+	    assert(Tree::xdata[i] == xsrc[entry]);
+	    assert(Tree::ydata[i] == ysrc[entry]);
+	    assert(Tree::vdata[i] == vsrc[entry]);
+	}
+
+	printf("SORTING IS GOOD\n");
+	
+	free(kv);
+
+	debugroot = new DebugNode;
+	
+	_build(debugroot, 0, 0, 0, 0, nsrc, 0);
+    
+	const int nnodes = Tree::host_nnodes;
+	std::vector<Tree::DeviceNode> allnodes(nnodes);
+
+	CUDA_CHECK(cudaMemcpy(&allnodes.front(), Tree::device_bufnodes, sizeof(Tree::DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
+
+	//std::vector<realtype> allexpansions(nnodes * ORDER * 2);
+	//CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * ORDER * nnodes, cudaMemcpyDeviceToHost));
+
+	printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
+	       allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
+	       allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
+
+	//ok let's check this
+	check_tree(ORDER, 0, Tree::host_expansions, &allnodes.front(), allnodes[0], *debugroot);
+
+	printf("TREE IS GOOD\n");
+	printf("VERIFICATION SUCCEDED.______________________________\n");
+	CUDA_CHECK(cudaFreeHost(debug_keys));
     }
-
-    std::sort(kv, kv + nsrc);
-
-    for(int i = 0; i < nsrc; ++i)
-    {
-	//const int key = kv[i].first;
-
-	const int entry = kv[i].second;
-	assert(entry >= 0 && entry < nsrc);
-
-	assert(xdata[i] == xsrc[entry]);
-	assert(ydata[i] == ysrc[entry]);
-	assert(vdata[i] == vsrc[entry]);
-    }
-
-    free(kv);
-#endif
-
-    _build(root, 0, 0, 0, 0, nsrc, 0);
-
-#ifndef NDEBUG
-    const int nnodes = device_diag->ntreenodes;
-    std::vector<DeviceNode> allnodes(nnodes);
-
-    CUDA_CHECK(cudaMemcpy(&allnodes.front(), device_bufnodes, sizeof(DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
-
-    std::vector<realtype> allexpansions(nnodes * EXPANSIONORDER * 2);
-    CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * EXPANSIONORDER * nnodes, cudaMemcpyDeviceToHost));
-
-    printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
-	   allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
-	   allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
-
-    //ok let's check this
-    check_tree(EXPANSIONORDER, 0, &allexpansions.front(), &allnodes.front(), allnodes[0], *root);
-#endif
-
-    CUDA_CHECK(cudaFree(device_xdata));
-    CUDA_CHECK(cudaFree(device_ydata));
-    CUDA_CHECK(cudaFree(device_vdata));
-    CUDA_CHECK(cudaFree(device_keys));
-    CUDA_CHECK(cudaFree(device_bufnodes));
-    CUDA_CHECK(cudaFree(device_queue));
-    CUDA_CHECK(cudaFree(device_bufexpansions));
-    CUDA_CHECK(cudaFreeHost(device_diag));
-    CUDA_CHECK(cudaEventDestroy(evstart));
-    CUDA_CHECK(cudaEventDestroy(evstop));
-}
-
-void Tree::dispose()
-{
-    CUDA_CHECK(cudaFreeHost(xdata));
-    CUDA_CHECK(cudaFreeHost(ydata));
-    CUDA_CHECK(cudaFreeHost(vdata));
-    CUDA_CHECK(cudaFreeHost(keys));
 }

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdio>
+#include <algorithm>
 
 #include "cuda-common.h"
 
@@ -30,39 +31,44 @@ typedef REAL realtype;
 
 namespace EvaluatePotential
 {
+    realtype thetasquared;//, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
-    realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
-
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const Tree::Node & root)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt)
     {
-	const Tree::Node * stack[15 * 4 * 2];
+	int stack[LMAX * 4 * 2];
 
 	int stackentry = 0, maxentry = 0;
 
-	stack[0] = &root;
+	stack[0] = 0;
 	*result = 0;
 	while(stackentry > -1)
 	{
-	    const Tree::Node * const node = stack[stackentry--];
+	    const int nodeid = stack[stackentry--];
+	    
+	    const Tree::Node * const node = Tree::host_nodes + nodeid;
 
-	    //realtype tmp[2];
-
-	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
+	    if (node->e - node->s == 0)
+		continue;
+	    
+	    const realtype * rxp = Tree::host_expansions + ORDER * (0 + 2 * nodeid);
+	    const realtype * ixp = Tree::host_expansions + ORDER * (1 + 2 * nodeid);
+	    	    
+	    const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
 
 	    if (node->r * node->r < thetasquared * r2)
-		*result += potential_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions);
+		*result += potential_e2p(node->mass, xt - node->xcom, yt - node->ycom, rxp, ixp);
 	    else
 	    {
-		if (node->leaf)
+		if (!node->state.innernode)
 		{
 		    const int s = node->s;
 
-		    *result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
+		    *result += potential_p2p(&Tree::xdata[s], &Tree::ydata[s], &Tree::vdata[s], node->e - s, xt, yt);
 		}
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (Tree::Node *)node->children[c];
+			stack[++stackentry] = node->state.children[c];
 
 		    maxentry = std::max(maxentry, stackentry);
 		}
@@ -80,23 +86,14 @@ void treecode_potential_solve(const realtype theta,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {
     thetasquared = theta * theta;
-
-    Tree::Node root;
-    
-    //CUDA_CHECK(cudaMemset(device_root, 0, sizeof(device_root)));
     
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, &root,  32 * 16 , ORDER); //before: 64
+    Tree::build(xsrc, ysrc, vsrc, nsrc,  32 * 16); //before: 64
     const double t1 = omp_get_wtime();
-    
-    
-    xdata = Tree::xdata;
-    ydata = Tree::ydata;
-    vdata = Tree::vdata;
 
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
-	evaluate(vdst + i, xdst[i], ydst[i], root);
+	evaluate(vdst + i, xdst[i], ydst[i]);
 
     Tree::dispose();
         
