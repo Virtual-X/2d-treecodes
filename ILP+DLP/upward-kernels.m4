@@ -16,6 +16,16 @@ __device__ void print_message()
 printf("hello again from ILPDLP order %d\n", ORDER);
 }
 
+define(`ARY', `$1[tid + 4 * eval($2 - 1)]')
+define(`ARYFP', eval(4 * ORDER))
+
+extern __shared__ realtype ary[];
+
+define(`WARPSUM', `SEQ(`
+		  $1 += __shfl_xor($1, L );
+		  $2 += __shfl_xor($2, L );
+', L, 16, 8, 4, 2, 1)')
+
 __device__ void upward_p2e(const realtype xcom,
 	const realtype ycom,
 	const realtype * __restrict__ const xsources,
@@ -24,63 +34,66 @@ __device__ void upward_p2e(const realtype xcom,
 	const int nsources,
 	realtype * __restrict__ const rexpansions,
 	realtype * __restrict__ const iexpansions)
-{
-	realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
-		TMP(rxp, n) = 0')
-	LUNROLL(n, 0, eval(ORDER - 1),`,
-		TMP(ixp, n) = 0');
-
+{		
 	const int tid = threadIdx.x;
+	const int slot = threadIdx.y;
+
+	realtype * const rxp = ary + ARYFP * (0 + 4 * slot);
+	realtype * const ixp = ary + ARYFP * (1 + 4 * slot);
+
+	for(int i = tid; i < eval(ARYFP * 2); i += 32)
+		rxp[i] = 0;
 
 	for(int i = tid; i < nsources; i += WARPSIZE)
-	{
+	{		
 		const realtype rprod_0 = xsources[i] - xcom; 
 		const realtype iprod_0 = ysources[i] - ycom;
 
 		const realtype src = vsources[i]; 
 
-		TMP(rxp, 0) -= rprod_0 * src;
-		TMP(ixp, 0) -= iprod_0 * src;
+		realtype rtmp = rprod_0 * src;
+		realtype itmp = iprod_0 * src;
+		
+		WARPSUM(rtmp, itmp)
 
+		if (tid == 0)
+		{
+		    rxp[0] -= rtmp;
+		    ixp[0] -= itmp;
+		}
+
+		realtype rprod = rprod_0, iprod = iprod_0;
+		
 		LUNROLL(n, 1, eval(ORDER - 1),`
-		const realtype TMP(rprod, n) = TMP(rprod, eval(n - 1)) * TMP(rprod, 0) - TMP(iprod, eval(n - 1)) * TMP(iprod, 0);
-		const realtype TMP(iprod, n) = TMP(rprod, eval(n - 1)) * TMP(iprod, 0) + TMP(iprod, eval(n - 1)) * TMP(rprod, 0);
+		rtmp = rprod * TMP(rprod, 0) - iprod * TMP(iprod, 0);
+		itmp = rprod * TMP(iprod, 0) + iprod * TMP(rprod, 0);
 
-		const realtype TMP(term, n) = src / eval(n+1).f;
+		const realtype TMP(term, n) = src * (realtype)(1 / eval(n+1).);
 
-		TMP(rxp, n) -= TMP(rprod, n) * TMP(term, n);
-		TMP(ixp, n) -= TMP(iprod, n) * TMP(term, n);
+		rprod = rtmp;
+		iprod = itmp;
+		
+		rtmp = rprod * TMP(term, n);
+		itmp = iprod * TMP(term, n);
+
+		WARPSUM(rtmp, itmp)
+
+		if (tid == 0)
+		{
+		    rxp[n] -= rtmp;
+		    ixp[n] -= itmp;	
+		}
 		')
 	}dnl
 
-	SEQ(`LUNROLL(n, 0, eval(ORDER - 1),`
-	TMP(rxp, n) += __shfl_xor( TMP(rxp, n), L );
-	TMP(ixp, n) += __shfl_xor( TMP(ixp, n), L );')
-	', L, 16, 8, 4, 2, 1)
-
-	realtype rval, ival;
-	switch(tid)
-	{
-	LUNROLL(n, 0, eval(ORDER - 1),`
-	case n:
-		rval = TMP(rxp, n);
-		ival = TMP(ixp, n);
-		break;
-		')
-	default:
-		break;
-	}
-
 	if (tid < ORDER)
 	{
-		rexpansions[tid] = rval;
-		iexpansions[tid] = ival;
+	   rexpansions[tid] = rxp[tid];
+	   iexpansions[tid] = ixp[tid];
 	}
-	
 }
 
-define(`ARY', `$1[tid + 4 * eval($2 - 1)]')
-define(`ARYFP', eval(4 * (ORDER )))
+
 
 __device__ void upward_e2e(
 	const realtype x0,
@@ -91,11 +104,10 @@ __device__ void upward_e2e(
 	realtype * __restrict__ const rdstxp,
 	realtype * __restrict__ const idstxp)
 {
+	const int slot = threadIdx.y;
 	const int tid = threadIdx.x;
 	assert(tid < 4);
 
-	const int slot = threadIdx.y;
-	extern __shared__ realtype ary[];
 	realtype * const rinvz = ary + ARYFP * (0 + 4 * slot);
 	realtype * const iinvz = ary + ARYFP * (1 + 4 * slot);
 	realtype * const rcoeff = ary + ARYFP * (2 + 4 * slot);
@@ -117,8 +129,11 @@ __device__ void upward_e2e(
 	{
 		const realtype TMP(prefac, l) = ifelse(l, 1, `- mass',`mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
 		pushdef(`BINFAC', `BINOMIAL(eval(l - 1), eval(k - 1)).f')
-		const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,` + ifelse(BINFAC,1.f,,`BINFAC * ') ARY(rcoeff, k)');
-		const realtype TMP(itmp, l) = LUNROLL(k, 1, l,` ifelse(k,1,,+) ifelse(BINFAC,1.f,,`BINFAC * ') ARY(icoeff, k)');
+		const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, l,`
+		+ ARY(rcoeff, k) ifelse(BINFAC,1.f,,`* BINFAC')');
+		
+		const realtype TMP(itmp, l) = LUNROLL(k, 1, l,`
+		ifelse(k,1,,+)  ARY(icoeff, k) ifelse(BINFAC,1.f,,`* BINFAC')');
 		popdef(`BINFAC')dnl
 
 		const realtype TMP(invz2, l) = ARY(rinvz, l) * ARY(rinvz, l) + ARY(iinvz, l) * ARY(iinvz, l);
