@@ -21,11 +21,6 @@ define(`ARYFP', eval(4 * ORDER))
 
 extern __shared__ realtype ary[];
 
-define(`WARPSUM', `SEQ(`
-		  $1 += __shfl_xor($1, L );
-		  $2 += __shfl_xor($2, L );
-', L, 16, 8, 4, 2, 1)')
-
 __device__ void upward_p2e(const realtype xcom,
 	const realtype ycom,
 	const realtype * __restrict__ const xsources,

@@ -10,117 +10,77 @@
 *  before getting a written permission from the author of this file.
 */
 
-define(NACC, 16)
-
+define(NACC, 4)
 include(unroll.m4) dnl
-#include <pmmintrin.h>
-#include <math.h>
 
-#if defined(__INTEL_COMPILER)
-inline __m128d operator+(__m128d a, __m128d b){ return _mm_add_pd(a, b); }
-inline __m128d operator/(__m128d a, __m128d b){ return _mm_div_pd(a, b); }
-inline __m128d operator*(__m128d a, __m128d b){ return _mm_mul_pd(a, b); }
-inline __m128d operator-(__m128d a, __m128d b){ return _mm_sub_pd(a, b); }
-inline __m128d operator += (__m128d& a, __m128d b){ return a = _mm_add_pd(a, b); }
-inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b); }
-#else
-inline __m128d _mm_log_pd(const __m128d x)
-{
-  double tmp[2];
-  _mm_storeu_pd(tmp, x);
-  return _mm_set_pd(log(tmp[1]), log(tmp[0]));
-}
-#endif
-
+#include <cassert>
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#ifdef __cplusplus
-extern "C"
-#endif
-realtype potential_p2p(const realtype * __restrict__ const _xsrc,
-  const realtype * __restrict__ const _ysrc,
-  const realtype * __restrict__ const _vsrc,
-  const int nsources,
-  const realtype _xt,
-  const realtype _yt)
+__device__ realtype potential_p2p(
+	   const realtype * __restrict__ const xsrc,
+	   const realtype * __restrict__ const ysrc,
+	   const realtype * __restrict__ const vsrc,
+	   const int nsources,
+	   const realtype xt,
+	   const realtype yt)
   {
-    const __m128d xt = _mm_set1_pd(_xt);
-    const __m128d yt = _mm_set1_pd(_yt);
-    const __m128d eps = _mm_set1_pd(EPS);
+    const int tid = threadIdx.x;
+    assert(tid < 32 && blockDim.x == 32);
+    
+    realtype LUNROLL(`i', 0, eval(NACC - 1), `ifelse(i,0,,`,') TMP(s,i) = 0') ;
 
-    __m128d LUNROLL(`i', 0, NACC, `
-    ifelse(i,0,,`,') TMP(s,i) = _mm_setzero_pd()') ;
+    const int nnice = eval(32 * NACC) * (nsources / eval(32 * NACC));
 
-    const int nnice = NACC * (nsources / NACC);
-
-    for(int i = 0; i < nnice; i += NACC)
-    {
-      const realtype * __restrict__ const xsrc = _xsrc + i;
-      const realtype * __restrict__ const ysrc = _ysrc + i;
-      const realtype * __restrict__ const vsrc = _vsrc + i;
-
-      LUNROLL(j, 0, eval(NACC/2 - 1), `
-      const __m128d TMP(xr, j) = xt - _mm_loadu_pd(xsrc + eval(2 * j));
-      const __m128d TMP(yr, j) = yt - _mm_loadu_pd(ysrc + eval(2 * j));
-      TMP(s, j) += _mm_log_pd(TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + eps) * _mm_loadu_pd(vsrc + eval(2 * j));
-      ')
-    }
+    for(int i = 0; i < nnice; i += eval(NACC * 32))
+    {dnl
+      LUNROLL(j, 0, eval(NACC - 1), `
+      const realtype TMP(xr, j) = xt - xsrc[tid + i + eval(32 * j)];
+      const realtype TMP(yr, j) = yt - ysrc[tid + i + eval(32 * j)];')
+      dnl
+      LUNROLL(j, 0, eval(NACC - 1), `
+      TMP(s, j) += log(TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS) * vsrc[tid + i + eval(32 * j)];')
+    }dnl
 
     REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(s,i)'))
-
-    double sum;
-    _mm_store_sd(&sum, _mm_hadd_pd(TMP(s, 0), TMP(s, 0)));
-
-    for(int i = nnice; i < nsources; ++i)
+    
+    
+    for(int i = nnice + tid; i < nsources; i += 32)
     {
-      const realtype xr = _xt - _xsrc[i];
-      const realtype yr = _yt - _ysrc[i];
+      const realtype xr = xt - xsrc[i];
+      const realtype yr = yt - ysrc[i];
 
-      sum += log(xr * xr + yr * yr + EPS) * _vsrc[i];
+      TMP(s, 0) += log(xr * xr + yr * yr + EPS) * vsrc[i];
     }
 
-    return sum / 2;
+    SEQ(`
+    TMP(s, 0) += __shfl_xor(TMP(s, 0), L );', L, 16, 8, 4, 2, 1)
+    
+    return TMP(s, 0) / 2;
   }
 
-#ifdef __cplusplus
-extern "C"
-#endif
-realtype potential_e2p(const realtype mass,
+__device__ realtype potential_e2p(const realtype mass,
   const realtype rz,
   const realtype iz,
   const realtype * __restrict__ const rxp,
   const realtype * __restrict__ const ixp)
   {
+    const int tid = threadIdx.x;
+    assert(tid == 0);
+  
     const realtype r2 = rz * rz + iz * iz;
 
     const realtype rinvz_1 = rz / r2;
     const realtype iinvz_1 = -iz / r2;
 
-    const realtype TMP(rinvz, 2) = TMP(rinvz, 1) * rinvz_1 - TMP(iinvz, 1) * iinvz_1;
-    const realtype TMP(iinvz, 2) = TMP(rinvz, 1) * iinvz_1 + TMP(iinvz, 1) * rinvz_1;
+    LUNROLL(j, 2, ORDER, `
+    const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
+    const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
 
-    const __m128d rz2 = _mm_set1_pd(TMP(rinvz, 2));
-    const __m128d iz2 = _mm_set1_pd(TMP(iinvz, 2));
+    LUNROLL(j, 1, ORDER, `
+    realtype TMP(rsum, eval(j - 1)) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);')
 
-    const __m128d rbase_0 = _mm_set_pd(TMP(rinvz, 2), TMP(rinvz, 1));
-    const __m128d ibase_0 = _mm_set_pd(TMP(iinvz, 2), TMP(iinvz, 1));
-
-    LUNROLL(j, 0, eval(ORDER/2 - 1), `dnl
-    ifelse(j, eval(ORDER/2 - 1), ,
-    const __m128d TMP(rbase, eval(j + 1)) = TMP(rbase, j) * rz2 - TMP(ibase, j) * iz2;)
-
-    ifelse(j, eval(ORDER/2 - 1), ,
-    const __m128d TMP(ibase, eval(j + 1)) = TMP(rbase, j) * iz2 + TMP(ibase, j) * rz2;)
-
-    const __m128d TMP(rxp2, j) = _mm_loadu_pd(rxp + eval(2 * j));
-
-    const __m128d TMP(ixp2, j) = _mm_loadu_pd(ixp + eval(2 * j));
-
-    const __m128d TMP(rsum, j) = (TMP(rxp2, j) * TMP(rbase, j) - TMP(ixp2, j) * TMP(ibase, j))
-       	     	     	       ifelse(j, 0, ,+ TMP(rsum, eval(j - 1)));')
-    double partial;
-    _mm_store_sd(&partial,  _mm_hadd_pd(TMP(rsum, eval(ORDER/2 - 1)), TMP(rsum, eval(ORDER/2 - 1))));
-
-    return  mass * log(r2) / 2 + partial;
+    REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum,i)'))
+        
+    return  mass * log(r2) / 2 + TMP(rsum, 0);
   }

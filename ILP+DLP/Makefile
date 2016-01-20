@@ -13,11 +13,12 @@
 real ?= double
 order ?= 12
 
-OBJS = 	order$(order)-upward-kernels.gpu.o \
+OBJS = 	order$(order)-upward-kernels.cuda.o \
 	order$(order)-upward-kernels-reference.o 
 
-ifeq "$(MAKECMDGOALS)" "potential"
-	OBJS += order$(order)-potential-kernels.o
+ifneq "$(MAKECMDGOALS)" "force"
+	OBJS += order$(order)-potential-kernels.cuda.o \
+		order$(order)-reference-potential-kernels.o 
 else
 	OBJS += order$(order)-force-kernels.o \
 		order$(order)-force-kernels-tiled.o \
@@ -26,7 +27,7 @@ endif
 
 potential force: $(OBJS)
 
-%.gpu.o: %.cu Makefile
+%.cuda.o: %.cu Makefile
 	nvcc  -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -O4 -arch=sm_30 -use_fast_math -dc -c $< -o $@
 
 %.o: %.c Makefile

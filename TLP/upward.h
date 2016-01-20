@@ -27,14 +27,13 @@ namespace Tree
 	    bool innernode;
 	    int children[4];
 	} state;
-
-//	bool leaf;
-//	int children[4];
     };
 
-    extern realtype *xdata, *ydata, *vdata, *host_expansions;
+    extern realtype *host_xdata, *host_ydata, *host_vdata, *host_expansions;
+    extern realtype *device_xdata, *device_ydata, *device_vdata, *device_expansions;
 
-    extern Node * host_nodes;
+    extern Node * host_nodes, *device_nodes;
+    extern int nnodes;
 
     void build(const realtype * const xsrc,
 	       const realtype * const ysrc,

@@ -333,7 +333,7 @@ int main(int argc, char ** argv)
 	};
 
     file2test("testDiego/diegoBinaryN400", false, P_TEST);
-    file2test("testDiego/diegoBinaryN2000", false, P_TEST);
+     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
 
 /*    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);

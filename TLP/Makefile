@@ -36,7 +36,7 @@ potential: treecode-potential.o order$(order)-upward.o sort-sources.o
 force: treecode-force.o order$(order)-upward.o
 
 treecode-potential.o: treecode-potential.cu treecode-potential.h Makefile
-	nvcc $(NVCCFLAGS) -c $<
+	nvcc $(NVCCFLAGS) -dc -c $<
 
 treecode-force.o: treecode-force.cu treecode-force.h Makefile
 	nvcc $(NVCCFLAGS) \
