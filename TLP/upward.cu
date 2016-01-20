@@ -105,39 +105,31 @@ namespace Tree
 
     __constant__ realtype *xsorted, *ysorted, *vsorted;
 
-    struct DeviceNode
+    struct NodeHelper
     {
-	int x, y, l, s, e, mask, parent;
-	int children[4];
-	int validchildren;
+	int x, y, l, mask, parent, validchildren;
+	realtype w, wx, wy;
 
-	realtype mass, w, wx, wy, r;
-
-	__device__ void setup(int x, int y, int l, int s, int e, int mask, int parent)
+	__device__ void setup(int x, int y, int l, int mask, int parent)
 	    {
 		this->x = x;
 		this->y = y;
 		this->l = l;
-		this->s = s;
-		this->e = e;
+	
 		this->mask = mask;
 		this->parent = parent;
 		this->validchildren = 0;
-		this->r = 0;
 
-		for (int i = 0; i < 4; ++i)
-		    children[i] = 0;
+		w = wx = wy = 0;
 	    }
-
-	__device__ realtype xcom() const { return w ? wx / w : 0; }
-
-	__device__ realtype ycom() const { return w ? wy / w : 0; }
     };
 
 //TREE info
     __constant__ int bufsize;
     __device__ int currnnodes;
-    __constant__ DeviceNode * bufnodes;
+    
+    __constant__ Node * bufnodes;
+    __constant__ NodeHelper * bufhelpers;
     __constant__ realtype * bufexpansion;
 
     __device__ void process_leaf(const int nodeid, realtype extent)
@@ -145,7 +137,8 @@ namespace Tree
 	const int tid = threadIdx.x;
 	const bool master = tid == 0;
 
-	DeviceNode * node = bufnodes + nodeid;
+	Node * node = bufnodes + nodeid;
+	NodeHelper * helper = bufhelpers + nodeid;
 
 	const int s = node->s;
 	const int e = node->e;
@@ -200,23 +193,27 @@ namespace Tree
 
 	if (master)
 	{
-	    node->mass = msum;
-	    node->w = wsum;
-	    node->wx = wxsum;
-	    node->wy = wysum;
-	    node->r = sqrt(r2);
+	    helper->w = wsum;
+	    helper->wx = wxsum;
+	    helper->wy = wysum;
 
+	    node->mass = msum;
+	    node->r = sqrt(r2);
+	    node->xcom = xcom;
+	    node->ycom = ycom;
+	    	    
 	    MFENCE;
 	}
 
-	while(node->parent >= 0)
+	while(helper->parent >= 0)
 	{
-	    DeviceNode * parent = bufnodes + node->parent;
-
+	    Node * parent = bufnodes + helper->parent;
+	    NodeHelper * parenthelper = bufhelpers + helper->parent;
+	    
 	    bool e2e = false;
 
 	    if (master)
-		e2e = 3 == atomicAdd(&parent->validchildren, 1);
+		e2e = 3 == atomicAdd(&parenthelper->validchildren, 1);
 
 	    e2e = __shfl(e2e, 0);
 
@@ -229,18 +226,21 @@ namespace Tree
 		    realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
 		    for(int c = 0; c < 4; ++c)
 		    {
-			const DeviceNode * child = bufnodes + parent->children[c];
+			const int childid = parent->state.children[c];
 
+			const Node * child = bufnodes + childid;
 			msum += child->mass;
-			wsum += child->w;
-			wxsum += child->wx;
-			wysum += child->wy;
+
+			const NodeHelper * childhelper = bufhelpers + childid;
+			wsum += childhelper->w;
+			wxsum += childhelper->wx;
+			wysum += childhelper->wy;
 		    }
 
 		    parent->mass = msum;
-		    parent->w = wsum;
-		    parent->wx = wxsum;
-		    parent->wy = wysum;
+		    parenthelper->w = wsum;
+		    parenthelper->wx = wxsum;
+		    parenthelper->wy = wysum;
 
 		    assert(wsum);
 		    xcom_parent = wxsum / wsum;
@@ -249,18 +249,22 @@ namespace Tree
 		    realtype rr = 0;
 		    for(int c = 0; c < 4; ++c)
 		    {
-			const DeviceNode * child = bufnodes + parent->children[c];
+			const int childid = parent->state.children[c];
+			const Node * child = bufnodes + childid;
+			const NodeHelper * childhelper = bufhelpers + childid;
 
-			if (child->w)
+			if (childhelper->w)
 			{
-			    const realtype rx = xcom_parent - child->xcom();
-			    const realtype ry = ycom_parent - child->ycom();
+			    const realtype rx = xcom_parent - child->xcom;
+			    const realtype ry = ycom_parent - child->ycom;
 
 			    rr = max(rr, child->r + sqrt(rx * rx + ry * ry));
 			}
 		    }
 
-		    parent->r = min(rr, 1.4143f * extent / (1 << parent->l));
+		    parent->r = min(rr, 1.4143f * extent / (1 << parenthelper->l));
+		    parent->xcom = xcom_parent;
+		    parent->ycom = ycom_parent;
 		}
 
 		xcom_parent = __shfl(xcom_parent, 0);
@@ -268,13 +272,14 @@ namespace Tree
 
 		if (tid < 4)
 		{
-		    const DeviceNode * chd = bufnodes + parent->children[tid];
+		    const int childid = parent->state.children[tid];
+		    const Node * chd = bufnodes + childid;
 
-		    upward_e2e(chd->xcom() - xcom_parent, chd->ycom() - ycom_parent, chd->mass,
-			       bufexpansion + ORDER * (2 * parent->children[tid] + 0),
-			       bufexpansion + ORDER * (2 * parent->children[tid] + 1),
-			       bufexpansion + ORDER * (2 * node->parent + 0),
-			       bufexpansion + ORDER * (2 * node->parent + 1));
+		    upward_e2e(chd->xcom - xcom_parent, chd->ycom - ycom_parent, chd->mass,
+			       bufexpansion + ORDER * (2 * childid + 0),
+			       bufexpansion + ORDER * (2 * childid + 1),
+			       bufexpansion + ORDER * (2 * helper->parent + 0),
+			       bufexpansion + ORDER * (2 * helper->parent + 1));
 		}
 
 		if (master)
@@ -284,6 +289,7 @@ namespace Tree
 		break;
 
 	    node = parent;
+	    helper = parenthelper;
 	}
     }
 
@@ -295,7 +301,8 @@ namespace Tree
     __global__ void setup(const int nsrc)
     {
 	currnnodes = 1;
-	bufnodes[0].setup(0, 0, 0, 0, nsrc, 0, -1);
+	bufnodes[0].setup(0, nsrc);
+	bufhelpers[0].setup(0, 0, 0, 0, -1);
 
 	for(int i = 0; i < NQUEUES; ++i)
 	{
@@ -378,11 +385,12 @@ namespace Tree
 
 	    if (currid >= 0)
 	    {
-		DeviceNode * node = bufnodes + currid;
-
+		Node * node = bufnodes + currid;
+		NodeHelper * helper = bufhelpers + currid;
+		
 		const int s = node->s;
 		const int e = node->e;
-		const int l = node->l;
+		const int l = helper->l;
 
 		const bool leaf = e - s <= LEAF_MAXCOUNT || l + 1 > LMAX;
 
@@ -408,12 +416,12 @@ namespace Tree
 			}
 
 			for(int c = 0; c < 4; ++c)
-			    node->children[c] = bufbase + c;
+			    node->state.children[c] = bufbase + c;
 		    }
 
-		    const int mask = node->mask;
-		    const int x = node->x;
-		    const int y = node->y;
+		    const int mask = helper->mask;
+		    const int x = helper->x;
+		    const int y = helper->y;
 
 		    for(int c = 0; c < 4; ++c)
 		    {
@@ -427,8 +435,12 @@ namespace Tree
 
 			if (master)
 			{
-			    DeviceNode * child = bufnodes + node->children[c];
-			    child->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, indexmin, indexsup, key1, currid);
+			    const int childid = node->state.children[c];
+			    Node * child = bufnodes + childid;
+			    NodeHelper * childhelper = bufhelpers + childid;
+
+			    child->setup(indexmin, indexsup);
+			    childhelper->setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, key1, currid);
 			}
 		    }
 
@@ -436,7 +448,7 @@ namespace Tree
 		    {
 			bool placed_locally = false;
 
-			const int localtask = node->children[2];
+			const int localtask = node->state.children[2];
 			
 #if (LQSIZE > 0)
 			//try to put a task in the local queue
@@ -455,7 +467,7 @@ namespace Tree
 			else
 			{
 			    for(int c = 0; c < ngtasks; ++c)
-				queues[qid][(base + c) % queuesize] = node->children[c];
+				queues[qid][(base + c) % queuesize] = node->state.children[c];
 
 			    atomicAdd(&qitems, 3);
 
@@ -464,7 +476,7 @@ namespace Tree
 			    atomicAdd(&qtail[qid], ngtasks);
 			}
 
-			currid = node->children[3];
+			currid = node->state.children[3];
 		    }
 		}
 
@@ -494,8 +506,8 @@ namespace Tree
     int nnodes = 0;
     
     realtype *device_xdata = NULL, *device_ydata = NULL, *device_vdata = NULL;
-    DeviceNode * device_bufnodes = NULL;
     Node * device_nodes = NULL;
+    NodeHelper * device_helpers = NULL;
     int * device_keys = NULL;
 }
 
@@ -532,20 +544,16 @@ void Tree::build(const realtype * const xsrc,
     int * device_queue;
     CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize * NQUEUES));
 
-    CUDA_CHECK(cudaMalloc(&device_bufnodes, sizeof(*device_bufnodes) * device_bufsize));    
+    CUDA_CHECK(cudaMalloc(&device_nodes, sizeof(*device_nodes) * device_bufsize));
+    CUDA_CHECK(cudaMalloc(&device_helpers, sizeof(*device_helpers) * device_bufsize));    
     CUDA_CHECK(cudaMalloc(&device_expansions, sizeof(realtype) * ORDER * 2 * device_bufsize));
     
     CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
-
-    posix_memalign((void **)&host_xdata, 32, sizeof(realtype) * nsrc);
-    posix_memalign((void **)&host_ydata, 32, sizeof(realtype) * nsrc);
-    posix_memalign((void **)&host_vdata, 32, sizeof(realtype) * nsrc);
     
     BuildResult * device_diag;
     CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
-
     
     CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
    
@@ -560,7 +568,8 @@ void Tree::build(const realtype * const xsrc,
     CUDA_CHECK(cudaMemcpyToSymbolAsync(ysorted, &device_ydata, sizeof(device_ydata)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(vsorted, &device_vdata, sizeof(device_vdata)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(bufsize, &device_bufsize, sizeof(device_bufsize)));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufnodes, &device_bufnodes, sizeof(device_bufnodes)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufnodes, &device_nodes, sizeof(device_nodes)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(bufhelpers, &device_helpers, sizeof(device_helpers)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(bufexpansion, &device_expansions, sizeof(device_expansions)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(queuesize, &device_queuesize, sizeof(device_queuesize)));
 
@@ -571,14 +580,6 @@ void Tree::build(const realtype * const xsrc,
 
 	CUDA_CHECK(cudaMemcpyToSymbolAsync(queues, &ptrs, sizeof(ptrs)));
     }
-
-    //mi serve?
-    CUDA_CHECK(cudaMemsetAsync(device_bufnodes, 0, sizeof(*device_bufnodes) * device_bufsize));
-    CUDA_CHECK(cudaMemsetAsync(device_expansions, 0, sizeof(realtype)* ORDER * 2 * device_bufsize));
-
-#ifndef NDEBUG
-    CUDA_CHECK(cudaMemsetAsync(device_keys, 0xff, sizeof(int) * nsrc));
-#endif
 
     CUDA_CHECK(cudaMemcpyAsync(device_xdata, xsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
@@ -600,16 +601,11 @@ void Tree::build(const realtype * const xsrc,
 
     CUDA_CHECK(cudaPeekAtLastError());
 
-    CUDA_CHECK(cudaMemcpyAsync(host_xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpyAsync(host_ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpyAsync(host_vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
 
-    //CUDA_CHECK(cudaStreamSynchronize(0));
-    //assert(device_diag[3]);
     CUDA_CHECK(cudaStreamSynchronize(0));
 
-    CUDA_CHECK(cudaEventSynchronize(evstop));
-
+     CUDA_CHECK(cudaEventSynchronize(evstop));
+ 
     float timems;
     CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
     printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
@@ -620,36 +616,25 @@ void Tree::build(const realtype * const xsrc,
     nnodes = device_diag->ntreenodes;
     const size_t expansionsbytes = sizeof(realtype) * 2 * ORDER * nnodes;
  
-    //posix_memalign((void **)&host_expansions, 32, expansionsbytes);
-    CUDA_CHECK(cudaMallocHost(&host_expansions, expansionsbytes));
-    //posix_memalign((void **)&host_nodes, 32, sizeof(Node) * nnodes);
-    CUDA_CHECK(cudaMallocHost(&host_nodes, sizeof(Node) * nnodes));
-
-    CUDA_CHECK(cudaMemcpyAsync(host_expansions, device_expansions, expansionsbytes, cudaMemcpyDeviceToHost));
-    
-    std::vector<DeviceNode> devnodes(nnodes);
-    CUDA_CHECK(cudaMemcpyAsync(&devnodes.front(), device_bufnodes, sizeof(DeviceNode) * nnodes, cudaMemcpyDeviceToHost));
-
-    for(int i = 0; i < nnodes; ++i)
-    {
-	host_nodes[i].s = devnodes[i].s;
-	host_nodes[i].e = devnodes[i].e;
-	host_nodes[i].mass = devnodes[i].mass;
-	const realtype w = devnodes[i].w;
-	host_nodes[i].xcom = w == 0 ? 0 : devnodes[i].wx / devnodes[i].w;
-	host_nodes[i].ycom = w == 0 ? 0 : devnodes[i].wy / devnodes[i].w;
-	host_nodes[i].r = devnodes[i].r;
-	const bool leaf = devnodes[i].e - devnodes[i].s <= LEAF_MAXCOUNT || devnodes[i].l + 1 > LMAX;
-	
-	//host_nodes[i].leaf = leaf;
-	for(int c = 0; c < 4; ++c)
-	    host_nodes[i].state.children[c] = devnodes[i].children[c];
-    }
-
-    CUDA_CHECK(cudaMalloc(&device_nodes, sizeof(Node) * nnodes));
-    CUDA_CHECK(cudaMemcpy(device_nodes, host_nodes, sizeof(Node) * nnodes, cudaMemcpyHostToDevice));
-    
 #ifndef NDEBUG
+   
+    
+    posix_memalign((void **)&host_xdata, 32, sizeof(realtype) * nsrc);
+    posix_memalign((void **)&host_ydata, 32, sizeof(realtype) * nsrc);
+    posix_memalign((void **)&host_vdata, 32, sizeof(realtype) * nsrc);
+
+    CUDA_CHECK(cudaMemcpy(host_xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(host_ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(host_vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+    
+    CUDA_CHECK(cudaMallocHost(&host_expansions, expansionsbytes));
+    CUDA_CHECK(cudaMallocHost(&host_nodes, sizeof(Node) * nnodes));
+    CUDA_CHECK(cudaMemcpy(host_expansions, device_expansions, expansionsbytes, cudaMemcpyDeviceToHost));
+
+    std::vector<NodeHelper> devhelpers(nnodes);
+    CUDA_CHECK(cudaMemcpy(host_nodes, device_nodes, sizeof(Node) * nnodes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&devhelpers.front(), device_helpers, sizeof(NodeHelper) * nnodes, cudaMemcpyDeviceToHost));
+
     TreeCheck::verify_all(xsrc, ysrc, vsrc, nsrc, LEAF_MAXCOUNT);
 #endif
   
@@ -665,27 +650,25 @@ void Tree::dispose()
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
     CUDA_CHECK(cudaFree(device_vdata));
-    CUDA_CHECK(cudaFree(device_bufnodes));
+    CUDA_CHECK(cudaFree(device_nodes));
     CUDA_CHECK(cudaFree(device_expansions));
     CUDA_CHECK(cudaFree(device_keys));
-    CUDA_CHECK(cudaFree(device_nodes));
-    
+    CUDA_CHECK(cudaFree(device_helpers));
+
+#ifndef NDEBUG
     CUDA_CHECK(cudaFreeHost(host_nodes));
     CUDA_CHECK(cudaFreeHost(host_expansions));
     free(host_xdata);
     free(host_ydata);
     free(host_vdata);
+#endif
 }
 
 namespace TreeCheck
 {   
     int LEAF_MAXCOUNT;
 
-    //realtype debug_ext, debug_xmin, debug_ymin;
-
     int * debug_keys = NULL;
-
-    //realtype *debug_xdata = NULL, *debug_ydata = NULL, *debug_vdata = NULL;
 
     struct DebugNode
     {
@@ -785,9 +768,17 @@ namespace TreeCheck
 	const double x0 = Tree::xmin + h * x, y0 = Tree::ymin + h * y;
 
 	assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
-
+	//printf("node %d %d l%d\n", x, y, l);
+	
 	for(int i = s; i < e; ++i)
-	    assert(Tree::host_xdata[i] >= x0 && Tree::host_xdata[i] < x0 + h && Tree::host_ydata[i] >= y0 && Tree::host_ydata[i] < y0 + h);
+	{
+	    bool checkthis = Tree::host_xdata[i] >= x0 && Tree::host_xdata[i] < x0 + h && Tree::host_ydata[i] >= y0 && Tree::host_ydata[i] < y0 + h;
+	    
+	    // if(!checkthis)
+	    //	printf("oooops %d %f %f\n", i, Tree::host_xdata[i], Tree::host_ydata[i]);
+
+	    assert(checkthis);
+	}
 
 	node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
 
@@ -908,11 +899,11 @@ namespace TreeCheck
 	return r;
     }
 
-    void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::DeviceNode * allnodes, Tree::DeviceNode& a, TreeCheck::DebugNode& b)
+    void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::Node * allnodes, Tree::Node& a, TreeCheck::DebugNode& b)
     {
-	assert(a.x == b.x);
-	assert(a.y == b.y);
-	assert(a.l == b.l);
+	//assert(a.x == b.x);
+	//assert(a.y == b.y);
+	//assert(a.l == b.l);
 	assert(a.s == b.s);
 	assert(a.e == b.e);
 	//assert(a.mask == b.mask);
@@ -920,16 +911,19 @@ namespace TreeCheck
 	{
 	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
-
+/*
 	    printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
 		   a.mass, a.w, a.wx, a.wy, a.r);
 	    printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-		   b.mass, b.w, b.wx, b.wy, b.r);
+	    b.mass, b.w, b.wx, b.wy, b.r);*/
 	}
 	assert(check_bits(a.mass, b.mass) >= 40);
-	assert(check_bits(a.w, b.w) >= 40);
-	assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
-	assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
+	//assert(check_bits(a.w, b.w) >= 40);
+	assert(check_bits(a.xcom, b.wx / b.w) >= 40 || b.w == 0);
+	assert(check_bits(a.ycom, b.wy / b.w) >= 40 || b.w == 0);
+	
+	//assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
+	//assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
 	assert(check_bits(a.r, b.r) >= 32);
 #ifndef NDEBUG
@@ -945,7 +939,7 @@ namespace TreeCheck
 
 	if (!b.leaf)
 	    for(int c = 0; c < 4; ++c)
-		check_tree(EXPORD, a.children[c], allexp, allnodes, allnodes[a.children[c]], *b.children[c]);
+		check_tree(EXPORD, a.state.children[c], allexp, allnodes, allnodes[a.state.children[c]], *b.children[c]);
     }
 
     void verify_all(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc, const int LEAF_MAXCOUNT)
@@ -1013,20 +1007,23 @@ namespace TreeCheck
 	
 	_build(debugroot, 0, 0, 0, 0, nsrc, 0);
     
-	const int nnodes = Tree::nnodes;
-	std::vector<Tree::DeviceNode> allnodes(nnodes);
+	//const int nnodes = Tree::nnodes;
+	//std::vector<Tree::Node> allnodes(nnodes);
 
-	CUDA_CHECK(cudaMemcpy(&allnodes.front(), Tree::device_bufnodes, sizeof(Tree::DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
+	//CUDA_CHECK(cudaMemcpy(&allnodes.front(), Tree::device_bufnodes, sizeof(Tree::DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
 
 	//std::vector<realtype> allexpansions(nnodes * ORDER * 2);
 	//CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * ORDER * nnodes, cudaMemcpyDeviceToHost));
 
-	printf("rooot xylsem: %d %d %d %d %d 0x%x, children %d %d %d %d\n",
-	       allnodes[0].x, allnodes[0].y, allnodes[0].l, allnodes[0].s, allnodes[0].e, allnodes[0].mask,
-	       allnodes[0].children[0], allnodes[0].children[1], allnodes[0].children[2], allnodes[0].children[3]);
+	printf("rooot xylsem: %d %d, children %d %d %d %d\n",
+	       Tree::host_nodes[0].s, Tree::host_nodes[0].e,
+	       Tree::host_nodes[0].state.children[0],
+	       Tree::host_nodes[0].state.children[1],
+	       Tree::host_nodes[0].state.children[2],
+	       Tree::host_nodes[0].state.children[3]);
 
 	//ok let's check this
-	check_tree(ORDER, 0, Tree::host_expansions, &allnodes.front(), allnodes[0], *debugroot);
+	check_tree(ORDER, 0, Tree::host_expansions,Tree::host_nodes, Tree::host_nodes[0], *debugroot);
 
 	printf("TREE IS GOOD\n");
 	printf("VERIFICATION SUCCEDED.______________________________\n");

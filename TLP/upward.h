@@ -27,14 +27,29 @@ namespace Tree
 	    bool innernode;
 	    int children[4];
 	} state;
+
+	
+	__device__ void setup(int s, int e)
+	    {
+		this->s = s;
+		this->e = e;
+		
+		mass = xcom = ycom = r = 0;
+
+		for (int i = 0; i < 4; ++i)
+		    state.children[i] = 0;
+	    }
     };
 
-    extern realtype *host_xdata, *host_ydata, *host_vdata, *host_expansions;
     extern realtype *device_xdata, *device_ydata, *device_vdata, *device_expansions;
-
-    extern Node * host_nodes, *device_nodes;
+    extern Node *device_nodes;
     extern int nnodes;
 
+#ifndef NDEBUG
+    extern Node * host_nodes;
+    extern realtype *host_xdata, *host_ydata, *host_vdata, *host_expansions;
+#endif
+    
     void build(const realtype * const xsrc,
 	       const realtype * const ysrc,
 	       const realtype * const vsrc,

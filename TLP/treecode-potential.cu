@@ -112,7 +112,8 @@ namespace EvaluatePotential
 	if (master)
 	    results[gid] = result;
     }
-    
+
+#ifndef NDEBUG
     void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared)
     {
 	int stack[LMAX * 4 * 2];
@@ -155,6 +156,7 @@ namespace EvaluatePotential
 		}
 	}
     }
+#endif
 }
 
 using namespace EvaluatePotential;
@@ -192,7 +194,7 @@ void treecode_potential_solve(const realtype theta,
     evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize), STACKSIZE * sizeof(int)* yblocksize>>>(
 	device_xdst, device_ydst, thetasquared, device_results, ndst);
     CUDA_CHECK(cudaPeekAtLastError());
-        
+         
     CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
     
 #else
