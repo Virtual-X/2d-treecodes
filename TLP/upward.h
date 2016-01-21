@@ -12,116 +12,48 @@
 
 #pragma once
 
-#include <cassert>
-//#include <cmath>
-
-//#include <parallel/algorithm>
-//#include <limits>
-#include <cinttypes>
-#include <algorithm>
-#include <utility>
-
 typedef REAL realtype;
-
-#include "reference-upward-kernels.h"
 
 namespace Tree
 {
     struct Node
     {
-	int x, y, l, s, e;
-	bool leaf;
-	realtype w, wx, wy, mass, r;
+	int s, e;
+	
+	realtype mass, xcom, ycom, r;
 
-	Node * children[4];
+	union
+	{
+	    bool innernode;
+	    int children[4];
+	} state;
 
-	void setup(int x, int y, int l, int s, int e, bool leaf)
+	
+	__device__ void setup(int s, int e)
 	    {
-		this->x = x;
-		this->y = y;
-		this->l = l;
 		this->s = s;
 		this->e = e;
-		this->leaf = leaf;
-
-	    }
-
-	realtype xcom() const { return wx / w; }
-	realtype ycom() const { return wy / w; }
-
-	Node() 
-	    { 
-		for (int i = 0; i < 4; ++i) 
-		    children[i] = nullptr; 
-
-		w = wx = wy = mass = r = 0; 
-	    }
 		
-	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
-
-	alignedvec rexpansions;
-	alignedvec iexpansions;
-
-	void allocate_children()
-	    {
-		for(int i = 0; i < 4; ++i)
-		    children[i] = new Node;
-	    }
-	
-	realtype * rexp(){return &rexpansions[0];} 
-	realtype * iexp(){return &iexpansions[0];}
-	
-	void p2e(const realtype * __restrict__ const xsources,
-		 const realtype * __restrict__ const ysources,
-		 const realtype * __restrict__ const vsources,
-		 const double x0, const double y0, const double h) 
-	    {
-		reference_upward_p2e(xsources, ysources, vsources, e - s,
-				     x0, y0, h, &mass, &w, &wx, &wy, &r,
-				     rexpansions, iexpansions);
-	    }
-
-	void e2e() 
-	    {
-		realtype srcmass[4], rx[4], ry[4];
-		realtype * chldrxp[4], *chldixp[4];
-
-		for(int c = 0; c < 4; ++c)
-		{
-		    Node * chd = children[c];
-
-		    srcmass[c] = chd->mass;
-		    rx[c] = chd->xcom() - xcom();
-		    ry[c] = chd->ycom() - ycom();
-		    chldrxp[c] = chd->rexpansions;
-		    chldixp[c] = chd->iexpansions;
-		}
-
-		reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
-#ifndef NDEBUG
-		{
-		    for(int i = 0; i < ORDER; ++i)
-			assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
-		}
-#endif
-	    }
-
-	~Node() 
-	    {
-		for(int i = 0; i < 4; ++i)
-		    if (children[i])
-		    {
-			delete children[i];
-
-			children[i] = nullptr;
-		    }
+#pragma unroll
+		for (int i = 0; i < 4; ++i)
+		    state.children[i] = 0;
 	    }
     };
 
-    extern realtype *xdata, *ydata, *vdata;
-
-    void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	       Node * const root, const int LEAF_MAXCOUNT, const int exporder);
+    extern realtype *device_xdata, *device_ydata, *device_vdata, *device_expansions;
+    extern Node *device_nodes;
+    
+#ifndef NDEBUG
+    extern int nnodes;
+    extern Node * host_nodes;
+    extern realtype *host_xdata, *host_ydata, *host_vdata, *host_expansions;
+#endif
+    
+    void build(const realtype * const xsrc,
+	       const realtype * const ysrc,
+	       const realtype * const vsrc,
+	       const int nsrc,
+	       const int LEAF_MAXCOUNT);
 
     void dispose();
 };

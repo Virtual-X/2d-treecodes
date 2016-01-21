@@ -29,13 +29,15 @@ OBJS += $(wildcard ILP+DLP/order$(order)-*.o)
 
 libtreecode-potential.so: TLP/treecode-potential.h drivers
 	m4 -D realtype=$(real) TLP/treecode-potential.h | sed '/typedef/d' > treecode-potential.h
-	nvcc -arch=sm_30 -Xcompiler '-fPIC' -dlink $(OBJS) -o linkpot.o
-	g++ -shared -o $@ $(OBJS) linkpot.o -L/usr/local/cuda/lib64 $(CUDARTPATH) -lcudart
+	nvcc -arch=sm_30 --resource-usage -Xcompiler '-fPIC' -dlink $(OBJS) -o linkpot.o
+	g++ -shared -o $@ $(OBJS) linkpot.o TLP/sort-sources.o -L/usr/local/cuda/lib64 $(CUDARTPATH) -lcudart
+
 
 libtreecode-force.so: TLP/treecode-force.h drivers
 	m4 -D realtype=$(real) TLP/treecode-force.h | sed '/typedef/d' > treecode-force.h
 	nvcc -arch=sm_30 -Xcompiler '-fPIC' -dlink $(OBJS) -o linkfor.o
-	g++ -shared -o $@ $(OBJS) linkfor.o -L/usr/local/cuda/lib64  $(CUDARTPATH) -lcudart
+	g++ -shared -o $@ $(OBJS) TLP/sort-sources.o linkfor.o -L/usr/local/cuda/lib64 $(CUDARTPATH) -lcudart
+
 
 drivers: kernels
 	make -C TLP $(TARGET)

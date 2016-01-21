@@ -13,18 +13,17 @@
 real ?= double
 order ?= 12
 mrag-blocksize ?= 32
-config ?=release
+#config ?=release
 
-TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order)
+TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15 -O3
 NVCCFLAGS := $(TLPFLAGS) -arch=sm_30 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'
 TLPFLAGS += -march=native -fopenmp -fvisibility=hidden
 
 ifeq "$(config)" "release"
-	TLPFLAGS += -O3 -DNDEBUG
-	NVCCFLAGS += -O3
-#-DNDEBUG
+	TLPFLAGS +=  -DNDEBUG
+	NVCCFLAGS += -DNDEBUG
 else
-	TLPFLAGS += -g -G
+#TLPFLAGS += -g -G
 endif
 
 ifeq "$(profiling)" "1"
@@ -32,12 +31,12 @@ ifeq "$(profiling)" "1"
 	NVCCFLAGS += -lineinfo
 endif
 
-potential: treecode-potential.o order$(order)-upward.o
+potential: treecode-potential.o order$(order)-upward.o sort-sources.o
 
 force: treecode-force.o order$(order)-upward.o
 
 treecode-potential.o: treecode-potential.cu treecode-potential.h Makefile
-	nvcc $(NVCCFLAGS) -c $<
+	nvcc $(NVCCFLAGS) -dc -c $<
 
 treecode-force.o: treecode-force.cu treecode-force.h Makefile
 	nvcc $(NVCCFLAGS) \
@@ -46,6 +45,9 @@ treecode-force.o: treecode-force.cu treecode-force.h Makefile
 
 order$(order)-upward.o: upward.cu upward.h Makefile
 	nvcc $(NVCCFLAGS) -dc -c $< -o $@
+
+sort-sources.o: sort-sources.cu sort-sources.h Makefile
+	nvcc $(NVCCFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o 

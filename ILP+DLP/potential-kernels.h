@@ -16,14 +16,14 @@
 extern "C"
 {
 #endif
-    realtype potential_p2p(const realtype * __restrict__ const xsources,
+    realtype reference_potential_p2p(const realtype * __restrict__ const xsources,
 			   const realtype * __restrict__ const ysources,
 			   const realtype * __restrict__ const sources,
 			   const int nsources,
 			   const realtype _xt,
 			   const realtype _yt);
 
-    realtype potential_e2p(const realtype mass,
+    realtype reference_potential_e2p(const realtype mass,
 			   const realtype rx,
 			   const realtype ry,
 			   const realtype * __restrict__ const rxp,
@@ -31,3 +31,18 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif
+
+
+
+__device__ realtype potential_p2p(const realtype * __restrict__ const xsources,
+				  const realtype * __restrict__ const ysources,
+				  const realtype * __restrict__ const sources,
+				  const int nsources,
+				  const realtype _xt,
+				  const realtype _yt);
+
+__device__ realtype potential_e2p(const realtype mass,
+				  const realtype rx,
+				  const realtype ry,
+				  const realtype * __restrict__ const rxp,
+				  const realtype * __restrict__ const ixp);
