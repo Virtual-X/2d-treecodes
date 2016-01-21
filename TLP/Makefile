@@ -47,7 +47,7 @@ order$(order)-upward.o: upward.cu upward.h Makefile
 	nvcc $(NVCCFLAGS) -dc -c $< -o $@
 
 sort-sources.o: sort-sources.cu sort-sources.h Makefile
-	nvcc $(NVCCFLAGS) -dc -c $< -o $@
+	nvcc $(NVCCFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o 

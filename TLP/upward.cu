@@ -23,7 +23,8 @@
 #include "cuda-common.h"
 
 #define WARPSIZE 32
-#define MFENCE __threadfence()
+#define MFENCE
+//__threadfence()
 #define NQUEUES 4
 #define LQSIZE 16
 
@@ -119,8 +120,6 @@ namespace Tree
 		this->mask = mask;
 		this->parent = parent;
 		this->validchildren = 0;
-
-		//w = wx = wy = 0;
 	    }
     };
 
@@ -742,15 +741,8 @@ namespace TreeCheck
 	//printf("node %d %d l%d\n", x, y, l);
 	
 	for(int i = s; i < e; ++i)
-	{
-	    bool checkthis = Tree::host_xdata[i] >= x0 && Tree::host_xdata[i] < x0 + h && Tree::host_ydata[i] >= y0 && Tree::host_ydata[i] < y0 + h;
-	    
-	    // if(!checkthis)
-	    //	printf("oooops %d %f %f\n", i, Tree::host_xdata[i], Tree::host_ydata[i]);
-
-	    assert(checkthis);
-	}
-
+	    assert(Tree::host_xdata[i] >= x0 && Tree::host_xdata[i] < x0 + h && Tree::host_ydata[i] >= y0 && Tree::host_ydata[i] < y0 + h);
+	
 	node->setup(x, y, l, s, e, e - s <= LEAF_MAXCOUNT || l + 1 > LMAX);
 
 	if (node->leaf)
