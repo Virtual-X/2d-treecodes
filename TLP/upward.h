@@ -34,8 +34,7 @@ namespace Tree
 		this->s = s;
 		this->e = e;
 		
-		mass = xcom = ycom = r = 0;
-
+#pragma unroll
 		for (int i = 0; i < 4; ++i)
 		    state.children[i] = 0;
 	    }
@@ -43,9 +42,9 @@ namespace Tree
 
     extern realtype *device_xdata, *device_ydata, *device_vdata, *device_expansions;
     extern Node *device_nodes;
-    extern int nnodes;
-
+    
 #ifndef NDEBUG
+    extern int nnodes;
     extern Node * host_nodes;
     extern realtype *host_xdata, *host_ydata, *host_vdata, *host_expansions;
 #endif

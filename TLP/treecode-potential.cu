@@ -22,8 +22,6 @@
 
 typedef REAL realtype; 
 
-//#include "treecode-potential.h"
-
 #include "potential-kernels.h"
 #include "upward.h"
 
@@ -33,7 +31,9 @@ typedef REAL realtype;
 
 namespace EvaluatePotential
 {
+#ifndef NDEBUG
     __constant__ int nnodes;
+#endif
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
   
@@ -164,8 +164,8 @@ using namespace EvaluatePotential;
 extern "C"
 __attribute__ ((visibility ("default")))
 void treecode_potential_solve(const realtype theta,
-			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
+			      const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
+			      const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
 {
     const realtype thetasquared = theta * theta;
 
@@ -187,7 +187,9 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyToSymbolAsync(vdata, &Tree::device_vdata, sizeof(Tree::device_vdata)));
 
     CUDA_CHECK(cudaMemcpyToSymbolAsync(nodes, &Tree::device_nodes, sizeof(Tree::device_nodes)));
+#ifndef NDEBUG
     CUDA_CHECK(cudaMemcpyToSymbolAsync(nnodes, &Tree::nnodes, sizeof(Tree::nnodes)));
+#endif
     CUDA_CHECK(cudaMemcpyToSymbolAsync(expansions, &Tree::device_expansions, sizeof(Tree::device_expansions)));
 
     const int yblocksize = 8;

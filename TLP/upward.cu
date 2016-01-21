@@ -120,7 +120,7 @@ namespace Tree
 		this->parent = parent;
 		this->validchildren = 0;
 
-		w = wx = wy = 0;
+		//w = wx = wy = 0;
 	    }
     };
 
@@ -509,6 +509,12 @@ namespace Tree
     Node * device_nodes = NULL;
     NodeHelper * device_helpers = NULL;
     int * device_keys = NULL;
+
+    cudaStream_t stream = 0;
+    cudaEvent_t evstart, evstop;
+
+    int * device_queue;
+    BuildResult * device_diag;
 }
 
 namespace TreeCheck
@@ -522,7 +528,6 @@ void Tree::build(const realtype * const xsrc,
 		 const int nsrc,
 		 const int LEAF_MAXCOUNT)
 {
-    cudaStream_t stream = 0;
     //CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
     
     texKeys.channelDesc = cudaCreateChannelDesc<int>();
@@ -530,7 +535,6 @@ void Tree::build(const realtype * const xsrc,
     texKeys.mipmapFilterMode = cudaFilterModePoint;
     texKeys.normalized = 0;
 
-    cudaEvent_t evstart, evstop;
     CUDA_CHECK(cudaEventCreate(&evstart));
     CUDA_CHECK(cudaEventCreate(&evstop));
     
@@ -541,25 +545,19 @@ void Tree::build(const realtype * const xsrc,
     const int device_queuesize = 8e4;
     const int device_bufsize = 8e4;
 
-    int * device_queue;
     CUDA_CHECK(cudaMalloc(&device_queue, sizeof(*device_queue) * device_queuesize * NQUEUES));
-
     CUDA_CHECK(cudaMalloc(&device_nodes, sizeof(*device_nodes) * device_bufsize));
     CUDA_CHECK(cudaMalloc(&device_helpers, sizeof(*device_helpers) * device_bufsize));    
     CUDA_CHECK(cudaMalloc(&device_expansions, sizeof(realtype) * ORDER * 2 * device_bufsize));
-    
     CUDA_CHECK(cudaMalloc(&device_xdata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_ydata, sizeof(realtype) * nsrc));
     CUDA_CHECK(cudaMalloc(&device_vdata, sizeof(realtype) * nsrc));
-    
-    BuildResult * device_diag;
-    CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
-    
     CUDA_CHECK(cudaMalloc(&device_keys, sizeof(int) * nsrc));
+    
+    CUDA_CHECK(cudaMallocHost(&device_diag, sizeof(*device_diag)));
    
     size_t textureoffset = 0;
-    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc,
-			       sizeof(int) * nsrc));
+    CUDA_CHECK(cudaBindTexture(&textureoffset, &texKeys, device_keys, &texKeys.channelDesc, sizeof(int) * nsrc));
     assert(textureoffset == 0);
 
     CUDA_CHECK(cudaPeekAtLastError());
@@ -585,27 +583,30 @@ void Tree::build(const realtype * const xsrc,
     CUDA_CHECK(cudaMemcpyAsync(device_ydata, ysrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
+    CUDA_CHECK(cudaEventRecord(evstart));
+    
     sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &extent);
 
     setup<<<1, 1>>>(nsrc);
 
-    CUDA_CHECK(cudaEventRecord(evstart));
-
     const int ysize = 16;
     build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
     CUDA_CHECK(cudaPeekAtLastError());
-    
-    CUDA_CHECK(cudaEventRecord(evstop));
 
     conclude<<<1, 1>>>(device_diag);
-
     CUDA_CHECK(cudaPeekAtLastError());
 
-
-    CUDA_CHECK(cudaStreamSynchronize(0));
-
-     CUDA_CHECK(cudaEventSynchronize(evstop));
+    CUDA_CHECK(cudaEventRecord(evstop));
  
+#ifndef NDEBUG
+    TreeCheck::verify_all(xsrc, ysrc, vsrc, nsrc, LEAF_MAXCOUNT);
+#endif
+} 
+
+void Tree::dispose()
+{   
+    CUDA_CHECK(cudaEventSynchronize(evstop));
+
     float timems;
     CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
     printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
@@ -613,40 +614,6 @@ void Tree::build(const realtype * const xsrc,
     printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
 	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good);
 
-    nnodes = device_diag->ntreenodes;
-    const size_t expansionsbytes = sizeof(realtype) * 2 * ORDER * nnodes;
- 
-#ifndef NDEBUG
-   
-    
-    posix_memalign((void **)&host_xdata, 32, sizeof(realtype) * nsrc);
-    posix_memalign((void **)&host_ydata, 32, sizeof(realtype) * nsrc);
-    posix_memalign((void **)&host_vdata, 32, sizeof(realtype) * nsrc);
-
-    CUDA_CHECK(cudaMemcpy(host_xdata, device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(host_ydata, device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(host_vdata, device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
-    
-    CUDA_CHECK(cudaMallocHost(&host_expansions, expansionsbytes));
-    CUDA_CHECK(cudaMallocHost(&host_nodes, sizeof(Node) * nnodes));
-    CUDA_CHECK(cudaMemcpy(host_expansions, device_expansions, expansionsbytes, cudaMemcpyDeviceToHost));
-
-    std::vector<NodeHelper> devhelpers(nnodes);
-    CUDA_CHECK(cudaMemcpy(host_nodes, device_nodes, sizeof(Node) * nnodes, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(&devhelpers.front(), device_helpers, sizeof(NodeHelper) * nnodes, cudaMemcpyDeviceToHost));
-
-    TreeCheck::verify_all(xsrc, ysrc, vsrc, nsrc, LEAF_MAXCOUNT);
-#endif
-  
-    CUDA_CHECK(cudaFree(device_queue));
-    
-    CUDA_CHECK(cudaFreeHost(device_diag));
-    CUDA_CHECK(cudaEventDestroy(evstart));
-    CUDA_CHECK(cudaEventDestroy(evstop));
-}
-
-void Tree::dispose()
-{
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
     CUDA_CHECK(cudaFree(device_vdata));
@@ -654,6 +621,10 @@ void Tree::dispose()
     CUDA_CHECK(cudaFree(device_expansions));
     CUDA_CHECK(cudaFree(device_keys));
     CUDA_CHECK(cudaFree(device_helpers));
+    CUDA_CHECK(cudaEventDestroy(evstart));
+    CUDA_CHECK(cudaEventDestroy(evstop));
+    CUDA_CHECK(cudaFree(device_queue));
+    CUDA_CHECK(cudaFreeHost(device_diag));
 
 #ifndef NDEBUG
     CUDA_CHECK(cudaFreeHost(host_nodes));
@@ -912,10 +883,10 @@ namespace TreeCheck
 	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 /*
-	    printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-		   a.mass, a.w, a.wx, a.wy, a.r);
-	    printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-	    b.mass, b.w, b.wx, b.wy, b.r);*/
+  printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+  a.mass, a.w, a.wx, a.wy, a.r);
+  printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
+  b.mass, b.w, b.wx, b.wy, b.r);*/
 	}
 	assert(check_bits(a.mass, b.mass) >= 40);
 	//assert(check_bits(a.w, b.w) >= 40);
@@ -944,6 +915,29 @@ namespace TreeCheck
 
     void verify_all(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc, const int LEAF_MAXCOUNT)
     {
+	CUDA_CHECK(cudaStreamSynchronize(0));
+	
+	Tree::nnodes = Tree::device_diag->ntreenodes;
+	const size_t expansionsbytes = sizeof(realtype) * 2 * ORDER * Tree::nnodes;
+	
+    
+	posix_memalign((void **)&Tree::host_xdata, 32, sizeof(realtype) * nsrc);
+	posix_memalign((void **)&Tree::host_ydata, 32, sizeof(realtype) * nsrc);
+	posix_memalign((void **)&Tree::host_vdata, 32, sizeof(realtype) * nsrc);
+	
+	CUDA_CHECK(cudaMemcpy(Tree::host_xdata, Tree::device_xdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(Tree::host_ydata, Tree::device_ydata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(Tree::host_vdata, Tree::device_vdata, sizeof(realtype) * nsrc, cudaMemcpyDeviceToHost));
+	
+	CUDA_CHECK(cudaMallocHost(&Tree::host_expansions, expansionsbytes));
+	CUDA_CHECK(cudaMallocHost(&Tree::host_nodes, sizeof(Tree::Node) * Tree::nnodes));
+	CUDA_CHECK(cudaMemcpy(Tree::host_expansions, Tree::device_expansions, expansionsbytes, cudaMemcpyDeviceToHost));
+
+	std::vector<Tree::NodeHelper> devhelpers(Tree::nnodes);
+	CUDA_CHECK(cudaMemcpy(Tree::host_nodes, Tree::device_nodes, sizeof(Tree::Node) * Tree::nnodes, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(&devhelpers.front(), Tree::device_helpers, sizeof(Tree::NodeHelper) * Tree::nnodes,
+			      cudaMemcpyDeviceToHost));
+    
 	printf("VERIFICATION _______________________________________\n");
 	
 	TreeCheck::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
