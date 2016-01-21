@@ -45,4 +45,5 @@ __device__ realtype potential_e2p(const realtype mass,
 				  const realtype rx,
 				  const realtype ry,
 				  const realtype * __restrict__ const rxp,
-				  const realtype * __restrict__ const ixp);
+				  const realtype * __restrict__ const ixp,
+				  realtype * const scratch);

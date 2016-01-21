@@ -56,6 +56,9 @@ namespace EvaluatePotential
 
 	volatile int * stack = ary + STACKSIZE * threadIdx.y;
 
+	realtype * scratchbase = (realtype *)(ary + STACKSIZE * blockDim.y);
+	realtype * scratch = scratchbase + (2 * 32 * threadIdx.y);
+	
 	int stackentry = 0, maxentry = 0;
 
 	if (master)
@@ -79,12 +82,12 @@ namespace EvaluatePotential
 
 	    if (node.r * node.r < thetasquared * r2)
 	    {
-		if (master)
+		//if (master)
 		{
 		    const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
 		    const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
 		    
-		    result += potential_e2p(node.mass, xt - node.xcom, yt - node.ycom, rxp, ixp);
+		    result += potential_e2p(node.mass, xt - node.xcom, yt - node.ycom, rxp, ixp, scratch);
 		}
 	    }
 	    else
@@ -193,7 +196,8 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyToSymbolAsync(expansions, &Tree::device_expansions, sizeof(Tree::device_expansions)));
 
     const int yblocksize = 8;
-    evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize), STACKSIZE * sizeof(int)* yblocksize>>>(
+    evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize),
+	(STACKSIZE * sizeof(int) + 2 * 32 * sizeof(realtype)) * yblocksize>>>(
 	device_xdst, device_ydst, thetasquared, device_results, ndst);
     CUDA_CHECK(cudaPeekAtLastError());
          

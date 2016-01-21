@@ -59,28 +59,46 @@ __device__ realtype potential_p2p(
     return TMP(s, 0) / 2;
   }
 
+define(`RARY', `scratch[$1]')
+define(`IARY', `scratch[32 + $1]')
+
+define(PASSES, `esyscmd(python z_to_k.py ORDER)')
+
 __device__ realtype potential_e2p(const realtype mass,
   const realtype rz,
   const realtype iz,
   const realtype * __restrict__ const rxp,
-  const realtype * __restrict__ const ixp)
+  const realtype * __restrict__ const ixp,
+  realtype * const scratch) // size of 32 * 2 * sizeof(realtype)
   {
+	//volatile realtype * const scratch = _scratch;
     const int tid = threadIdx.x;
-    assert(tid == 0);
+    assert(tid < 32 && blockDim.x == 32);
   
     const realtype r2 = rz * rz + iz * iz;
 
-    const realtype rinvz_1 = rz / r2;
-    const realtype iinvz_1 = -iz / r2;
+    scratch[0] = rz / r2;
+    scratch[32] = -iz / r2;
 
-    LUNROLL(j, 2, ORDER, `
-    const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
-    const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
+     RARY(1) = RARY(0) * RARY(0) - IARY(0) * IARY(0);
+     IARY(1) = 2 * IARY(0) * RARY(0);
 
-    LUNROLL(j, 1, ORDER, `
-    realtype TMP(rsum, eval(j - 1)) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);')
+    SEQ(`
+    pushdef(`DELTAN', eval(n / 2))dnl
+    pushdef(`NOLD', eval(n / 2))dnl
 
-    REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum,i)'))
-        
-    return  mass * log(r2) / 2 + TMP(rsum, 0);
+    if (tid < DELTAN)
+    {
+        RARY(tid + NOLD) = RARY(tid) * RARY(NOLD - 1) - IARY(tid) * IARY(NOLD - 1);
+	IARY(tid + NOLD) = RARY(tid) * IARY(NOLD - 1) + IARY(tid) * RARY(NOLD - 1);
+    }', n, PASSES)       
+
+    realtype rsum = 0;
+    if (tid < ORDER)
+       rsum = rxp[tid] * RARY(tid) - ixp[tid] * IARY(tid);
+
+    SEQ(`rsum += __shfl_xor(rsum, L );
+    ', L, 16, 8, 4, 2, 1)
+    
+    return  mass * log(r2) / 2 + rsum;
   }
