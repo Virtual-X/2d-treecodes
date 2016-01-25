@@ -29,6 +29,14 @@ typedef REAL realtype;
 
 #define STACKSIZE (LMAX * 4)
 
+struct SharedBuffers
+{
+	//realtype scratch[2][32];
+
+	int stack[LMAX * 4];
+	int buffered_e2ps[32];
+};
+
 namespace EvaluatePotential
 {
 #ifndef NDEBUG
@@ -52,12 +60,12 @@ namespace EvaluatePotential
 	const realtype xt = xts[gid];
 	const realtype yt = yts[gid];
 
-	extern __shared__ int ary[];
+	extern __shared__ SharedBuffers ary[];
 
-	volatile int * stack = ary + STACKSIZE * threadIdx.y;
-
-	realtype * scratchbase = (realtype *)(ary + STACKSIZE * blockDim.y);
-	realtype * scratch = scratchbase + (2 * 32 * threadIdx.y);
+	//realtype * scratch = ary[threadIdx.y].scratch[0]; //scratchbase + (2 * 32 * threadIdx.y);
+	int * stack = ary[threadIdx.y].stack;
+	int * buffered_e2ps = ary[threadIdx.y].buffered_e2ps;
+	int counter_e2ps = 0;
 	
 	int stackentry = 0, maxentry = 0;
 
@@ -82,35 +90,67 @@ namespace EvaluatePotential
 
 	    if (node.r * node.r < thetasquared * r2)
 	    {
-		//if (master)
-		{
-		    const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
-		    const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
-		    
-		    result += potential_e2p(node.mass, xt - node.xcom, yt - node.ycom, rxp, ixp, scratch);
-		}
+		    assert(counter_e2ps < 32);
+
+		    if (master)
+		    	buffered_e2ps[counter_e2ps] = nodeid;
+
+ 			counter_e2ps++;
+
+		    if (counter_e2ps == 32)
+		    {
+		    	counter_e2ps = 0;
+
+		    	const int mynodeid = buffered_e2ps[tid];
+	    		assert(mynodeid < nnodes);
+	    
+	    		const Tree::Node * mynode = nodes + mynodeid;
+
+	    		result += potential_e2p_individual(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
+	    			expansions + ORDER * (0 + 2 * mynodeid), 
+	    			expansions + ORDER * (1 + 2 * mynodeid));
+		    }
+		//}
 	    }
 	    else
 	    {
-		if (!node.state.innernode)
-		{
-		    const int s = node.s;
+			if (!node.state.innernode)
+			{
+			    const int s = node.s;
 
-		    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
-		}
-		else
-		{
-		    if (master)   
-			for(int c = 0; c < 4; ++c)
-			    stack[++stackentry] = node.state.children[c];
-		    else
-		    	stackentry += 4;
-		    
-		    maxentry = max(maxentry, stackentry);
-		    assert(maxentry < STACKSIZE);
-		}
+			    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
+			}
+			else
+			{
+			    if (master)   
+				for(int c = 0; c < 4; ++c)
+				    stack[++stackentry] = node.state.children[c];
+			    else
+			    	stackentry += 4;
+			    
+			    maxentry = max(maxentry, stackentry);
+			    assert(maxentry < STACKSIZE);
+			}
 	    }
 	}
+
+  	if (tid < counter_e2ps)
+	    {
+	    	const int mynodeid = buffered_e2ps[tid];
+	    	assert(mynodeid < nnodes);
+	    
+	    	const Tree::Node * mynode = nodes + mynodeid;
+
+	    	result += potential_e2p_individual(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
+	    		expansions + ORDER * (0 + 2 * mynodeid), 
+	    		expansions + ORDER * (1 + 2 * mynodeid));
+	    }
+
+	result += __shfl_xor(result, 16 );
+	result += __shfl_xor(result, 8 );
+	result += __shfl_xor(result, 4 );
+	result += __shfl_xor(result, 2 );
+	result += __shfl_xor(result, 1 );
 
 	if (master)
 	    results[gid] = result;
@@ -197,7 +237,7 @@ void treecode_potential_solve(const realtype theta,
 
     const int yblocksize = 8;
     evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize),
-	(STACKSIZE * sizeof(int) + 2 * 32 * sizeof(realtype)) * yblocksize>>>(
+	sizeof(SharedBuffers) * yblocksize>>>(
 	device_xdst, device_ydst, thetasquared, device_results, ndst);
     CUDA_CHECK(cudaPeekAtLastError());
          
