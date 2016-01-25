@@ -27,8 +27,10 @@ endif
 
 potential force: $(OBJS)
 
+# -maxrregcount=40
+
 %.cuda.o: %.cu Makefile
-	nvcc  -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -O4 -arch=sm_30 -use_fast_math -dc -c $< -o $@
+	nvcc -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -O4 -arch=sm_30 -use_fast_math -dc -c $< -o $@
 
 %.o: %.c Makefile
 	gcc -fPIC -fvisibility=hidden -std=c99 -O4 -DNDEBUG -ftree-vectorize \

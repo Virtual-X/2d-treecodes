@@ -75,7 +75,7 @@ __device__ realtype potential_e2p(const realtype mass,
     assert(tid < 32 && blockDim.x == 32);
 
     const int mask = tid & 0x3;
-    const int base = 4 * (tid & ~0x3);
+    const int base = tid & ~0x3;
     
     const realtype r2 = rz * rz + iz * iz;
 
@@ -112,10 +112,10 @@ __device__ realtype potential_e2p(const realtype mass,
     rprod = rtmp;
     iprod = itmp;')')
 
-    rsum += __shfl_xor(rsum, 2 );
-    rsum += __shfl_xor(rsum, 1 );
+    if (mask == 0)
+       rsum +=  mass * log(r2) / 2;
     
-    return  mass * log(r2) / 2 + rsum;
+    return  rsum;
   }
 
   __device__ realtype potential_e2p_individual(const realtype mass,
