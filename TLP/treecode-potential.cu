@@ -110,7 +110,6 @@ namespace EvaluatePotential
 	    			expansions + ORDER * (0 + 2 * mynodeid), 
 	    			expansions + ORDER * (1 + 2 * mynodeid));
 		    }
-		//}
 	    }
 	    else
 	    {
@@ -165,6 +164,7 @@ namespace EvaluatePotential
 
 	stack[0] = 0;
 	*result = 0;
+	//int slast = 0, elast = 0;
 	while(stackentry > -1)
 	{
 	    const int nodeid = stack[stackentry--];
@@ -189,7 +189,12 @@ namespace EvaluatePotential
 		    const int s = node->s;
 		    
 		    *result += reference_potential_p2p(&Tree::host_xdata[s], &Tree::host_ydata[s], &Tree::host_vdata[s], node->e - s, xt, yt);
-		}
+			//rintf("%d %d   %d %d\n", slast, s, elast, node->e);
+		
+		    //assert(s >= slast && node->e >= elast);
+		    //slast = s;
+		    //elast = node->e;
+		    }
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
@@ -244,7 +249,6 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
     
 #else
-#pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
 	reference_evaluate(vdst + i, xdst[i], ydst[i], thetasquared);
 #endif

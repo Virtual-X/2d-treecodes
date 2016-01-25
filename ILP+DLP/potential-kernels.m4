@@ -71,34 +71,49 @@ __device__ realtype potential_e2p(const realtype mass,
   const realtype * __restrict__ const ixp,
   realtype * const scratch) // size of 32 * 2 * sizeof(realtype)
   {
-    //volatile realtype * const scratch = _scratch;
     const int tid = threadIdx.x;
     assert(tid < 32 && blockDim.x == 32);
-  
+
+    const int mask = tid & 0x3;
+    const int base = 4 * (tid & ~0x3);
+    
     const realtype r2 = rz * rz + iz * iz;
 
-    scratch[0] = rz / r2;
-    scratch[32] = -iz / r2;
+    if (mask == 0)
+    {	
+	RARY(base + 0) = rz / r2;
+    	IARY(base + 0) = -iz / r2;
 
-     RARY(1) = RARY(0) * RARY(0) - IARY(0) * IARY(0);
-     IARY(1) = 2 * IARY(0) * RARY(0);
+    	RARY(base + 1) = RARY(base + 0) * RARY(base + 0) - IARY(base + 0) * IARY(base + 0);
+    	IARY(base + 1) = 2 * IARY(base + 0) * RARY(base + 0);
+     }
 
-    SEQ(`
-    pushdef(`DELTAN', eval(n / 2))dnl
-    pushdef(`NOLD', eval(n / 2))dnl
-
-    if (tid < DELTAN)
+    if (mask < 2)
     {
-        RARY(tid + NOLD) = RARY(tid) * RARY(NOLD - 1) - IARY(tid) * IARY(NOLD - 1);
-	IARY(tid + NOLD) = RARY(tid) * IARY(NOLD - 1) + IARY(tid) * RARY(NOLD - 1);
-    }', n, PASSES)       
+        RARY(base + mask + 2) = RARY(base + mask) * RARY(base + 1) - IARY(base + mask) * IARY(base + 1);
+	IARY(base + mask + 2) = RARY(base + mask) * IARY(base + 1) + IARY(base + mask) * RARY(base + 1);
+    }
 
-    realtype rsum = 0;
-    if (tid < ORDER)
-       rsum = rxp[tid] * RARY(tid) - ixp[tid] * IARY(tid);
+    const realtype rinvz_4 = RARY(base + 3);
+    const realtype iinvz_4 = IARY(base + 3);
 
-    SEQ(`rsum += __shfl_xor(rsum, L );
-    ', L, 16, 8, 4, 2, 1)
+    realtype rprod = RARY(tid);
+    realtype iprod = IARY(tid);
+
+    realtype rsum = 0, rtmp, itmp;
+    
+    LUNROLL(j, 1, eval((3 + ORDER) / 4), `
+    pushdef(`JJ', eval((j-1)* 4))
+    rsum += rxp[JJ + mask] * rprod - ixp[JJ + mask] * iprod;
+    dnl dnl 
+    ifelse(eval(JJ + 4 < ORDER), 1, `
+    rtmp = rinvz_4 * rprod - iinvz_4 * iprod;
+    itmp = rinvz_4 * iprod + iinvz_4 * rprod;
+    rprod = rtmp;
+    iprod = itmp;')')
+
+    rsum += __shfl_xor(rsum, 2 );
+    rsum += __shfl_xor(rsum, 1 );
     
     return  mass * log(r2) / 2 + rsum;
   }
@@ -109,7 +124,7 @@ __device__ realtype potential_e2p(const realtype mass,
   const realtype * __restrict__ const rxp,
   const realtype * __restrict__ const ixp)
   {
-    const int tid = threadIdx.x;
+    //const int tid = threadIdx.x;
     //assert(tid == 0);
   
     const realtype r2 = rz * rz + iz * iz;
