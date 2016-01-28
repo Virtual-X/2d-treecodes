@@ -10,7 +10,7 @@
 *  before getting a written permission from the author of this file.
 */
 
-define(NACC, 4)
+define(NACC, 2)
 include(unroll.m4) dnl
 
 #include <cassert>

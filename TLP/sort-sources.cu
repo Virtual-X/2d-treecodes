@@ -1,3 +1,5 @@
+#include <cassert>
+
 #include <thrust/extrema.h>
 #include <thrust/device_ptr.h>
 #include <thrust/pair.h>
@@ -52,11 +54,13 @@ extern "C" void sort_sources(cudaStream_t stream,
 			     realtype * const host_extent)
 {
     thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > xminmax =
-	thrust::minmax_element(thrust::cuda::par.on(stream), thrust::device_pointer_cast(device_xsrc),
+	thrust::minmax_element(//thrust::cuda::par.on(stream), 
+			       thrust::device_pointer_cast(device_xsrc),
 			       thrust::device_pointer_cast(device_xsrc)  + nsrc);
 
     thrust::pair<thrust::device_ptr<realtype>, thrust::device_ptr<realtype> > yminmax =
-	thrust::minmax_element(thrust::cuda::par.on(stream), thrust::device_pointer_cast(device_ysrc),
+	thrust::minmax_element(//thrust::cuda::par.on(stream), 
+			       thrust::device_pointer_cast(device_ysrc),
 			       thrust::device_pointer_cast(device_ysrc)  + nsrc);
 
     const realtype truexmin = *xminmax.first;
@@ -76,7 +80,7 @@ extern "C" void sort_sources(cudaStream_t stream,
 
     CUDA_CHECK(cudaPeekAtLastError());
 
-    thrust::sort_by_key(thrust::cuda::par.on(stream),
+    thrust::sort_by_key(//thrust::cuda::par.on(stream),
 			thrust::device_pointer_cast(device_keys),
 			thrust::device_pointer_cast(device_keys + nsrc),
 			thrust::make_zip_iterator(thrust::make_tuple(

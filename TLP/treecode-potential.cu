@@ -27,18 +27,15 @@ typedef REAL realtype;
 
 #define _INSTRUMENTATION_
 
-#define STACKSIZE (LMAX * 4)
-#define _NO_THREADCOOP_
-
 struct SharedBuffers
 {
 #ifndef _NO_THREADCOOP_
-    realtype scratch[2][32];
+    realtype scratch[64];
     int buffered_e2ps[8];
 #else
     int buffered_e2ps[32];
 #endif
-    int stack[LMAX * 4];
+    int stack[LMAX * 3];
 };
 
 namespace EvaluatePotential
@@ -49,77 +46,12 @@ namespace EvaluatePotential
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
+#define EPS (10 * __DBL_EPSILON__)
+#define MAX(a,b) (((a)>(b))?(a):(b))
 
+#define ACCESS(x) __ldg(&(x)) 
 
-__device__ __forceinline__ double potential_e2pAZZ(const double mass,
-				const double rz,
-				const double iz,
-				const double * __restrict__ const rxp,
-				const double * __restrict__ const ixp,
-				double * const scratch) // size of 32 * 2 * sizeof(double)
-{
-    //asm volatile ("L_AZZ:");
-    
-    const int tid = threadIdx.x;
-    assert(tid < 32 && blockDim.x == 32);
-
-    const int mask = tid & 0x3;
-    const int base = tid & ~0x3;
-    
-    const double r2 = rz * rz + iz * iz;
-
-    if (mask == 0)
-    {	
-	scratch[base + 0] = rz / r2;
-    	scratch[32 + base + 0] = -iz / r2;
-
-    	scratch[base + 1] = scratch[base + 0] * scratch[base + 0] - scratch[32 + base + 0] * scratch[32 + base + 0];
-    	scratch[32 + base + 1] = 2 * scratch[32 + base + 0] * scratch[base + 0];
-    }
-
-    if (mask < 2)
-    {
-        scratch[base + mask + 2] = scratch[base + mask] * scratch[base + 1] - scratch[32 + base + mask] * scratch[32 + base + 1];
-	scratch[32 + base + mask + 2] = scratch[base + mask] * scratch[32 + base + 1] + scratch[32 + base + mask] * scratch[base + 1];
-    }
-
-    const double rinvz_4 = scratch[base + 3];
-    const double iinvz_4 = scratch[32 + base + 3];
-
-    double rprod = scratch[tid];
-    double iprod = scratch[32 + tid];
-
-    double rsum = 0, rtmp, itmp;
-    
-    
-    
-    rsum += rxp[0 + mask] * rprod - ixp[0 + mask] * iprod;
-        
-    rtmp = rinvz_4 * rprod - iinvz_4 * iprod;
-    itmp = rinvz_4 * iprod + iinvz_4 * rprod;
-    rprod = rtmp;
-    iprod = itmp;
-    
-    rsum += rxp[4 + mask] * rprod - ixp[4 + mask] * iprod;
-        
-    rtmp = rinvz_4 * rprod - iinvz_4 * iprod;
-    itmp = rinvz_4 * iprod + iinvz_4 * rprod;
-    rprod = rtmp;
-    iprod = itmp;
-    
-    rsum += rxp[8 + mask] * rprod - ixp[8 + mask] * iprod;
-        
-
-    if (mask == 0)
-	rsum +=  mass * log(r2) / 2;
-
-    //asm volatile ("; //AZZ END");
-    return  rsum;
-}
-
-    
-
-    __global__ void   //  __launch_bounds__(128, 12)
+    __global__ void     __launch_bounds__(128, 16)
     evaluate(const realtype * const xts, const realtype * const yts, const realtype thetasquared, realtype * const results, const int ndst)
     {
 	assert(blockDim.x == 32);
@@ -137,7 +69,7 @@ __device__ __forceinline__ double potential_e2pAZZ(const double mass,
 
 	extern __shared__ SharedBuffers ary[];
 #ifndef _NO_THREADCOOP_
-	realtype * scratch = ary[threadIdx.y].scratch[0];
+	realtype * scratch = ary[threadIdx.y].scratch;
 #endif
 	int * stack = ary[threadIdx.y].stack;
 	int * buffered_e2ps = ary[threadIdx.y].buffered_e2ps;
@@ -155,18 +87,22 @@ __device__ __forceinline__ double potential_e2pAZZ(const double mass,
 	    const int nodeid = stack[stackentry--];
 	    assert(nodeid < nnodes);
 
-	    const Tree::Node node = *(nodes + nodeid);
+	    const Tree::Node * node = nodes + nodeid;
+	    const realtype nodemass = ACCESS(node->mass);
 	
-	    if (node.e - node.s == 0)
+	    if (nodemass == 0)
 	       	continue;
 
-	    const realtype rx = xt - node.xcom;
-	    const realtype ry = yt - node.ycom;
+	    const realtype xcom = ACCESS(node->xcom);
+	    const realtype ycom = ACCESS(node->ycom);
+	    const realtype r = ACCESS(node->r);
+	    const realtype rx = xt - xcom;
+	    const realtype ry = yt - ycom;
 	    const realtype r2 = rx * rx + ry * ry;
 
-	    if (node.r * node.r < thetasquared * r2)
-	    {
-		assert(counter_e2ps < 8);
+	    if (r * r < thetasquared * r2)
+ 	    {
+		//assert(counter_e2ps < 8);
 
 		if (master)
 		    buffered_e2ps[counter_e2ps] = nodeid;
@@ -183,7 +119,7 @@ __device__ __forceinline__ double potential_e2pAZZ(const double mass,
 	    
 		    const Tree::Node * mynode = nodes + mynodeid;
 
-		    result += potential_e2p(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
+		    result += potential_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
 					    expansions + ORDER * (0 + 2 * mynodeid), 
 					    expansions + ORDER * (1 + 2 * mynodeid), scratch);
 		}
@@ -203,19 +139,19 @@ __device__ __forceinline__ double potential_e2pAZZ(const double mass,
 		}
 #endif
 	    }
-	    else
+	    else 
 	    {
-		if (!node.state.innernode)
+		if (!node->state.innernode)
 		{
-		    const int s = node.s;
+		    const int s = node->s;
 
-		    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node.e - s, xt, yt);
+		    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
 		}
 		else
 		{
 		    if (master)   
 			for(int c = 0; c < 4; ++c)
-			    stack[++stackentry] = node.state.children[c];
+			    stack[++stackentry] = node->state.children[c];
 		    else
 			stackentry += 4;
 			    
@@ -233,7 +169,7 @@ __device__ __forceinline__ double potential_e2pAZZ(const double mass,
 	    
 	    const Tree::Node * mynode = nodes + mynodeid;
 
-	    result += potential_e2p(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
+	    result += potential_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
 				    expansions + ORDER * (0 + 2 * mynodeid), 
 				    expansions + ORDER * (1 + 2 * mynodeid), scratch);
 	}
@@ -332,7 +268,7 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyAsync(device_ydst, ydst, sizeof(realtype) * ndst, cudaMemcpyHostToDevice));
     
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc,  32 * 16); //before: 64
+    Tree::build(xsrc, ysrc, vsrc, nsrc, 512);
     const double t1 = omp_get_wtime();
 
 #if 1

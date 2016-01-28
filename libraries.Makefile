@@ -16,6 +16,7 @@ mrag-blocksize ?= 32
 
 OBJS = TLP/order$(order)-upward.o
 CUDARTPATH=$(CRAY_CUDATOOLKIT_POST_LINK_OPTS)
+NVCCFLAGS = -arch=compute_35 -code=sm_35 -Xcompiler '-fPIC' -lineinfo
 
 ifeq "$(MAKECMDGOALS)" "libtreecode-force.so"
 	OBJS += TLP/treecode-force.o
@@ -29,13 +30,13 @@ OBJS += $(wildcard ILP+DLP/order$(order)-*.o)
 
 libtreecode-potential.so: TLP/treecode-potential.h drivers
 	m4 -D realtype=$(real) TLP/treecode-potential.h | sed '/typedef/d' > treecode-potential.h
-	nvcc -arch=sm_30 --resource-usage -Xcompiler '-fPIC' -dlink $(OBJS) -o linkpot.o
+	nvcc $(NVCCFLAGS) -dlink $(OBJS) -o linkpot.o
 	g++ -shared -o $@ $(OBJS) linkpot.o TLP/sort-sources.o -L/usr/local/cuda/lib64 $(CUDARTPATH) -lcudart
 
 
 libtreecode-force.so: TLP/treecode-force.h drivers
 	m4 -D realtype=$(real) TLP/treecode-force.h | sed '/typedef/d' > treecode-force.h
-	nvcc -arch=sm_30 -Xcompiler '-fPIC' -dlink $(OBJS) -o linkfor.o
+	nvcc $(NVCCFLAGS) -dlink $(OBJS) -o linkfor.o
 	g++ -shared -o $@ $(OBJS) TLP/sort-sources.o linkfor.o -L/usr/local/cuda/lib64 $(CUDARTPATH) -lcudart
 
 
