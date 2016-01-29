@@ -1,5 +1,5 @@
 /*
- *  treecode.cpp
+ *  treecode-potential.cu
  *  Part of MRAG/2d-treecode-potential
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
@@ -22,6 +22,8 @@
 #define _INSTRUMENTATION_
 #define ACCESS(x) __ldg(&(x)) 
 
+namespace EvaluatePotential
+{
 struct SharedBuffers
 {
     realtype scratch[64];
@@ -29,15 +31,13 @@ struct SharedBuffers
     int stack[LMAX * 3];
 };
 
-namespace EvaluatePotential
-{
 #ifndef NDEBUG
     __constant__ int nnodes;
 #endif
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
-    __global__ void     __launch_bounds__(128, 16)
+    __global__ void  __launch_bounds__(128, 16)
     evaluate(const realtype * const xts, const realtype * const yts, const realtype thetasquared, realtype * const results, const int ndst)
     {
 	assert(blockDim.x == 32);
@@ -165,6 +165,7 @@ void treecode_potential_solve(const realtype theta,
     const realtype thetasquared = theta * theta;
 
     realtype * device_xdst, *device_ydst, *device_results;
+
     CUDA_CHECK(cudaMalloc(&device_xdst, sizeof(realtype) * ndst));
     CUDA_CHECK(cudaMalloc(&device_ydst, sizeof(realtype) * ndst));
     CUDA_CHECK(cudaMalloc(&device_results, sizeof(realtype) * ndst));
@@ -189,12 +190,10 @@ void treecode_potential_solve(const realtype theta,
 
     const int yblocksize = 4;
     evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize),
-	sizeof(SharedBuffers) * yblocksize>>>(
-	    device_xdst, device_ydst, thetasquared, device_results, ndst);
+	sizeof(SharedBuffers) * yblocksize>>>(device_xdst, device_ydst, thetasquared, device_results, ndst);
     CUDA_CHECK(cudaPeekAtLastError());
          
-    CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
-    
+    CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost))
 #else
     for(int i = 0; i < ndst; ++i)
 	reference_evaluate(vdst + i, xdst[i], ydst[i], thetasquared);

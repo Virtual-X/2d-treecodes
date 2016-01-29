@@ -1,6 +1,6 @@
 /*
- *  treecode.cpp
- *  Part of MRAG/2d-treecode-potential
+ *  upward.cu
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -642,11 +642,12 @@ namespace TreeCheck
 
     struct DebugNode
     {
+	DebugNode * children[4];
+
 	int x, y, l, s, e;
 	bool leaf;
 	realtype w, wx, wy, mass, r;
-
-	DebugNode * children[4];
+	realtype rexpansions[ORDER], iexpansions[ORDER];
 
 	void setup(int x, int y, int l, int s, int e, bool leaf)
 	    {
@@ -669,28 +670,17 @@ namespace TreeCheck
 		w = wx = wy = mass = r = 0; 
 	    }
 		
-	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
-
-	alignedvec rexpansions;
-	alignedvec iexpansions;
-
 	void allocate_children()
 	    {
 		for(int i = 0; i < 4; ++i)
 		    children[i] = new DebugNode;
 	    }
-	
-	realtype * rexp(){return &rexpansions[0];} 
-	realtype * iexp(){return &iexpansions[0];}
-	
+		
 	void p2e(const realtype * __restrict__ const xsources,
 		 const realtype * __restrict__ const ysources,
 		 const realtype * __restrict__ const vsources,
 		 const double x0, const double y0, const double h)
 	    {
-		/*reference_upward_p2e(xsources, ysources, vsources, e - s,
-		  x0, y0, h, &mass, &w, &wx, &wy, &r,
-		  rexpansions, iexpansions);*/
 		mass = 0; 
 		w = 0;
 		wx = 0;
@@ -969,7 +959,6 @@ namespace TreeCheck
 	a.d = x;
 	b.d = y;
 
-	//printf("%.20e %.20e\n", x,y);
 	int currbit = 0;
 	for(int i = 0; i < 8; ++i)
 	{
@@ -1019,11 +1008,9 @@ namespace TreeCheck
 	{
 	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
-	    //printf("%e %e\n", b.wx, b.w);
 	}
 
 	assert(check_bits(a.mass, b.mass) >= 40);
-	//assert(check_bits(a.xcom, b.wx / b.w) >= 40 || b.w == 0);
 	assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 	assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
 	assert(check_bits(a.r, b.r) >= 32);
