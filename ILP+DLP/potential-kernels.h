@@ -12,28 +12,6 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-    realtype reference_potential_p2p(const realtype * __restrict__ const xsources,
-			   const realtype * __restrict__ const ysources,
-			   const realtype * __restrict__ const sources,
-			   const int nsources,
-			   const realtype _xt,
-			   const realtype _yt);
-
-    realtype reference_potential_e2p(const realtype mass,
-			   const realtype rx,
-			   const realtype ry,
-			   const realtype * __restrict__ const rxp,
-			   const realtype * __restrict__ const ixp);
-#ifdef __cplusplus
-}
-#endif
-
-
-
 __device__ realtype potential_p2p(const realtype * __restrict__ const xsources,
 				  const realtype * __restrict__ const ysources,
 				  const realtype * __restrict__ const sources,
@@ -48,8 +26,3 @@ __device__ realtype potential_e2p(const realtype mass,
 				  const realtype * __restrict__ const ixp,
 				  realtype * const scratch);
 
-  __device__ realtype potential_e2p_individual(const realtype mass,
-  const realtype rz, 
-  const realtype iz,
-  const realtype * __restrict__ const rxp,
-  const realtype * __restrict__ const ixp);

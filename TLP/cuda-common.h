@@ -1,3 +1,6 @@
+typedef REAL realtype; 
+
+#include <cstdio>
 #include <cuda_runtime.h>
 
 #define CUDA_CHECK(ans) do { cudaAssert((ans), __FILE__, __LINE__); } while(0)

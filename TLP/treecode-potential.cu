@@ -12,29 +12,20 @@
 
 #include <omp.h>
 
-#include <cassert>
-#include <cmath>
-#include <cstring>
 #include <cstdio>
-#include <algorithm>
+#include <cassert>
 
 #include "cuda-common.h"
-
-typedef REAL realtype; 
-
 #include "potential-kernels.h"
 #include "upward.h"
 
 #define _INSTRUMENTATION_
+#define ACCESS(x) __ldg(&(x)) 
 
 struct SharedBuffers
 {
-#ifndef _NO_THREADCOOP_
     realtype scratch[64];
     int buffered_e2ps[8];
-#else
-    int buffered_e2ps[32];
-#endif
     int stack[LMAX * 3];
 };
 
@@ -45,11 +36,6 @@ namespace EvaluatePotential
 #endif
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
-
-#define EPS (10 * __DBL_EPSILON__)
-#define MAX(a,b) (((a)>(b))?(a):(b))
-
-#define ACCESS(x) __ldg(&(x)) 
 
     __global__ void     __launch_bounds__(128, 16)
     evaluate(const realtype * const xts, const realtype * const yts, const realtype thetasquared, realtype * const results, const int ndst)
@@ -68,9 +54,9 @@ namespace EvaluatePotential
 	const realtype yt = yts[gid];
 
 	extern __shared__ SharedBuffers ary[];
-#ifndef _NO_THREADCOOP_
+
 	realtype * scratch = ary[threadIdx.y].scratch;
-#endif
+
 	int * stack = ary[threadIdx.y].stack;
 	int * buffered_e2ps = ary[threadIdx.y].buffered_e2ps;
 	int counter_e2ps = 0;
@@ -102,14 +88,11 @@ namespace EvaluatePotential
 
 	    if (r * r < thetasquared * r2)
  	    {
-		//assert(counter_e2ps < 8);
-
 		if (master)
 		    buffered_e2ps[counter_e2ps] = nodeid;
 
 		counter_e2ps++;
 
-#ifndef _NO_THREADCOOP_
 		if (counter_e2ps == 8)
 		{
 		    counter_e2ps = 0;
@@ -123,21 +106,6 @@ namespace EvaluatePotential
 					    expansions + ORDER * (0 + 2 * mynodeid), 
 					    expansions + ORDER * (1 + 2 * mynodeid), scratch);
 		}
-#else
-		if (counter_e2ps == 32)
-		{
-		    counter_e2ps = 0;
-
-		    const int mynodeid = buffered_e2ps[tid];
-		    assert(mynodeid < nnodes);
-	    
-		    const Tree::Node * mynode = nodes + mynodeid;
-
-		    result += potential_e2p_individual(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
-					    expansions + ORDER * (0 + 2 * mynodeid), 
-					    expansions + ORDER * (1 + 2 * mynodeid));
-		}
-#endif
 	    }
 	    else 
 	    {
@@ -151,17 +119,16 @@ namespace EvaluatePotential
 		{
 		    if (master)   
 			for(int c = 0; c < 4; ++c)
-			    stack[++stackentry] = node->state.children[c];
+			    stack[++stackentry] = ACCESS(node->state.children[c]);
 		    else
 			stackentry += 4;
 			    
 		    maxentry = max(maxentry, stackentry);
-		    assert(maxentry < STACKSIZE);
+		    assert(maxentry < LMAX * 3);
 		}
 	    }
 	}
 
-#ifndef _NO_THREADCOOP_
   	if (tid / 4 < counter_e2ps)
 	{
 	    const int mynodeid = buffered_e2ps[tid / 4];
@@ -173,19 +140,6 @@ namespace EvaluatePotential
 				    expansions + ORDER * (0 + 2 * mynodeid), 
 				    expansions + ORDER * (1 + 2 * mynodeid), scratch);
 	}
-#else
-	if (tid < counter_e2ps)
-	{
-	    const int mynodeid = buffered_e2ps[tid];
-	    assert(mynodeid < nnodes);
-	    
-	    const Tree::Node * mynode = nodes + mynodeid;
-
-	    result += potential_e2p_individual(mynode->mass, xt - mynode->xcom, yt - mynode->ycom, 
-					       expansions + ORDER * (0 + 2 * mynodeid), 
-					       expansions + ORDER * (1 + 2 * mynodeid));
-	}
-#endif
 
 	result += __shfl_xor(result, 16 );
 	result += __shfl_xor(result, 8 );
@@ -196,60 +150,11 @@ namespace EvaluatePotential
 	if (master)
 	    results[gid] = result;
     }
-
-#ifndef NDEBUG
-    void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared)
-    {
-	int stack[LMAX * 4 * 2];
-
-	int stackentry = 0, maxentry = 0;
-
-	stack[0] = 0;
-	*result = 0;
-	//int slast = 0, elast = 0;
-	while(stackentry > -1)
-	{
-	    const int nodeid = stack[stackentry--];
-	    
-	    const Tree::Node * const node = Tree::host_nodes + nodeid;
-
-	    if (node->e - node->s == 0)
-		continue;
-	    
-	    const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
-
-	    if (node->r * node->r < thetasquared * r2)
-	    {
-		const realtype * rxp = Tree::host_expansions + ORDER * (0 + 2 * nodeid);
-		const realtype * ixp = Tree::host_expansions + ORDER * (1 + 2 * nodeid);
-		
-		*result += reference_potential_e2p(node->mass, xt - node->xcom, yt - node->ycom, rxp, ixp);
-	    }
-	    else
-		if (!node->state.innernode)
-		{
-		    const int s = node->s;
-		    
-		    *result += reference_potential_p2p(&Tree::host_xdata[s], &Tree::host_ydata[s], &Tree::host_vdata[s], node->e - s, xt, yt);
-		    //rintf("%d %d   %d %d\n", slast, s, elast, node->e);
-		
-		    //assert(s >= slast && node->e >= elast);
-		    //slast = s;
-		    //elast = node->e;
-		}
-		else
-		{
-		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = node->state.children[c];
-		    
-		    maxentry = std::max(maxentry, stackentry);
-		}
-	}
-    }
-#endif
 }
 
 using namespace EvaluatePotential;
+
+void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared);
 
 extern "C"
 __attribute__ ((visibility ("default")))
@@ -308,4 +213,80 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaFree(device_results));
     
 }
+
+#ifndef NDEBUG
+ //CPU REFERENCE CODE
+void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared)
+{
+    const double eps = 10 * __DBL_EPSILON__;
+    int stack[LMAX * 3];
+
+    int stackentry = 0, maxentry = 0;
+
+    stack[0] = 0;
+    *result = 0;
+	
+    while(stackentry > -1)
+    {
+	const int nodeid = stack[stackentry--];
+	    
+	const Tree::Node * const node = Tree::host_nodes + nodeid;
+
+	if (node->e - node->s == 0)
+	    continue;
+	    
+	const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
+
+	if (node->r * node->r < thetasquared * r2)
+	{
+	    const realtype * rxp = Tree::host_expansions + ORDER * (0 + 2 * nodeid);
+	    const realtype * ixp = Tree::host_expansions + ORDER * (1 + 2 * nodeid);
+
+	    const realtype rz = xt - node->xcom;
+	    const realtype iz = yt - node->ycom;
+
+	    const realtype rinvz_1 = rz / r2;
+	    const realtype iinvz_1 = -iz / r2;
+
+	    realtype rsum = 0, rprod = rinvz_1, iprod = iinvz_1;
+	    for(int j = 0; j < ORDER; ++j)
+	    {
+		const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
+		const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
+
+		rsum += rxp[j] * rprod - ixp[j] * iprod;
+
+		rprod = rtmp;
+		iprod = itmp;
+	    }
+	    
+	    *result += node->mass * log(r2) / 2 + rsum;
+	}
+	else
+	    if (!node->state.innernode)
+	    {
+		const int s = node->s;
+		    
+		realtype tmp = 0;
+		for(int i = s; i < node->e; ++i)
+		{
+		    const realtype xr = xt - Tree::host_xdata[i];
+		    const realtype yr = yt - Tree::host_ydata[i];
+
+		    tmp += log(xr * xr + yr * yr + eps) * Tree::host_vdata[i];
+		}
+    
+		*result += tmp / 2;
+	    }
+	    else
+	    {
+		for(int c = 0; c < 4; ++c)
+		    stack[++stackentry] = node->state.children[c];
+		    
+		if (maxentry < stackentry)
+		    maxentry = stackentry;
+	    }
+    }
+}
+#endif
 

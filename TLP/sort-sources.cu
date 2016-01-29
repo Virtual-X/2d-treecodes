@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdio>
 
 #include <thrust/extrema.h>
 #include <thrust/device_ptr.h>
@@ -75,7 +76,7 @@ extern "C" void sort_sources(cudaStream_t stream,
     *host_xmin = truexmin - eps * *host_extent;
     *host_ymin = trueymin - eps * *host_extent;
 
-    SortSources::generate_keys<<< (nsrc + 127)/128, 128>>>(device_xsrc, device_ysrc, nsrc,
+    SortSources::generate_keys<<<(nsrc + 127)/128, 128>>>(device_xsrc, device_ysrc, nsrc,
 					      *host_xmin, *host_ymin, *host_extent, device_keys);
 
     CUDA_CHECK(cudaPeekAtLastError());

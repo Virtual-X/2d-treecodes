@@ -12,19 +12,13 @@
 
 #include <cassert>
 
-#include <omp.h>
-#include <algorithm>
-#include <limits>
-#include <utility>
-
+#include "cuda-common.h"
 #include "upward.h"
 #include "sort-sources.h"
 #include "upward-kernels.h"
-#include "cuda-common.h"
 
+#define MFENCE //__threadfence()
 #define WARPSIZE 32
-#define MFENCE
-//__threadfence()
 #define NQUEUES 4
 #define LQSIZE 16
 
@@ -41,7 +35,7 @@ namespace Tree
 
 	if (tex1Dfetch(texKeys, e - 1) < val)
 	    return e;
-
+ 
 	while (c)
 	{
 	    int candidate_s = s, candidate_e = e;
@@ -590,9 +584,9 @@ void Tree::build(const realtype * const xsrc,
 
     const int ysize = 16;
     build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
-    CUDA_CHECK(cudaPeekAtLastError());
 
     conclude<<<1, 1>>>(device_diag);
+
     CUDA_CHECK(cudaPeekAtLastError());
 
     CUDA_CHECK(cudaEventRecord(evstop));
@@ -634,6 +628,12 @@ void Tree::dispose()
 #endif
 }
 
+#ifndef NDEBUG
+
+#include <algorithm>
+#include <limits>
+#include <utility>
+
 namespace TreeCheck
 {   
     int LEAF_MAXCOUNT;
@@ -656,7 +656,6 @@ namespace TreeCheck
 		this->s = s;
 		this->e = e;
 		this->leaf = leaf;
-
 	    }
 
 	realtype xcom() const { return wx / w; }
@@ -689,10 +688,107 @@ namespace TreeCheck
 		 const realtype * __restrict__ const vsources,
 		 const double x0, const double y0, const double h)
 	    {
-		reference_upward_p2e(xsources, ysources, vsources, e - s,
-				     x0, y0, h, &mass, &w, &wx, &wy, &r,
-				     rexpansions, iexpansions);
+		/*reference_upward_p2e(xsources, ysources, vsources, e - s,
+		  x0, y0, h, &mass, &w, &wx, &wy, &r,
+		  rexpansions, iexpansions);*/
+		mass = 0; 
+		w = 0;
+		wx = 0;
+		wy = 0;
+
+		for(int i = 0; i < e - s; ++i)
+		{
+		    const realtype sv = vsources[i];
+		    const realtype av = std::abs(vsources[i]);
+
+		    mass += sv;
+		    w += av;
+		    wx += xsources[i] * av;
+		    wy += ysources[i] * av;
+		}
+
+		if (w == 0)
+		{
+		    w = 1e-13;
+		    wx = (x0 + 0.5 * h) * w;
+		    wy = (y0 + 0.5 * h) * w;
+		}
+    
+		realtype r2 = 0;
+
+		for(int i = 0; i < e - s; ++i)
+		{
+		    const realtype xr = xsources[i] - xcom();
+		    const realtype yr = ysources[i] - ycom();
+		    
+		    r2 = std::max(r2, xr * xr + yr * yr);
+		}
+
+		r = sqrt(r2);
+
+		memset(rexpansions, 0, sizeof(realtype) * ORDER);
+		memset(iexpansions, 0, sizeof(realtype) * ORDER);
+
+		for(int i = 0; i < e - s; ++i)
+		{		
+		    const realtype rprod_0 = xsources[i] - xcom(); 
+		    const realtype iprod_0 = ysources[i] - ycom();
+
+		    const realtype src = vsources[i]; 
+
+		    realtype rtmp = rprod_0 * src;
+		    realtype itmp = iprod_0 * src;
+		
+		    rexpansions[0] -= rtmp;
+		    iexpansions[0] -= itmp;
+		    
+		    realtype rprod = rprod_0, iprod = iprod_0;
+		
+		    for(int n = 1; n < ORDER; ++n)
+		    {
+			rtmp = rprod * rprod_0 - iprod * iprod_0;
+			itmp = rprod * iprod_0 + iprod * rprod_0;
+
+			const realtype term = src * (realtype)(1. / (n + 1));
+
+			rprod = rtmp;
+			iprod = itmp;
+		
+			rtmp = rprod * term;
+			itmp = iprod * term;
+
+			rexpansions[n] -= rtmp;
+			iexpansions[n] -= itmp;
+		    }
+		}
 	    }
+	
+	long long combi(int n,int k)
+	    {
+		long long ans = 1;
+
+		k = k > n - k ? n - k : k;
+		
+		for(int j = 1; j <= k; j++, n--)
+		{
+		    if(n % j == 0)
+		    {
+			ans *= n / j;
+		    }
+		    else
+			if(ans % j == 0)
+			{
+			    ans = ans / j * n;
+			}
+			else
+			{
+			    ans = (ans * n) / j;
+			}
+		}
+
+		return ans;
+	    }
+
 	void e2e()
 	    {
 		realtype srcmass[4], rx[4], ry[4];
@@ -709,7 +805,59 @@ namespace TreeCheck
 		    chldixp[c] = chd->iexpansions;
 		}
 
-		reference_upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+		memset(rexpansions, 0, sizeof(realtype) * ORDER);
+		memset(iexpansions, 0, sizeof(realtype) * ORDER);
+		
+		for(int tid = 0; tid < 4; ++tid)
+		{
+		    const realtype x0 = rx[tid];
+		    const realtype y0 = ry[tid];
+
+		    const realtype r2z0 = x0 * x0 + y0 * y0;
+
+		    realtype rinvz[ORDER], iinvz[ORDER];
+
+		    rinvz[0] = x0 / r2z0;
+		    iinvz[0] = - y0 / r2z0;
+		    for(int j = 1; j < ORDER; ++j)
+		    {
+			rinvz[j] = rinvz[j - 1] * rinvz[0] - iinvz[j - 1] * iinvz[0];
+			iinvz[j] = rinvz[j - 1] * iinvz[0] + iinvz[j - 1] * rinvz[0];
+		    }
+		    
+		    realtype rcoeff[ORDER], icoeff[ORDER];
+		    for(int j = 0; j < ORDER; ++j)
+		    {
+			rcoeff[j] = chldrxp[tid][j] * rinvz[j] - chldixp[tid][j] * iinvz[j];
+			icoeff[j] = chldrxp[tid][j] * iinvz[j] + chldixp[tid][j] * rinvz[j];
+		    }
+		    
+		    for(int l = 0; l < ORDER; ++l)
+		    {
+			realtype rtmp = srcmass[tid] * -1. / (l + 1);
+			realtype itmp = 0;
+
+			for(int k = 0; k <= l; ++k)
+			{
+			    const long long binfac = combi(l, k);
+			    
+			    rtmp += rcoeff[k] * binfac;
+			    itmp += icoeff[k] * binfac;
+			}
+		
+			const realtype invz2 = rinvz[l] * rinvz[l] + iinvz[l] * iinvz[l];
+			const realtype invinvz2 = invz2 ? 1 / invz2 : 0;
+			const realtype rz = rinvz[l] * invinvz2;
+			const realtype iz = - iinvz[l] * invinvz2;
+
+			realtype rpartial = rtmp * rz - itmp * iz;
+			realtype ipartial = rtmp * iz + itmp * rz;
+		
+			rexpansions[l] += rpartial;
+			iexpansions[l] += ipartial;
+		    }
+		}
+
 #ifndef NDEBUG
 		{
 		    for(int i = 0; i < ORDER; ++i)
@@ -738,7 +886,6 @@ namespace TreeCheck
 	const double x0 = Tree::xmin + h * x, y0 = Tree::ymin + h * y;
 
 	assert(x < (1 << l) && y < (1 << l) && x >= 0 && y >= 0);
-	//printf("node %d %d l%d\n", x, y, l);
 	
 	for(int i = s; i < e; ++i)
 	    assert(Tree::host_xdata[i] >= x0 && Tree::host_xdata[i] < x0 + h && Tree::host_ydata[i] >= y0 && Tree::host_ydata[i] < y0 + h);
@@ -822,6 +969,7 @@ namespace TreeCheck
 	a.d = x;
 	b.d = y;
 
+	//printf("%.20e %.20e\n", x,y);
 	int currbit = 0;
 	for(int i = 0; i < 8; ++i)
 	{
@@ -864,32 +1012,22 @@ namespace TreeCheck
 
     void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::Node * allnodes, Tree::Node& a, TreeCheck::DebugNode& b)
     {
-	//assert(a.x == b.x);
-	//assert(a.y == b.y);
-	//assert(a.l == b.l);
 	assert(a.s == b.s);
 	assert(a.e == b.e);
-	//assert(a.mask == b.mask);
+	
 	if (verbose)
 	{
 	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
 	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
-/*
-  printf("a/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-  a.mass, a.w, a.wx, a.wy, a.r);
-  printf("b/ m-w-wx-wy-r: %.20e %.20e %.20e %.20e %.20e\n",
-  b.mass, b.w, b.wx, b.wy, b.r);*/
+	    //printf("%e %e\n", b.wx, b.w);
 	}
-	assert(check_bits(a.mass, b.mass) >= 40);
-	//assert(check_bits(a.w, b.w) >= 40);
-	assert(check_bits(a.xcom, b.wx / b.w) >= 40 || b.w == 0);
-	assert(check_bits(a.ycom, b.wy / b.w) >= 40 || b.w == 0);
-	
-	//assert(check_bits(a.wx, b.wx) >= 40 || a.w == 0);
-	//assert(check_bits(a.wy, b.wy) >= 40 || a.w == 0);
 
+	assert(check_bits(a.mass, b.mass) >= 40);
+	//assert(check_bits(a.xcom, b.wx / b.w) >= 40 || b.w == 0);
+	assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
+	assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
 	assert(check_bits(a.r, b.r) >= 32);
-#ifndef NDEBUG
+
 	{
 	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 	    const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
@@ -898,7 +1036,6 @@ namespace TreeCheck
 	    assert(24 <= check_bits(resrexp, refrexp, EXPORD));
 	    assert(24 <= check_bits(resiexp, refiexp, EXPORD));
 	}
-#endif
 
 	if (!b.leaf)
 	    for(int c = 0; c < 4; ++c)
@@ -911,8 +1048,7 @@ namespace TreeCheck
 	
 	Tree::nnodes = Tree::device_diag->ntreenodes;
 	const size_t expansionsbytes = sizeof(realtype) * 2 * ORDER * Tree::nnodes;
-	
-    
+	    
 	posix_memalign((void **)&Tree::host_xdata, 32, sizeof(realtype) * nsrc);
 	posix_memalign((void **)&Tree::host_ydata, 32, sizeof(realtype) * nsrc);
 	posix_memalign((void **)&Tree::host_vdata, 32, sizeof(realtype) * nsrc);
@@ -940,12 +1076,6 @@ namespace TreeCheck
 	
 	std::pair<int, int> * kv = NULL;
 	posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
-
-	//assert(truexmin == *std::min_element(xsrc, xsrc + nsrc));
-	//assert(trueymin == *std::min_element(ysrc, ysrc + nsrc));
-
-	//assert(ext0 == *std::max_element(xsrc, xsrc + nsrc) - truexmin);
-	//assert(ext1 == *std::max_element(ysrc, ysrc + nsrc) - trueymin);
 
 	for(int i = 0; i < nsrc; ++i)
 	{
@@ -975,8 +1105,6 @@ namespace TreeCheck
 
 	for(int i = 0; i < nsrc; ++i)
 	{
-	    //const int key = kv[i].first;
-
 	    const int entry = kv[i].second;
 	    assert(entry >= 0 && entry < nsrc);
 
@@ -992,14 +1120,6 @@ namespace TreeCheck
 	debugroot = new DebugNode;
 	
 	_build(debugroot, 0, 0, 0, 0, nsrc, 0);
-    
-	//const int nnodes = Tree::nnodes;
-	//std::vector<Tree::Node> allnodes(nnodes);
-
-	//CUDA_CHECK(cudaMemcpy(&allnodes.front(), Tree::device_bufnodes, sizeof(Tree::DeviceNode) * allnodes.size(), cudaMemcpyDeviceToHost));
-
-	//std::vector<realtype> allexpansions(nnodes * ORDER * 2);
-	//CUDA_CHECK(cudaMemcpy(&allexpansions.front(), device_bufexpansions, sizeof(realtype) * 2 * ORDER * nnodes, cudaMemcpyDeviceToHost));
 
 	printf("rooot xylsem: %d %d, children %d %d %d %d\n",
 	       Tree::host_nodes[0].s, Tree::host_nodes[0].e,
@@ -1012,7 +1132,10 @@ namespace TreeCheck
 	check_tree(ORDER, 0, Tree::host_expansions,Tree::host_nodes, Tree::host_nodes[0], *debugroot);
 
 	printf("TREE IS GOOD\n");
+	
 	printf("VERIFICATION SUCCEDED.______________________________\n");
+	
 	CUDA_CHECK(cudaFreeHost(debug_keys));
     }
 }
+#endif

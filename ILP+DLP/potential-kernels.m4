@@ -13,9 +13,7 @@
 define(NACC, 2)
 include(unroll.m4) dnl
 
-#include <cassert>
 #define EPS (10 * __DBL_EPSILON__)
-#define MAX(a,b) (((a)>(b))?(a):(b))
 
 __device__ realtype potential_p2p(
 	   const realtype * __restrict__ const xsrc,
@@ -26,8 +24,7 @@ __device__ realtype potential_p2p(
 	   const realtype yt)
   {
     const int tid = threadIdx.x;
-    assert(tid < 32 && blockDim.x == 32);
-    
+        
     realtype LUNROLL(`i', 0, eval(NACC - 1), `ifelse(i,0,,`,') TMP(s,i) = 0') ;
 
     const int nnice = eval(32 * NACC) * (nsources / eval(32 * NACC));
@@ -44,7 +41,6 @@ __device__ realtype potential_p2p(
 
     REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(s,i)'))
     
-    
     for(int i = nnice + tid; i < nsources; i += 32)
     {
       const realtype xr = xt - xsrc[i];
@@ -52,17 +48,13 @@ __device__ realtype potential_p2p(
 
       TMP(s, 0) += log(xr * xr + yr * yr + EPS) * vsrc[i];
     }
-
-    //#SEQ(`
-    //#TMP(s, 0) += __shfl_xor(TMP(s, 0), L );', L, 16, 8, 4, 2, 1)
     
     return TMP(s, 0) / 2;
   }
 
+
 define(`RARY', `scratch[$1]')
 define(`IARY', `scratch[32 + $1]')
-
-define(PASSES, `esyscmd(python z_to_k.py ORDER)')
 
 __device__ realtype potential_e2p(const realtype mass,
   const realtype rz,
@@ -72,7 +64,6 @@ __device__ realtype potential_e2p(const realtype mass,
   realtype * const scratch) // size of 32 * 2 * sizeof(realtype)
   {
     const int tid = threadIdx.x;
-    assert(tid < 32 && blockDim.x == 32);
 
     const int mask = tid & 0x3;
     const int base = tid & ~0x3;
@@ -118,28 +109,29 @@ __device__ realtype potential_e2p(const realtype mass,
     return  rsum;
   }
 
-  __device__ realtype potential_e2p_individual(const realtype mass,
-  const realtype rz, 
-  const realtype iz,
-  const realtype * __restrict__ const rxp,
-  const realtype * __restrict__ const ixp)
-  {
-    //const int tid = threadIdx.x;
-    //assert(tid == 0);
-  
-    const realtype r2 = rz * rz + iz * iz;
-
-    const realtype rinvz_1 = rz / r2;
-    const realtype iinvz_1 = -iz / r2;
-
-    LUNROLL(j, 2, ORDER, `
-    const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
-    const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
-
-    LUNROLL(j, 1, ORDER, `
-    realtype TMP(rsum, eval(j - 1)) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);')
-
-    REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum,i)'))
-        
-    return  mass * log(r2) / 2 + TMP(rsum, 0);
-  }
+//#naive implementation (disabled)
+//#  __device__ realtype potential_e2p_individual(const realtype mass,
+//#  const realtype rz, 
+//#  const realtype iz,
+//#  const realtype * __restrict__ const rxp,
+//#  const realtype * __restrict__ const ixp)
+//#  {
+//#    const int tid = threadIdx.x;
+//#    assert(tid == 0);
+//#  
+//#    const realtype r2 = rz * rz + iz * iz;
+//#
+//#    const realtype rinvz_1 = rz / r2;
+//#    const realtype iinvz_1 = -iz / r2;
+//#
+//#    LUNROLL(j, 2, ORDER, `
+//#    const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
+//#    const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
+//#
+//#    LUNROLL(j, 1, ORDER, `
+//#    realtype TMP(rsum, eval(j - 1)) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);')
+//#
+//#    REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum,i)'))
+//#        
+//#    return  mass * log(r2) / 2 + TMP(rsum, 0);
+//#  }

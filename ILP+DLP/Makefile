@@ -16,12 +16,10 @@ backend ?= sse
 real ?= double
 order ?= 12
 
-OBJS = 	order$(order)-upward-kernels.cuda.o \
-	order$(order)-upward-kernels-reference.o 
+OBJS = 	order$(order)-upward-kernels.cuda.o 
 
 ifneq "$(MAKECMDGOALS)" "force"
-	OBJS += order$(order)-potential-kernels.cuda.o \
-		order$(order)-reference-potential-kernels.o 
+	OBJS += order$(order)-potential-kernels.cuda.o
 else
 	OBJS += order$(order)-force-kernels.o \
 		order$(order)-force-kernels-tiled.o \
@@ -29,8 +27,6 @@ else
 endif
 
 potential force: $(OBJS)
-
-#
 
 %.cuda.o: %.cu Makefile
 	nvcc -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'  -maxrregcount=32 -lineinfo -O4 -arch=compute_35 -code=sm_35 -use_fast_math -dc -c $< -o $@
