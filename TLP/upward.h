@@ -25,7 +25,7 @@ namespace Tree
 	union
 	{
 	    bool innernode;
-	    int children[4];
+	    int childbase;
 	} state;
 
 	
@@ -33,10 +33,11 @@ namespace Tree
 	    {
 		this->s = s;
 		this->e = e;
+		this->state.childbase = 0;
 		
-#pragma unroll
-		for (int i = 0; i < 4; ++i)
-		    state.children[i] = 0;
+//#pragma unroll
+		//for (int i = 0; i < 4; ++i)
+		//  state.children[i] = 0;
 	    }
     };
 

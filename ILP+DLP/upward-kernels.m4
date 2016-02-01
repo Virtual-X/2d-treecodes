@@ -8,8 +8,10 @@ divert(0) dnl dnl dnl
 ifelse(eval(WARPSIZE >= ORDER), 1, ,`
 `#'if WARPSIZE < `ORDER'
 `#'error `ORDER' should be lessequal than WARPSIZE
-#endif')dnl dnl
+`#'endif')
+dnl dnl
 #include <cstdio>
+#define ACCESS(x) __ldg(&(x)) 
 
 __device__ void print_message()
 {
@@ -41,10 +43,10 @@ __device__ void upward_p2e(const realtype xcom,
 
 	for(int i = tid; i < nsources; i += WARPSIZE)
 	{		
-		const realtype rprod_0 = xsources[i] - xcom; 
-		const realtype iprod_0 = ysources[i] - ycom;
+		const realtype rprod_0 = ACCESS(xsources[i]) - xcom; 
+		const realtype iprod_0 = ACCESS(ysources[i]) - ycom;
 
-		const realtype src = vsources[i]; 
+		const realtype src = ACCESS(vsources[i]); 
 
 		realtype rtmp = rprod_0 * src;
 		realtype itmp = iprod_0 * src;

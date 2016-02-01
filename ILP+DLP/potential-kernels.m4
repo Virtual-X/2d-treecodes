@@ -12,7 +12,7 @@
 
 define(NACC, 2)
 include(unroll.m4) dnl
-
+#define ACCESS(x) __ldg(&(x)) 
 #define EPS (10 * __DBL_EPSILON__)
 
 __device__ realtype potential_p2p(
@@ -25,31 +25,17 @@ __device__ realtype potential_p2p(
   {
     const int tid = threadIdx.x;
         
-    realtype LUNROLL(`i', 0, eval(NACC - 1), `ifelse(i,0,,`,') TMP(s,i) = 0') ;
-
-    const int nnice = eval(32 * NACC) * (nsources / eval(32 * NACC));
-
-    for(int i = 0; i < nnice; i += eval(NACC * 32))
-    {dnl
-      LUNROLL(j, 0, eval(NACC - 1), `
-      const realtype TMP(xr, j) = xt - xsrc[tid + i + eval(32 * j)];
-      const realtype TMP(yr, j) = yt - ysrc[tid + i + eval(32 * j)];')
-      dnl
-      LUNROLL(j, 0, eval(NACC - 1), `
-      TMP(s, j) += log(TMP(xr, j) * TMP(xr, j) + TMP(yr, j) * TMP(yr, j) + EPS) * vsrc[tid + i + eval(32 * j)];')
-    }dnl
-
-    REDUCE(`+=', LUNROLL(i, 0, eval(NACC - 1),`ifelse(i,0,,`,')TMP(s,i)'))
+    realtype sum = 0;
     
-    for(int i = nnice + tid; i < nsources; i += 32)
+    for(int i = tid; i < nsources; i += 32)
     {
-      const realtype xr = xt - xsrc[i];
-      const realtype yr = yt - ysrc[i];
+      const realtype xr = xt - ACCESS(xsrc[i]);
+      const realtype yr = yt - ACCESS(ysrc[i]);
 
-      TMP(s, 0) += log(xr * xr + yr * yr + EPS) * vsrc[i];
+      sum += log(xr * xr + yr * yr + EPS) * ACCESS(vsrc[i]);
     }
     
-    return TMP(s, 0) / 2;
+    return sum / 2;
   }
 
 
@@ -95,7 +81,7 @@ __device__ realtype potential_e2p(const realtype mass,
     
     LUNROLL(j, 1, eval((3 + ORDER) / 4), `
     pushdef(`JJ', eval((j-1)* 4))
-    rsum += rxp[JJ + mask] * rprod - ixp[JJ + mask] * iprod;
+    rsum += ACCESS(rxp[JJ + mask]) * rprod - ACCESS(ixp[JJ + mask]) * iprod;
     dnl dnl 
     ifelse(eval(JJ + 4 < ORDER), 1, `
     rtmp = rinvz_4 * rprod - iinvz_4 * iprod;

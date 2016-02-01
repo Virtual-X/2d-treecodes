@@ -118,8 +118,12 @@ struct SharedBuffers
 		else
 		{
 		    if (master)   
-			for(int c = 0; c < 4; ++c)
-			    stack[++stackentry] = ACCESS(node->state.children[c]);
+		    {
+			const int childbase = ACCESS(node->state.childbase);
+
+			for(int c = 0; c < 4; ++c) 
+			    stack[++stackentry] = childbase + c;
+		    }
 		    else
 			stackentry += 4;
 			    
@@ -193,7 +197,7 @@ void treecode_potential_solve(const realtype theta,
 	sizeof(SharedBuffers) * yblocksize>>>(device_xdst, device_ydst, thetasquared, device_results, ndst);
     CUDA_CHECK(cudaPeekAtLastError());
          
-    CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost))
+    CUDA_CHECK(cudaMemcpyAsync(vdst, device_results, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
 #else
     for(int i = 0; i < ndst; ++i)
 	reference_evaluate(vdst + i, xdst[i], ydst[i], thetasquared);
@@ -280,7 +284,7 @@ void reference_evaluate(realtype * const result, const realtype xt, const realty
 	    else
 	    {
 		for(int c = 0; c < 4; ++c)
-		    stack[++stackentry] = node->state.children[c];
+		    stack[++stackentry] = node->state.childbase + c;
 		    
 		if (maxentry < stackentry)
 		    maxentry = stackentry;

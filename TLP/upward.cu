@@ -21,6 +21,7 @@
 #define WARPSIZE 32
 #define NQUEUES 4
 #define LQSIZE 16
+#define ACCESS(x) __ldg(&(x)) 
 
 namespace Tree
 {
@@ -140,9 +141,9 @@ namespace Tree
 
 	for(int t = s + tid; t < e; t += WARPSIZE)
 	{
-	    const realtype x = xsorted[t];
-	    const realtype y = ysorted[t];
-	    const realtype m = vsorted[t];
+	    const realtype x = ACCESS(xsorted[t]);
+	    const realtype y = ACCESS(ysorted[t]);
+	    const realtype m = ACCESS(vsorted[t]);
 	    const realtype w = fabs(m);
 
 	    msum += m;
@@ -171,8 +172,8 @@ namespace Tree
 	realtype r2 = 0;
 	for(int i = s + tid; i < e; i += WARPSIZE)
 	{
-	    const realtype xr = xsorted[i] - xcom;
-	    const realtype yr = ysorted[i] - ycom;
+	    const realtype xr = ACCESS(xsorted[i]) - xcom;
+	    const realtype yr = ACCESS(ysorted[i]) - ycom;
 
 	    r2 = max(r2, xr * xr + yr * yr);
 	}
@@ -216,10 +217,12 @@ namespace Tree
 
 		if (master)
 		{
+		    const int childbase = parent->state.childbase;
 		    realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
+
 		    for(int c = 0; c < 4; ++c)
 		    {
-			const int childid = parent->state.children[c];
+			const int childid = childbase + c;
 
 			const Node * child = bufnodes + childid;
 			msum += child->mass;
@@ -242,7 +245,7 @@ namespace Tree
 		    realtype rr = 0;
 		    for(int c = 0; c < 4; ++c)
 		    {
-			const int childid = parent->state.children[c];
+			const int childid = childbase + c;
 			const Node * child = bufnodes + childid;
 			const NodeHelper * childhelper = bufhelpers + childid;
 
@@ -265,7 +268,7 @@ namespace Tree
 
 		if (tid < 4)
 		{
-		    const int childid = parent->state.children[tid];
+		    const int childid = parent->state.childbase + tid;
 		    const Node * chd = bufnodes + childid;
 
 		    upward_e2e(chd->xcom - xcom_parent, chd->ycom - ycom_parent, chd->mass,
@@ -281,7 +284,7 @@ namespace Tree
 	    else
 		break;
 
-	    node = parent;
+	    node = parent; 
 	    helper = parenthelper;
 	}
     }
@@ -400,16 +403,15 @@ namespace Tree
 		{
 		    if (master) //children allocation
 		    {
-			const int bufbase = atomicAdd(&currnnodes, 4);
+			const int childbase = atomicAdd(&currnnodes, 4);
 
-			if (bufbase + 4 > bufsize)
+			if (childbase + 4 > bufsize)
 			{
 			    qgood = false;
 			    break;
 			}
 
-			for(int c = 0; c < 4; ++c)
-			    node->state.children[c] = bufbase + c;
+			node->state.childbase = childbase;
 		    }
 
 		    const int mask = helper->mask;
@@ -428,7 +430,7 @@ namespace Tree
 
 			if (master)
 			{
-			    const int childid = node->state.children[c];
+			    const int childid = node->state.childbase + c;
 			    Node * child = bufnodes + childid;
 			    NodeHelper * childhelper = bufhelpers + childid;
 
@@ -441,7 +443,9 @@ namespace Tree
 		    {
 			bool placed_locally = false;
 
-			const int localtask = node->state.children[2];
+			const int childbase = node->state.childbase;
+
+			const int localtask = childbase + 2;
 			
 #if (LQSIZE > 0)
 			//try to put a task in the local queue
@@ -460,7 +464,7 @@ namespace Tree
 			else
 			{
 			    for(int c = 0; c < ngtasks; ++c)
-				queues[qid][(base + c) % queuesize] = node->state.children[c];
+				queues[qid][(base + c) % queuesize] = childbase + c;
 
 			    atomicAdd(&qitems, 3);
 
@@ -469,7 +473,7 @@ namespace Tree
 			    atomicAdd(&qtail[qid], ngtasks);
 			}
 
-			currid = node->state.children[3];
+			currid = childbase + 3;
 		    }
 		}
 
@@ -521,8 +525,6 @@ void Tree::build(const realtype * const xsrc,
 		 const int nsrc,
 		 const int LEAF_MAXCOUNT)
 {
-    //CUDA_CHECK(cudaFuncSetCacheConfig(build_tree, cudaFuncCachePreferL1) );
-    
     texKeys.channelDesc = cudaCreateChannelDesc<int>();
     texKeys.filterMode = cudaFilterModePoint;
     texKeys.mipmapFilterMode = cudaFilterModePoint;
@@ -533,7 +535,7 @@ void Tree::build(const realtype * const xsrc,
     
     int nsmxs = -1;
     CUDA_CHECK(cudaDeviceGetAttribute (&nsmxs, cudaDevAttrMultiProcessorCount, 0));
-    printf("i have found %d smxs\n", nsmxs);
+    //printf("i have found %d smxs\n", nsmxs);
    
     const int device_queuesize = 8e4;
     const int device_bufsize = 8e4;
@@ -582,7 +584,7 @@ void Tree::build(const realtype * const xsrc,
 
     setup<<<1, 1>>>(nsrc);
 
-    const int ysize = 16;
+    const int ysize = 31;
     build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
 
     conclude<<<1, 1>>>(device_diag);
@@ -605,7 +607,7 @@ void Tree::dispose()
     printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
 
     printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
-	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good);
+	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good); 
 
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
@@ -1018,15 +1020,15 @@ namespace TreeCheck
 	{
 	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 	    const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
-	    const realtype * refrexp = b.rexp();
-	    const realtype * refiexp = b.iexp();
+	    const realtype * refrexp = b.rexpansions;
+	    const realtype * refiexp = b.iexpansions;
 	    assert(24 <= check_bits(resrexp, refrexp, EXPORD));
 	    assert(24 <= check_bits(resiexp, refiexp, EXPORD));
 	}
 
 	if (!b.leaf)
 	    for(int c = 0; c < 4; ++c)
-		check_tree(EXPORD, a.state.children[c], allexp, allnodes, allnodes[a.state.children[c]], *b.children[c]);
+		check_tree(EXPORD, a.state.childbase + c, allexp, allnodes, allnodes[a.state.childbase + c], *b.children[c]);
     }
 
     void verify_all(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc, const int LEAF_MAXCOUNT)
@@ -1110,10 +1112,10 @@ namespace TreeCheck
 
 	printf("rooot xylsem: %d %d, children %d %d %d %d\n",
 	       Tree::host_nodes[0].s, Tree::host_nodes[0].e,
-	       Tree::host_nodes[0].state.children[0],
-	       Tree::host_nodes[0].state.children[1],
-	       Tree::host_nodes[0].state.children[2],
-	       Tree::host_nodes[0].state.children[3]);
+	       Tree::host_nodes[0].state.childbase + 0,
+	       Tree::host_nodes[0].state.childbase + 1,
+	       Tree::host_nodes[0].state.childbase + 2,
+	       Tree::host_nodes[0].state.childbase + 3);
 
 	//ok let's check this
 	check_tree(ORDER, 0, Tree::host_expansions,Tree::host_nodes, Tree::host_nodes[0], *debugroot);
