@@ -27,7 +27,7 @@ inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b);
 #define EPS (10 * __DBL_EPSILON__)
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-define(P2E_KERNEL, upward_p2e_order$1)
+define(P2E_KERNEL, reference_upward_p2e_order$1)
 define(E2E_KERNEL, upward_e2e_order$1)
 
 #ifdef __cplusplus

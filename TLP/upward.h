@@ -129,9 +129,15 @@ namespace Tree
 		 const realtype * __restrict__ const vsources,
 		 const double x0, const double y0, const double h) override
 	{
+	 
+
 	    P2E_KERNEL(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
 		       rexpansions, iexpansions);
+
+	    /*   REFERENCE_P2E_KERNEL(xsources, ysources, vsources, e - s,
+		       x0, y0, h, &mass, &w, &wx, &wy, &r,
+		       rexpansions, iexpansions);*/
 	}
 
 	void e2e() override

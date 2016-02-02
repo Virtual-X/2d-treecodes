@@ -19,10 +19,13 @@ treecode-force-order ?= 24
 UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
 UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 
-OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o
+REFERENCE_UPWARDKERNELS_POTENTIAL = reference-upward-kernels-order$(treecode-potential-order)
+REFERENCE_UPWARDKERNELS_FORCE=reference-upward-kernels-order$(treecode-force-order)
+
+OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o  $(REFERENCE_UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
-	OBJS += $(UPWARDKERNELS_FORCE).o 
+	OBJS += $(UPWARDKERNELS_FORCE).o $(REFERENCE_UPWARDKERNELS_FORCE).o
 endif
 
 M4FLAGS = -D realtype=$(real)
@@ -39,7 +42,9 @@ kernels: $(OBJS)
 
 %.o: %.c
 	$(CC) $(KERNELSFLAGS) -c $^
-#module load intel ; icpc -march=native -mtune=native -Ofast -fno-alias -fno-rtti -fno-exceptions -c $^ ; module unload intel;
+
+%.o: %.ispc
+	ispc  $^ -O2 --arch=x86-64 --target=avx2-i64x4 -o $@
 
 potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > potential-kernels.c
@@ -53,13 +58,22 @@ force-kernels-tiled.c: force-kernels-tiled-sse.m4 force-kernels.h Makefile
 downward-kernels.c:  downward-kernels-sse.m4 downward-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > downward-kernels.c
 
-$(UPWARDKERNELS_POTENTIAL).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4 Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $(UPWARDKERNELS_POTENTIAL).c
+$(UPWARDKERNELS_POTENTIAL).ispc: upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $@
 
-$(UPWARDKERNELS_FORCE).c: upward-kernels-sse.m4 upward-kernels.h unroll.m4  Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $< > $(UPWARDKERNELS_FORCE).c
+$(UPWARDKERNELS_FORCE).ispc: upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $< > $@
+
+$(REFERENCE_UPWARDKERNELS_POTENTIAL).c: reference-upward-kernels.m4 upward-kernels.h unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $< > $@
+
+$(REFERENCE_UPWARDKERNELS_FORCE).c: reference-upward-kernels.m4 upward-kernels.h unroll.m4  Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $< > $@
+
+
+
 
 clean:
-	rm -f *.o *kernels*.c
+	rm -f *.o *kernels*.c *kernels*.ispc
 
 .PHONY = clean

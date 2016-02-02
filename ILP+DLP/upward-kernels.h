@@ -14,7 +14,9 @@
 
 #define _CONCATENATE_BODY(a, b) a ## b
 #define _CONCATENATE(a, b) _CONCATENATE_BODY(a, b)
+
 #define P2E_KERNEL _CONCATENATE(upward_p2e_order, ORDER)
+#define REFERENCE_P2E_KERNEL _CONCATENATE(reference_upward_p2e_order, ORDER)
 #define E2E_KERNEL _CONCATENATE(upward_e2e_order, ORDER)
 
 #ifdef __cplusplus
@@ -22,6 +24,21 @@ extern "C"
 {
 #endif
     void P2E_KERNEL(const realtype * __restrict__ const xsources,
+		    const realtype * __restrict__ const ysources,
+		    const realtype * __restrict__ const sources,
+		    const int nsources,
+		    const realtype x0,
+		    const realtype y0,
+		    const realtype h,
+		    realtype * const mass,
+		    realtype * const weight,
+		    realtype * const xsum,
+		    realtype * const ysum,
+		    realtype * const radius,
+		    realtype * __restrict__ const rexpansions,
+		    realtype * __restrict__ const iexpansions);
+
+     void REFERENCE_P2E_KERNEL(const realtype * __restrict__ const xsources,
 		    const realtype * __restrict__ const ysources,
 		    const realtype * __restrict__ const sources,
 		    const int nsources,
@@ -45,6 +62,7 @@ extern "C"
 		    const realtype * __restrict__ const * viexpansions,
 		    realtype * __restrict__ const rdstxp,
 		    realtype * __restrict__ const idstxp);
+    
 #ifdef __cplusplus
 }
 #endif
