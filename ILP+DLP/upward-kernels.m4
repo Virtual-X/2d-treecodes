@@ -23,7 +23,7 @@ export void P2E_KERNEL(ORDER)(
        uniform realtype iexpansions[])
 {
 	realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-	//print("helloous\n");
+	
 	foreach(i = 0 ... nsources)
 	{
 	    const realtype x = xsources[i];
@@ -66,8 +66,8 @@ export void P2E_KERNEL(ORDER)(
 
 	*radius = sqrt(reduce_max(r2));
 	
-	uniform realtype rxp[ORDER] = { LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,') 0') };
-	uniform realtype ixp[ORDER] = { LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,') 0') };
+	realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
+            TMP(rxp, n) = 0, TMP(ixp, n) = 0');
 
 	foreach(i = 0 ... nsources)
 	{		
@@ -76,15 +76,12 @@ export void P2E_KERNEL(ORDER)(
 
 		const realtype src = vsources[i]; 
 
-		realtype rtmp = reduce_add(rprod_0 * src);
-		realtype itmp = reduce_add(iprod_0 * src);
+		realtype rtmp = rprod_0 * src;
+		realtype itmp = iprod_0 * src;
 
-		if (programIndex == 0)
-		{
-		    rxp[programIndex] -= rtmp;
-		    ixp[programIndex] -= itmp;
-		}
-
+		TMP(rxp, 0) -= rtmp;
+		TMP(ixp, 0) -= itmp;
+		
 		realtype rprod = rprod_0, iprod = iprod_0;
 		
 		LUNROLL(n, 1, eval(ORDER - 1),`
@@ -96,19 +93,23 @@ export void P2E_KERNEL(ORDER)(
 		rprod = rtmp;
 		iprod = itmp;
 		
-		rtmp = reduce_add(rprod * TMP(term, n));
-		itmp = reduce_add(iprod * TMP(term, n));
+		rtmp = rprod * TMP(term, n);
+		itmp = iprod * TMP(term, n);
 
-		if (programIndex == 0)
-		{
-		    rxp[n + programIndex] -= rtmp;
-		    ixp[n + programIndex] -= itmp;	
-		}')
+		TMP(rxp, n) -= rtmp;
+		TMP(ixp, n) -= itmp;	
+		')
 	}dnl
 
-	foreach(i = 0 ... ORDER)
+	LUNROLL(i, 0, eval(ORDER - 1), `
 	{
-	   rexpansions[i] = rxp[i];
-	   iexpansions[i] = ixp[i];
-	}
+	   uniform realtype rsum = reduce_add(TMP(rxp, i));
+	   uniform realtype isum = reduce_add(TMP(ixp, i));
+	   
+	   if (programIndex == 0)
+	   {
+	      rexpansions[i] = rsum;
+	      iexpansions[i] = isum;
+	   }
+	}')
 }

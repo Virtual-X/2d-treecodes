@@ -72,7 +72,7 @@ namespace Tree
 	const int64_t highest_workload = std::max(std::max(subworkloads[0], subworkloads[1]),
 						  std::max(subworkloads[2], subworkloads[3]));
 	
-	const int64_t myworkload = all ? allcycles : searchonly? searchcycles : (e2ecycles + p2ecycles + searchcycles);
+	const int64_t myworkload = all ? allcycles : searchonly? searchcycles : (e2ecycles*0 + p2ecycles + 0*searchcycles);
 
 	return std::make_pair(aggregate + myworkload, 
 			      highest_workload + myworkload);
@@ -130,14 +130,15 @@ namespace Tree
 		 const double x0, const double y0, const double h) override
 	{
 	 
-
+#if 1
 	    P2E_KERNEL(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
 		       rexpansions, iexpansions);
-
-	    /*   REFERENCE_P2E_KERNEL(xsources, ysources, vsources, e - s,
+#else
+	       REFERENCE_P2E_KERNEL(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
-		       rexpansions, iexpansions);*/
+		       rexpansions, iexpansions);
+#endif
 	}
 
 	void e2e() override
