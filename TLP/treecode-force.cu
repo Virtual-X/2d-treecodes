@@ -270,23 +270,23 @@ void reference_evaluate(realtype * const xforce, realtype * const yforce,
 	    const realtype rinvz_1 = rz / r2;
 	    const realtype iinvz_1 = -iz / r2;
 
-	    realtype rsum = 0, isum = 0;
+	    realtype rsum = node->mass * rinvz_1, isum = node->mass * iinvz_1;
 	    realtype rprod = rinvz_1, iprod = iinvz_1;
 
 	    for(int j = 0; j < ORDER; ++j)
 	    {
 		const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
 		const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
-
+		
 		rprod = rtmp;
-		iprod = itmp;
+		iprod = itmp;	
 
-		rsum += rxp[j] * rprod - ixp[j] * iprod;
-		isum += rxp[j] * iprod + ixp[j] * rprod;
+		rsum -= (j + 1) * (rxp[j] * rprod - ixp[j] * iprod);
+		isum -= (j + 1) * (rxp[j] * iprod + ixp[j] * rprod);
 	    }
 	    
-	    *xforce += node->mass * rinvz_1 - rsum;
-	    *yforce += -(node->mass * iinvz_1 - isum);
+	    *xforce += rsum;
+	    *yforce += -isum;
 	}
 	else
 	    if (!node->state.innernode)

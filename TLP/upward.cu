@@ -32,7 +32,7 @@ namespace Tree
 	int c = e - s;
 
 	if (tex1Dfetch(texKeys, s) >= val)
-	    return 0;
+	    return s;
 
 	if (tex1Dfetch(texKeys, e - 1) < val)
 	    return e;
@@ -68,7 +68,7 @@ namespace Tree
 	int c = e - s;
 
 	if (tex1Dfetch(texKeys, s) > val)
-	    return 0;
+	    return s;
 
 	if (tex1Dfetch(texKeys, e - 1) <= val)
 	    return e;
@@ -270,7 +270,7 @@ namespace Tree
 		{
 		    const int childid = parent->state.childbase + tid;
 		    const Node * chd = bufnodes + childid;
-
+			
 		    upward_e2e(chd->xcom - xcom_parent, chd->ycom - ycom_parent, chd->mass,
 			       bufexpansion + ORDER * (2 * childid + 0),
 			       bufexpansion + ORDER * (2 * childid + 1),
@@ -425,8 +425,8 @@ namespace Tree
 			const int key1 = mask | (c << shift);
 			const int key2 = key1 + (1 << shift) - 1;
 
-			const size_t indexmin = c == 0 ? s : lower_bound(s, e, key1);
-			const size_t indexsup = c == 3 ? e : upper_bound(s, e, key2);
+			const int indexmin = c == 0 ? s : lower_bound(s, e, key1);
+			const int indexsup = c == 3 ? e : upper_bound(s, e, key2);
 
 			if (master)
 			{
@@ -579,9 +579,9 @@ void Tree::build(const realtype * const xsrc,
     CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
     CUDA_CHECK(cudaEventRecord(evstart));
-     CUDA_CHECK(cudaPeekAtLastError());
+    
     sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &extent);
- CUDA_CHECK(cudaPeekAtLastError());
+
     setup<<<1, 1>>>(nsrc);
 
 #ifndef NDEBUG
@@ -593,18 +593,21 @@ void Tree::build(const realtype * const xsrc,
  CUDA_CHECK(cudaPeekAtLastError());
     conclude<<<1, 1>>>(device_diag);
 
+#ifndef NDEBUG
     CUDA_CHECK(cudaStreamSynchronize(0));
-    printf("nodes: %d queuesize: %d nqueueitems:%d good %d\n", 
+    /*printf("nodes: %d queuesize: %d nqueueitems:%d good %d\n", 
 	   device_diag->ntreenodes, 
 	   device_diag->queuesize, 
 	   device_diag->nqueueitems,
 	   device_diag->good);
-
+    */
     if (!device_diag->good)
     {
 	printf("ooops something went wrong\n");
 	abort();
     }
+#endif
+
     CUDA_CHECK(cudaPeekAtLastError());
 
     CUDA_CHECK(cudaEventRecord(evstop));
@@ -620,10 +623,10 @@ void Tree::dispose()
 
     float timems;
     CUDA_CHECK(cudaEventElapsedTime(&timems, evstart,evstop  ));
-    printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
+    // printf("\x1B[33mtimems: %f\x1b[0m\n", timems);
 
-    printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
-	   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good); 
+    //printf("device has found %d nodes, and max queue size was %d, outstanding items %d, queue is good: %d\n",
+    //   device_diag->ntreenodes, device_diag->queuesize, device_diag->nqueueitems, device_diag->good); 
 
     CUDA_CHECK(cudaFree(device_xdata));
     CUDA_CHECK(cudaFree(device_ydata));
@@ -677,8 +680,8 @@ namespace TreeCheck
 		this->leaf = leaf;
 	    }
 
-	realtype xcom() const { return wx / w; }
-	realtype ycom() const { return wy / w; }
+	realtype xcom() const { return w ? wx / w : 0; }
+	realtype ycom() const { return w ? wy / w : 0; }
 
 	DebugNode() 
 	    { 
@@ -715,12 +718,7 @@ namespace TreeCheck
 		    wy += ysources[i] * av;
 		}
 
-		if (w == 0)
-		{
-		    w = 1e-13;
-		    wx = (x0 + 0.5 * h) * w;
-		    wy = (y0 + 0.5 * h) * w;
-		}
+	
     
 		realtype r2 = 0;
 
@@ -932,7 +930,7 @@ namespace TreeCheck
 		node->children[c] = chd;
 	    }
 
-	    node->r = 0;
+	     node->r = 0;
 	    for(int c = 0; c < 4; ++c)
 		if (node->children[c]->w)
 		    node->r = std::max(node->r,
@@ -941,6 +939,7 @@ namespace TreeCheck
 					    pow(node->ycom() - node->children[c]->ycom(), 2)));
 
 	    node->r = std::min(node->r, 1.4143 * h);
+
 
 	    assert(node->r < 1.5 * h);
 
@@ -965,6 +964,7 @@ namespace TreeCheck
     {
 	if (verbose)
 	    printf("checking: %.20e %.20e\n", x, y);
+
 	union ASD
 	{
 	    unsigned char c[8];
@@ -995,13 +995,14 @@ namespace TreeCheck
 
     int check_bits(const double *a , const double *b, const int n)
     {
-	if (verbose) printf("*******************************\n");
+	if (verbose) printf("******************************* (%d elements)\n", n);
 	int r = 64;
 
 	for(int i = 0; i < n; ++i)
 	{
-	    if (fabs(a[i]) > 1.11e-16 || fabs(b[i]) > 1.11e-16)
+	    if (fabs(a[i]) > 5.14e-15 || fabs(b[i]) > 5.14e-15)
 	    {
+		printf("element %d:\n", i);
 		int l = check_bits(a[i], b[i]);
 		const double x = a[i];
 		const double y = b[i];
@@ -1017,31 +1018,29 @@ namespace TreeCheck
 
     void check_tree (const int EXPORD, const int nodeid, realtype * allexp, Tree::Node * allnodes, Tree::Node& a, TreeCheck::DebugNode& b)
     {
-	assert(a.s == b.s);
-	assert(a.e == b.e);
-	
 	if (verbose)
 	{
 	    printf("<%s>", (b.leaf ? "LEAF" : "INNER"));
-	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
+	    printf("ASDnode %d %d l%d s: %d e: %d. MY: %d %d check passed..\n", b.x, b.y, b.l, b.s, b.e, a.s, a.e);
 	}
 
-	if (	(check_bits(a.mass, b.mass) < 40))
-	    printf("BAD!\n");
-/*	assert(check_bits(a.mass, b.mass) >= 40);
+	assert(a.s == b.s);
+	assert(a.e == b.e);
+	
+	assert(check_bits(a.mass, b.mass) >= 40);
 	assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 	assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
-	assert(check_bits(a.r, b.r) >= 32);
+	assert(check_bits(a.r, b.r) >= 32 );
 
 	{
 	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 	    const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
 	    const realtype * refrexp = b.rexpansions;
 	    const realtype * refiexp = b.iexpansions;
-	    assert(24 <= check_bits(resrexp, refrexp, EXPORD));
-	    assert(24 <= check_bits(resiexp, refiexp, EXPORD));
+	    assert(24 <= check_bits(resrexp, refrexp, EXPORD) );
+	    assert(24 <= check_bits(resiexp, refiexp, EXPORD) );
 	}
-*/
+
 	if (!b.leaf)
 	    for(int c = 0; c < 4; ++c)
 		check_tree(EXPORD, a.state.childbase + c, allexp, allnodes, allnodes[a.state.childbase + c], *b.children[c]);
