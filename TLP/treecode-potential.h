@@ -19,15 +19,18 @@ extern "C"
 {
 #endif
     __attribute__ ((visibility ("default")))
-    void treecode_potential_solve(const realtype theta,
-			    const realtype * const xsources,
-			    const realtype * const ysources,
-			    const realtype * const sourcevalues,
-			    const int nsources,
-			    const realtype * const xtargets,
-			    const realtype * const ytargets,
-			    const int ntargets,
-			    realtype * const targetvalues);
+    void treecode_potential_async(const realtype theta,
+				  const realtype * const xsources,
+				  const realtype * const ysources,
+				  const realtype * const sourcevalues,
+				  const int nsources,
+				  const realtype * const xtargets,
+				  const realtype * const ytargets,
+				  const int ntargets,
+				  realtype * const targetvalues);
+
+    __attribute__ ((visibility ("default")))
+    void treecode_potential_wait();
 #ifdef __cplusplus
 }
 #endif

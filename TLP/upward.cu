@@ -1,5 +1,5 @@
 /*
- *  upward.cu
+ *  TLP/upward.cu
  *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
@@ -17,7 +17,7 @@
 #include "sort-sources.h"
 #include "upward-kernels.h"
 
-#define MFENCE //__threadfence()
+#define MFENCE //__threadfence() 
 #define WARPSIZE 32
 #define NQUEUES 4
 #define LQSIZE 16
@@ -579,16 +579,32 @@ void Tree::build(const realtype * const xsrc,
     CUDA_CHECK(cudaMemcpyAsync(device_vdata, vsrc, sizeof(realtype) * nsrc, cudaMemcpyHostToDevice));
 
     CUDA_CHECK(cudaEventRecord(evstart));
-    
+     CUDA_CHECK(cudaPeekAtLastError());
     sort_sources(stream, device_xdata, device_ydata, device_vdata, nsrc, device_keys, &xmin, &ymin, &extent);
-
+ CUDA_CHECK(cudaPeekAtLastError());
     setup<<<1, 1>>>(nsrc);
 
-    const int ysize = 31;
+#ifndef NDEBUG
+    const int ysize = 16 ;/// (ORDER / 12);
+#else
+    const int ysize = 31 ;/// (ORDER / 12);
+#endif
     build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
-
+ CUDA_CHECK(cudaPeekAtLastError());
     conclude<<<1, 1>>>(device_diag);
 
+    CUDA_CHECK(cudaStreamSynchronize(0));
+    printf("nodes: %d queuesize: %d nqueueitems:%d good %d\n", 
+	   device_diag->ntreenodes, 
+	   device_diag->queuesize, 
+	   device_diag->nqueueitems,
+	   device_diag->good);
+
+    if (!device_diag->good)
+    {
+	printf("ooops something went wrong\n");
+	abort();
+    }
     CUDA_CHECK(cudaPeekAtLastError());
 
     CUDA_CHECK(cudaEventRecord(evstop));
@@ -678,9 +694,9 @@ namespace TreeCheck
 		    children[i] = new DebugNode;
 	    }
 		
-	void p2e(const realtype * __restrict__ const xsources,
-		 const realtype * __restrict__ const ysources,
-		 const realtype * __restrict__ const vsources,
+	void p2e(const realtype * const xsources,
+		 const realtype * const ysources,
+		 const realtype * const vsources,
 		 const double x0, const double y0, const double h)
 	    {
 		mass = 0; 
@@ -850,12 +866,8 @@ namespace TreeCheck
 		    }
 		}
 
-#ifndef NDEBUG
-		{
-		    for(int i = 0; i < ORDER; ++i)
-			assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
-		}
-#endif
+		for(int i = 0; i < ORDER; ++i)
+		    assert(!std::isnan((double)rexpansions[i]) && !std::isnan(iexpansions[i]));
 	    }
 
 	~DebugNode() 
@@ -947,10 +959,12 @@ namespace TreeCheck
 	assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
 
-    bool verbose = false;
+    bool verbose = true;
 
     int check_bits(double x, double y)
     {
+	if (verbose)
+	    printf("checking: %.20e %.20e\n", x, y);
 	union ASD
 	{
 	    unsigned char c[8];
@@ -1012,7 +1026,9 @@ namespace TreeCheck
 	    printf("ASDnode %d %d l%d s: %d e: %d. check passed..\n", b.x, b.y, b.l, b.s, b.e);
 	}
 
-	assert(check_bits(a.mass, b.mass) >= 40);
+	if (	(check_bits(a.mass, b.mass) < 40))
+	    printf("BAD!\n");
+/*	assert(check_bits(a.mass, b.mass) >= 40);
 	assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 	assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
 	assert(check_bits(a.r, b.r) >= 32);
@@ -1025,7 +1041,7 @@ namespace TreeCheck
 	    assert(24 <= check_bits(resrexp, refrexp, EXPORD));
 	    assert(24 <= check_bits(resiexp, refiexp, EXPORD));
 	}
-
+*/
 	if (!b.leaf)
 	    for(int c = 0; c < 4; ++c)
 		check_tree(EXPORD, a.state.childbase + c, allexp, allnodes, allnodes[a.state.childbase + c], *b.children[c]);

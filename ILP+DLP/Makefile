@@ -29,7 +29,9 @@ endif
 potential force: $(OBJS)
 
 %.cuda.o: %.cu Makefile
-	nvcc -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'  -maxrregcount=32 -lineinfo -O4 -arch=compute_35 -code=sm_35 -use_fast_math -dc -c $< -o $@
+	nvcc -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'  -maxrregcount=32  -O4 -arch=compute_35 -code=sm_35 -use_fast_math -dc -c $< -o $@
+
+#-lineinfo
 
 %.o: %.c Makefile
 	gcc -fPIC -fvisibility=hidden -std=c99 -O4 -DNDEBUG -ftree-vectorize \

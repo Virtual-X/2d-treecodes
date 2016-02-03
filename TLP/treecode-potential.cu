@@ -1,6 +1,6 @@
 /*
- *  treecode-potential.cu
- *  Part of MRAG/2d-treecode-potential
+ *  TLP/treecode-potential.cu
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -10,8 +10,6 @@
  *  before getting a written permission from the author of this file.
  */
 
-#include <omp.h>
-
 #include <cstdio>
 #include <cassert>
 
@@ -19,17 +17,16 @@
 #include "potential-kernels.h"
 #include "upward.h"
 
-#define _INSTRUMENTATION_
 #define ACCESS(x) __ldg(&(x)) 
 
 namespace EvaluatePotential
 {
-struct SharedBuffers
-{
-    realtype scratch[64];
-    int buffered_e2ps[8];
-    int stack[LMAX * 3];
-};
+    struct SharedBuffers
+    {
+	realtype scratch[64];
+	int buffered_e2ps[8];
+	int stack[LMAX * 3];
+    };
 
 #ifndef NDEBUG
     __constant__ int nnodes;
@@ -161,7 +158,6 @@ using namespace EvaluatePotential;
 void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared);
 
 extern "C"
-__attribute__ ((visibility ("default")))
 void treecode_potential_solve(const realtype theta,
 			      const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 			      const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)
@@ -177,10 +173,8 @@ void treecode_potential_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyAsync(device_xdst, xdst, sizeof(realtype) * ndst, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpyAsync(device_ydst, ydst, sizeof(realtype) * ndst, cudaMemcpyHostToDevice));
     
-    const double t0 = omp_get_wtime();
     Tree::build(xsrc, ysrc, vsrc, nsrc, 512);
-    const double t1 = omp_get_wtime();
-
+    
 #if 1
     CUDA_CHECK(cudaMemcpyToSymbolAsync(xdata, &Tree::device_xdata, sizeof(Tree::device_xdata)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(ydata, &Tree::device_ydata, sizeof(Tree::device_ydata)));
@@ -205,12 +199,6 @@ void treecode_potential_solve(const realtype theta,
     
     Tree::dispose();
 
-    const double t2 = omp_get_wtime();
-
-#ifdef _INSTRUMENTATION_
-    printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t2 - t1) / (t2 - t0) * 100);
-#endif
-
     CUDA_CHECK(cudaFree(device_xdst));
     CUDA_CHECK(cudaFree(device_ydst));
     CUDA_CHECK(cudaFree(device_results));
@@ -218,7 +206,7 @@ void treecode_potential_solve(const realtype theta,
 }
 
 #ifndef NDEBUG
- //CPU REFERENCE CODE
+//CPU REFERENCE CODE
 void reference_evaluate(realtype * const result, const realtype xt, const realtype yt, realtype thetasquared)
 {
     const double eps = 10 * __DBL_EPSILON__;

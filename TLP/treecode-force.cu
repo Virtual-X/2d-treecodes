@@ -12,537 +12,308 @@
 
 #include <omp.h>
 
+#include <cstdio>
 #include <cassert>
-#include <cmath>
-#include <cstring>
-#include <tuple>
-#include <algorithm>
 
 #include "cuda-common.h"
-
-#include "treecode-force.h"
-
-#include "downward-kernels.h"
 #include "force-kernels.h"
 #include "upward.h"
 
-
-#define _INSTRUMENTATION_ 1
-#if ORDER <= 12
-#define _MIXPREC_
-#endif
-
-#ifndef _INSTRUMENTATION_
-#define MYRDTSC 0
-#else
-#define MYRDTSC _rdtsc()
-#endif
+#define ACCESS(x) __ldg(&(x)) 
 
 namespace EvaluateForce
 {
-    realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
-    float *xdata_fp32 = nullptr, *ydata_fp32 = nullptr, *vdata_fp32 = nullptr;
-
-    struct PerfMon
+     struct SharedBuffers
     {
-	int64_t e2pcalls, e2lcalls, e2lcycles, e2pcycles, p2pcalls, p2pcycles, p2pinteractions;
-	int64_t startc, endc;
+	realtype scratch[64];
+	int buffered_e2ps[8];
+	int stack[LMAX * 3];
+    };
 
-	int maxstacksize, evaluations;
+#ifndef NDEBUG
+    __constant__ int nnodes;
+#endif
+    __constant__ Tree::Node * nodes;
+    __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
-	bool failed;
-
-	void setup()
-	    {
-		e2lcalls = 0;
-		e2lcycles = 0;
-		e2pcalls = 0;
-		e2pcycles = 0;
-		p2pcalls = 0;
-		p2pcycles = 0;
-		p2pinteractions = 0;
-
-		maxstacksize = 0;
-		evaluations = 0;
-		failed = false;
-	    }
-
-	double tot_cycles() { return (double)(endc - startc); }
-
-	std::tuple<double, double, double, double> e2l(const int instructions)
-	    {
-		return std::make_tuple((double)(e2lcycles),
-				       (double)(e2lcycles) / tot_cycles(),
-				       (double)(e2lcycles) / e2lcalls,
-				       (double)(e2lcalls * instructions) / e2lcycles);
-	    }
-	std::tuple<double, double, double, double> e2p(const int instructions)
-	    {
-		return std::make_tuple((double)(e2pcycles),
-				       (double)(e2pcycles) / tot_cycles(),
-				       (double)(e2pcycles) / e2pcalls,
-				       (double)(e2pcalls * instructions) / e2pcycles);
-	    }
-
-	std::tuple<double, double, double, double> p2p()
-	    {
-		return std::make_tuple((double)(p2pcycles),
-				       (double)(p2pcycles) / tot_cycles(),
-				       (double)(p2pcycles) / p2pcalls,
-				       (double)p2pcycles / (double)(p2pinteractions));
-	    }
-
-	std::tuple<double, double, int> traversal()
-	    {
-		return std::make_tuple((double)(endc - startc - p2pcycles - e2pcycles - e2lcycles),
-				       (double)(endc - startc - p2pcycles - e2pcycles - e2lcycles) / (endc - startc),
-				       maxstacksize);
-	    }
-
-    } perfmon;
-
-#pragma omp threadprivate(perfmon)
-
-    void evaluate(realtype * const xresult, realtype * const yresult,
-		  const realtype xt, const realtype yt,
-		  const Tree::Node & root, const realtype thetasquared)
+    /*__global__ void  __launch_bounds__(128, 16)
+    evaluate(const realtype * const xts, const realtype * const yts, const realtype thetasquared, 
+	     realtype * const xforce, realtype * const yforce, const int ndst)
     {
-	const Tree::Node * stack[15 * 4 * 2];
+	assert(blockDim.x == 32);
+	
+	const int tid = threadIdx.x;
+	const bool master = tid == 0;
+	
+	const int gid = threadIdx.y + blockDim.y * blockIdx.x;
 
+	if (gid >= ndst)
+	    return;
+	
+	const realtype xt = xts[gid];
+	const realtype yt = yts[gid];
+
+	extern __shared__ SharedBuffers ary[];
+
+	realtype * scratch = ary[threadIdx.y].scratch;
+
+	int * stack = ary[threadIdx.y].stack;
+	int * buffered_e2ps = ary[threadIdx.y].buffered_e2ps;
+	int counter_e2ps = 0;
+	
 	int stackentry = 0, maxentry = 0;
 
-	stack[0] = &root;
-
-	*xresult = 0;
-	*yresult = 0;
+	if (master)
+	    stack[0] = 0;
+	
+	realtype result = 0;
 
 	while(stackentry > -1)
 	{
-	    const Tree::Node * const node = stack[stackentry--];
+	    const int nodeid = stack[stackentry--];
+	    assert(nodeid < nnodes);
 
-	    realtype tmp[2];
+	    const Tree::Node * node = nodes + nodeid;
+	    const realtype nodemass = ACCESS(node->mass);
+	
+	    if (nodemass == 0)
+	       	continue;
 
-	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
+	    const realtype xcom = ACCESS(node->xcom);
+	    const realtype ycom = ACCESS(node->ycom);
+	    const realtype r = ACCESS(node->r);
+	    const realtype rx = xt - xcom;
+	    const realtype ry = yt - ycom;
+	    const realtype r2 = rx * rx + ry * ry;
 
-	    if (4 * node->r * node->r < thetasquared * r2)
-	    {
-		int64_t startc = MYRDTSC;
-		force_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions, tmp, tmp + 1);
-		int64_t endc = MYRDTSC;
+	    if (r * r < thetasquared * r2)
+ 	    {
+		if (master)
+		    buffered_e2ps[counter_e2ps] = nodeid;
 
-		*xresult += tmp[0];
-		*yresult += tmp[1];
-#ifdef _INSTRUMENTATION_
-		perfmon.e2pcycles += endc - startc;
-		++perfmon.e2pcalls;
-#endif
+		counter_e2ps++;
+
+		if (counter_e2ps == 8)
+		{
+		    counter_e2ps = 0;
+
+		    const int mynodeid = buffered_e2ps[tid / 4];
+		    assert(mynodeid < nnodes);
+	    
+		    const Tree::Node * mynode = nodes + mynodeid;
+
+		    result += force_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
+					expansions + ORDER * (0 + 2 * mynodeid), 
+					expansions + ORDER * (1 + 2 * mynodeid), scratch);
+		}
 	    }
-	    else
+	    else 
 	    {
-		if (node->leaf)
+		if (!node->state.innernode)
 		{
 		    const int s = node->s;
 
-		    int64_t startc = MYRDTSC;
-		    force_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt, tmp, tmp + 1);
-		    int64_t endc = MYRDTSC;
-
-		    *xresult += tmp[0];
-		    *yresult += tmp[1];
-#ifdef _INSTRUMENTATION_
-		    perfmon.p2pcycles += endc - startc;
-		    perfmon.p2pinteractions += node->e - s;
-		    ++perfmon.p2pcalls;
-#endif
+		    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
 		}
 		else
 		{
-		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (Tree::Node *)node->children[c];
-
-		    maxentry = std::max(maxentry, stackentry);
-		}
-	    }
-	}
-
-#ifdef _INSTRUMENTATION_
-	perfmon.maxstacksize = maxentry + 1;
-	++perfmon.evaluations;
-	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
-#endif
-    }
-
-    template<int size>
-    struct E2LWork
-    {
-	int count = 0;
-	realtype * const rdst,  * const idst;
-
-	realtype x0s[size], y0s[size], masses[size];
-	const realtype * rxps[size], *ixps[size];
-
-	E2LWork(realtype * const rlocal, realtype * const ilocal):
-	    count(0), rdst(rlocal), idst(ilocal) { }
-
-	void _flush()
-	    {
-		const int64_t startc = MYRDTSC;
-		downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
-		const int64_t endc = MYRDTSC;
-
-#ifdef _INSTRUMENTATION_
-		perfmon.e2lcycles += endc - startc;
-		perfmon.e2lcalls += (count + 1) / 2;
-#endif
-		count = 0;
-	    }
-
-	void push(const realtype x0, const realtype y0, const realtype mass,
-		  const realtype * const rxp, const realtype * const ixp)
-	    {
-		x0s[count] = x0;
-		y0s[count] = y0;
-		masses[count] = mass;
-		rxps[count] = rxp;
-		ixps[count] = ixp;
-
-		if (++count >= size)
-		    _flush();
-	    }
-
-	void finalize()
-	    {
-		if (count)
-		    _flush();
-	    }
-    };
-
-#define TILESIZE 4
-#define BRICKSIZE 8
-
-    void evaluate(realtype * const xresultbase, realtype * const yresultbase,
-		  const realtype x0, const realtype y0, const realtype h,
-		  const Tree::Node & root, const realtype theta)
-    {
-	//const bool localexp = true;
-	int maxentry = 0;
-
-	const Tree::Node * stack[15 * 4 * 2];
-
-	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
-
-#ifdef _MIXPREC_
-	float xresult_fp32[BRICKSIZE][BRICKSIZE], yresult_fp32[BRICKSIZE][BRICKSIZE];
-#endif
-
-	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
-
-	E2LWork<32> e2lwork(rlocal, ilocal);
-
-	const realtype rbrick = 1.4142135623730951 * h * (BRICKSIZE - 1) * 0.5;
-
-	for(int by = 0; by < BLOCKSIZE; by += BRICKSIZE)
-	    for(int bx = 0; bx < BLOCKSIZE; bx += BRICKSIZE)
-	    {
-		const realtype x0brick = x0 + h * (bx + 0.5 * (BRICKSIZE - 1));
-		const realtype y0brick = y0 + h * (by + 0.5 * (BRICKSIZE - 1));
-
-		for(int i = 0; i <= ORDER; ++i)
-		    rlocal[i] = ilocal[i] = 0;
-
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			xresult[iy][ix] = 0;
-
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			yresult[iy][ix] = 0;
-
-#ifdef _MIXPREC_
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			xresult_fp32[iy][ix] = 0;
-		
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			yresult_fp32[iy][ix] = 0;
-#endif
-
-		int stackentry = 0;
-		stack[0] = &root;
-
-		while(stackentry > -1)
-		{
-		    const Tree::Node * const node = stack[stackentry--];
-
-		    const realtype xcom = node->xcom();
-		    const realtype ycom = node->ycom();
-
-		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
-
-		    const bool localexpansion_converges = (distance / node->r - 1) > (1 / theta) && rbrick <= node->r;
-
-		    if (localexpansion_converges)
-			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);
-		    else
+		    if (master)   
 		    {
-			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
-			const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
+			const int childbase = ACCESS(node->state.childbase);
 
-			const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
-
-			if (node->r * node->r < theta * theta * r2)
-			{
-			    int64_t startc = MYRDTSC;
-
-			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
-				for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				    force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
-						    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-
-			    int64_t endc = MYRDTSC;
-
-#ifdef _INSTRUMENTATION_
-			    perfmon.e2pcycles += endc - startc;
-			    perfmon.e2pcalls += (BRICKSIZE / TILESIZE) * (BRICKSIZE / TILESIZE);
-#endif
-			}
-			else
-			{
-			    if (node->leaf)
-			    {
-				const int s = node->s;
-
-				int64_t startc = MYRDTSC;
-
-				for(int ty = 0; ty < BRICKSIZE; ty += 4)
-				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				    {
-#ifdef _MIXPREC_
-					force_p2p_tiled_mixprec(&xdata_fp32[s], &ydata_fp32[s], &vdata_fp32[s], node->e - s,
-								(float)(x0 + (bx + tx) * h), (float)(y0 + (by + ty) * h), (float)h, 
-								&xresult_fp32[ty][tx], &yresult_fp32[ty][tx], BRICKSIZE);
-#else
-					force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
-							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, 
-							&xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-#endif
-				    }
-
-				int64_t endc = MYRDTSC;
-
-#ifdef _INSTRUMENTATION_
-				perfmon.p2pcycles += endc - startc;
-				perfmon.p2pinteractions += (node->e - s) * BRICKSIZE * BRICKSIZE;
-				++perfmon.p2pcalls;
-#endif
-			    }
-			    else
-			    {
-				for(int c = 0; c < 4; ++c)
-				    stack[++stackentry] = (Tree::Node *)node->children[c];
-
-				maxentry = std::max(maxentry, stackentry);
-			    }
-			}
+			for(int c = 0; c < 4; ++c) 
+			    stack[++stackentry] = childbase + c;
 		    }
+		    else
+			stackentry += 4;
+			    
+		    maxentry = max(maxentry, stackentry);
+		    assert(maxentry < LMAX * 3);
 		}
-
-		e2lwork.finalize();
-
-		for(int ty = 0; ty < BRICKSIZE; ty += 4)
-		    for(int tx = 0; tx < BRICKSIZE; tx += 4)
-			downward_l2p_tiled(h * (tx - 0.5 * (BRICKSIZE - 1)),
-					   h * (ty - 0.5 * (BRICKSIZE - 1)),
-					   h, rlocal, ilocal,
-					   &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-#ifdef _MIXPREC_
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			xresult[iy][ix] += xresult_fp32[iy][ix];
-		
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			yresult[iy][ix] += yresult_fp32[iy][ix];	
-#endif
-
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			xresultbase[bx + ix + BLOCKSIZE * (by + iy)] = xresult[iy][ix];
-
-		for(int iy = 0; iy < BRICKSIZE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
-			yresultbase[bx + ix + BLOCKSIZE * (by + iy)] = yresult[iy][ix];
 	    }
+	}
 
-#ifdef _INSTRUMENTATION_
-	perfmon.maxstacksize = maxentry + 1;
-	perfmon.evaluations += BRICKSIZE * BRICKSIZE;
-	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
+  	if (tid / 4 < counter_e2ps)
+	{
+	    const int mynodeid = buffered_e2ps[tid / 4];
+	    assert(mynodeid < nnodes);
+	    
+	    const Tree::Node * mynode = nodes + mynodeid;
+
+	    result += force_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
+				expansions + ORDER * (0 + 2 * mynodeid), 
+				expansions + ORDER * (1 + 2 * mynodeid), scratch);
+	}
+
+	result += __shfl_xor(result, 16 );
+	result += __shfl_xor(result, 8 );
+	result += __shfl_xor(result, 4 );
+	result += __shfl_xor(result, 2 );
+	result += __shfl_xor(result, 1 );
+
+	if (master)
+	    results[gid] = result;
+	    }*/
+
+
+}
+
+void reference_evaluate(realtype * const xforce, realtype * const yforce, 
+			const realtype xt, const realtype yt, realtype thetasquared);
+
+using namespace EvaluateForce;
+   
+extern "C"
+__attribute__ ((visibility ("default")))
+void treecode_force_mrag_solve(const realtype theta,
+			       const realtype * const xsrc,
+			       const realtype * const ysrc,
+			       const realtype * const vsrc,
+			       const int nsrc,
+			       const realtype * const x0s,
+			       const realtype * const y0s,
+			       const realtype * const hs,
+			       const int nblocks,
+			       realtype * const xforce,
+			       realtype * const yforce)
+{
+    const realtype thetasquared = theta * theta;
+    
+    realtype * device_x0s, *device_y0s, *device_hs, *device_xforce, *device_yforce;
+    
+    const int ndst = nblocks * BLOCKSIZE * BLOCKSIZE;
+
+    CUDA_CHECK(cudaMalloc(&device_x0s, sizeof(realtype) * ndst));
+    CUDA_CHECK(cudaMalloc(&device_y0s, sizeof(realtype) * ndst));
+    CUDA_CHECK(cudaMalloc(&device_hs, sizeof(realtype) * ndst));
+
+    CUDA_CHECK(cudaMalloc(&device_xforce, sizeof(realtype) * ndst));
+    CUDA_CHECK(cudaMalloc(&device_yforce, sizeof(realtype) * ndst));
+    
+    CUDA_CHECK(cudaMemcpyAsync(device_x0s, x0s, sizeof(realtype) * nblocks, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_y0s, y0s, sizeof(realtype) * nblocks, cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(device_hs, hs, sizeof(realtype) * nblocks, cudaMemcpyHostToDevice));
+    
+    Tree::build(xsrc, ysrc, vsrc, nsrc, 512);
+    //CUDA_CHECK(cudaDeviceSynchronize());
+#if 0
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(xdata, &Tree::device_xdata, sizeof(Tree::device_xdata)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(ydata, &Tree::device_ydata, sizeof(Tree::device_ydata)));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(vdata, &Tree::device_vdata, sizeof(Tree::device_vdata)));
+
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(nodes, &Tree::device_nodes, sizeof(Tree::device_nodes)));
+#ifndef NDEBUG
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(nnodes, &Tree::nnodes, sizeof(Tree::nnodes)));
 #endif
-    }
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(expansions, &Tree::device_expansions, sizeof(Tree::device_expansions)));
 
-    void report_instrumentation(PerfMon perf[], const int N, const double t0, const double t1, 
-				const int e2linstructions, const int e2pinstructions)
-    {
-#ifdef _INSTRUMENTATION_
-#if _INSTRUMENTATION_ == 2
-	for(int i = 0; i < N; ++i)
-	    if (perf[i].failed)
+    const int yblocksize = 4;
+    evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize),
+	sizeof(SharedBuffers) * yblocksize>>>(device_xdst, device_ydst, thetasquared, device_xforce, device_yforce, ndst);
+    CUDA_CHECK(cudaPeekAtLastError());
+         
+    CUDA_CHECK(cudaMemcpyAsync(xdst, device_xforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(ydst, device_yforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
+#else
+    for(int c = 0, b = 0; b < nblocks; ++b)
+	for(int iy = 0; iy < BLOCKSIZE; ++iy)
+	    for(int ix = 0; ix < BLOCKSIZE; ++ix, ++c)
 	    {
-		printf("oops there was an overflow in the computation\n");
-		abort();
+		const realtype xdst = x0s[b] + hs[b] * ix;
+		const realtype ydst = y0s[b] + hs[b] * iy;
+
+		reference_evaluate(xforce + c, yforce + c, xdst, ydst, thetasquared);
 	    }
-
-	printf("EVALUATION CYCLES ===============================\n");
-	for(int i = 0; i < N; ++i)
-	    printf("TID %d: tot cycles: %.3e\n", i, perf[i].tot_cycles());
-
-	printf("DOWNWARD CYCLES ===============================\n");
-	for(int i = 0; i < N; ++i)
-	{
-	    auto p = perf[i].e2l(e2linstructions);
-
-	    printf("TID %d: E2L cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
-		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
-	}
-
-	printf("E2P CYCLES ===============================\n");
-	for(int i = 0; i < N; ++i)
-	{
-	    auto p = perf[i].e2p(e2pinstructions);
-
-	    printf("TID %d: E2P cycles: %.3e (%.1f %%) cycles-per-call: %.1f, ipc: %.2f\n",
-		   i, std::get<0>(p), std::get<1>(p) * 100., std::get<2>(p), std::get<3>(p));
-	}
-
-	printf("EVALUATION P2P CYCLES ===============================\n");
-
-	for(int i = 0; i < N; ++i)
-	{
-	    auto p = perf[i].p2p();
-
-	    printf("TID %d: P2P importance: %.1f %% cycles-per-interactions: %.1f, cycles-per-call: %.1f\n",
-		   i, std::get<1>(p) * 100, std::get<3>(p), std::get<2>(p));
-	}
-
-	printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
-	for(int i = 0; i < N; ++i)
-	{
-	    auto p = perf[i].traversal();
-
-	    printf("TID %d: traversal overhead: %.1f %%, max stacksize: %d \n", i, 100. * std::get<1>(p), std::get<2>(p));
-	}
-
 #endif
-      
-	const double t2 = omp_get_wtime();
-	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
-#endif
-    }
+    
+    Tree::dispose();
 
-    extern "C"
-    __attribute__ ((visibility ("default")))
-    void treecode_force_solve(const realtype theta,
-			      const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-			      const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const xresult, realtype * const yresult)
-    {
-	const realtype thetasquared = theta * theta;
+    CUDA_CHECK(cudaFree(device_x0s));
+    CUDA_CHECK(cudaFree(device_y0s));   
+    CUDA_CHECK(cudaFree(device_hs));
+    CUDA_CHECK(cudaFree(device_xforce));
+    CUDA_CHECK(cudaFree(device_yforce));
+}
 
-	Tree::Node root;
-	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 128, ORDER);
-	const double t1 = omp_get_wtime();
+void reference_evaluate(realtype * const xforce, realtype * const yforce, 
+			const realtype xt, const realtype yt, realtype thetasquared)
+{
+    const double eps = 10 * __DBL_EPSILON__;
+    int stack[LMAX * 3];
 
-	xdata = Tree::xdata;
-	ydata = Tree::ydata;
-	vdata = Tree::vdata;
+    int stackentry = 0, maxentry = 0;
+    
+    stack[0] = 0;
 
-	PerfMon perf[omp_get_max_threads()];
-
-#pragma omp parallel
-	{
-	    perfmon.setup();
-	    perfmon.startc = MYRDTSC;
-
-#pragma omp for schedule(static,1)
-	    for(int i = 0; i < ndst; ++i)
-		evaluate(xresult + i, yresult + i, xdst[i], ydst[i], root, thetasquared);
-
-	    perfmon.endc = MYRDTSC;
-#ifdef _INSTRUMENTATION_
-	    perf[omp_get_thread_num()] = perfmon;
-#endif
-	}
-
-	Tree::dispose();
-
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
-    }
-
-    extern "C"
-    __attribute__ ((visibility ("default")))
-    void treecode_force_mrag_solve(const realtype theta,
-				   const realtype * const xsrc,
-				   const realtype * const ysrc,
-				   const realtype * const vsrc,
-				   const int nsrc,
-				   const realtype * const x0s,
-				   const realtype * const y0s,
-				   const realtype * const hs,
-				   const int nblocks,
-				   realtype * const xdst,
-				   realtype * const ydst)
-    {
-	Tree::Node root;
-
-	const double t0 = omp_get_wtime();
-	Tree::Node* device_root;
-	CUDA_CHECK(cudaMalloc(&device_root, sizeof(*device_root)));
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192, ORDER); //before: 128
-	const double t1 = omp_get_wtime();
-
-	xdata = Tree::xdata;
-	ydata = Tree::ydata;
-	vdata = Tree::vdata;
-
-#ifdef _MIXPREC_
-	posix_memalign((void **)&xdata_fp32, 32, sizeof(float) * nsrc);
-	posix_memalign((void **)&ydata_fp32, 32, sizeof(float) * nsrc);
-	posix_memalign((void **)&vdata_fp32, 32, sizeof(float) * nsrc);
-
-#pragma omp parallel for
-	for(int i = 0; i < nsrc; ++i)
-	{
-	    xdata_fp32[i] = (float)xdata[i];
-	    ydata_fp32[i] = (float)ydata[i];
-	    vdata_fp32[i] = (float)vdata[i];
-	}
-#endif
-	PerfMon perf[omp_get_max_threads()];
-
-#pragma omp parallel
-	{
-	    perfmon.setup();
-	    perfmon.startc = MYRDTSC;
-
-#pragma omp for schedule(dynamic,1)
-	    for(int i = 0; i < nblocks; ++i)
-		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], root, theta);
-
-	    perfmon.endc = MYRDTSC;
-#ifdef _INSTRUMENTATION_
-	    perf[omp_get_thread_num()] = perfmon;
-#endif
-	}
+    *xforce = 0;
+    *yforce = 0;
 	
-#ifdef _MIXPREC_
-	free(xdata_fp32);
-	free(ydata_fp32);
-	free(vdata_fp32);
-#endif
-	Tree::dispose();
-	
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
+    while(stackentry > -1)
+    {
+	const int nodeid = stack[stackentry--];
+	    
+	const Tree::Node * const node = Tree::host_nodes + nodeid;
+
+	if (node->e - node->s == 0)
+	    continue;
+	    
+	const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
+
+	if (node->r * node->r < thetasquared * r2)
+	{
+	    const realtype * rxp = Tree::host_expansions + ORDER * (0 + 2 * nodeid);
+	    const realtype * ixp = Tree::host_expansions + ORDER * (1 + 2 * nodeid);
+
+	    const realtype rz = xt - node->xcom;
+	    const realtype iz = yt - node->ycom;
+
+	    const realtype rinvz_1 = rz / r2;
+	    const realtype iinvz_1 = -iz / r2;
+
+	    realtype rsum = 0, isum = 0;
+	    realtype rprod = rinvz_1, iprod = iinvz_1;
+
+	    for(int j = 0; j < ORDER; ++j)
+	    {
+		const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
+		const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
+
+		rprod = rtmp;
+		iprod = itmp;
+
+		rsum += rxp[j] * rprod - ixp[j] * iprod;
+		isum += rxp[j] * iprod + ixp[j] * rprod;
+	    }
+	    
+	    *xforce += node->mass * rinvz_1 - rsum;
+	    *yforce += -(node->mass * iinvz_1 - isum);
+	}
+	else
+	    if (!node->state.innernode)
+	    {
+		const int s = node->s;
+		    
+		realtype xsum = 0, ysum = 0;
+		for(int i = s; i < node->e; ++i)
+		{
+		    const realtype xr = xt - Tree::host_xdata[i];
+		    const realtype yr = yt - Tree::host_ydata[i];
+		    const realtype factor = Tree::host_vdata[i] / (xr * xr + yr * yr + eps);
+
+		    xsum += xr * factor;
+		    ysum += yr * factor;
+		}
+    
+		*xforce += xsum;
+		*yforce += ysum;
+	    }
+	    else
+	    {
+		for(int c = 0; c < 4; ++c)
+		    stack[++stackentry] = node->state.childbase + c;
+		    
+		if (maxentry < stackentry)
+		    maxentry = stackentry;
+	    }
     }
 }
