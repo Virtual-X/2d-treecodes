@@ -156,8 +156,11 @@ namespace Tree
 		chldrxp[c] = chd->rexpansions;
 		chldixp[c] = chd->iexpansions;
 	    }
-
+#if 1
 	    E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+#else
+	    REFERENCE_E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+#endif
 #ifndef NDEBUG
 	    {
 		for(int i = 0; i < ORDER; ++i)

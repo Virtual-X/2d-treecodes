@@ -18,6 +18,7 @@
 #define P2E_KERNEL _CONCATENATE(upward_p2e_order, ORDER)
 #define REFERENCE_P2E_KERNEL _CONCATENATE(reference_upward_p2e_order, ORDER)
 #define E2E_KERNEL _CONCATENATE(upward_e2e_order, ORDER)
+#define REFERENCE_E2E_KERNEL _CONCATENATE(reference_upward_e2e_order, ORDER)
 
 #ifdef __cplusplus
 extern "C"
@@ -62,6 +63,15 @@ extern "C"
 		    const realtype * __restrict__ const * viexpansions,
 		    realtype * __restrict__ const rdstxp,
 		    realtype * __restrict__ const idstxp);
+    
+ void REFERENCE_E2E_KERNEL(const realtype * const x0s, 
+		    const realtype * const y0s,
+		    const realtype * const masses, 
+		    const realtype * __restrict__ const * vrexpansions,
+		    const realtype * __restrict__ const * viexpansions,
+		    realtype * __restrict__ const rdstxp,
+		    realtype * __restrict__ const idstxp);
+    
     
 #ifdef __cplusplus
 }
