@@ -326,6 +326,9 @@ int main(int argc, char ** argv)
 
 	    fseek(fin, 0, SEEK_SET);
 
+	     if (!mragfile && (testt & P_TEST))
+		test(theta, tol, fin, true, verify);
+fseek(fin, 0, SEEK_SET);
 	    if (testt & V_TEST)
 		test(theta, tol * 100, fin, false, verify, mragfile);
 	    fclose(fin);

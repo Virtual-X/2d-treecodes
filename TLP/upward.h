@@ -72,7 +72,7 @@ namespace Tree
 	const int64_t highest_workload = std::max(std::max(subworkloads[0], subworkloads[1]),
 						  std::max(subworkloads[2], subworkloads[3]));
 	
-	const int64_t myworkload = all ? allcycles : searchonly? searchcycles : (e2ecycles*0 + p2ecycles + 0*searchcycles);
+	const int64_t myworkload = all ? allcycles : searchonly? searchcycles : (e2ecycles + p2ecycles + 0*searchcycles);
 
 	return std::make_pair(aggregate + myworkload, 
 			      highest_workload + myworkload);
