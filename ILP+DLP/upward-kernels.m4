@@ -42,18 +42,15 @@ export void P2E_KERNEL(ORDER)(
 	*xsum = reduce_add(wxsum);
 	*ysum = reduce_add(wysum);
 
-	if (programIndex == 0)
-	{
-	   if (*weight == 0)
-    	   {
-      	      *weight = 1e-13;
-      	      *xsum = (x0 + 0.5 * h) * *weight;
-      	      *ysum = (y0 + 0.5 * h) * *weight;
-    	   }
-	}
+	if (*weight == 0)
+    	{
+	   *weight = 1e-13;
+      	   *xsum = (x0 + 0.5 * h) * *weight;
+      	   *ysum = (y0 + 0.5 * h) * *weight;
+    	}
 
-    	const realtype xcom = *xsum / *weight;
-    	const realtype ycom = *ysum / *weight;
+    	const uniform realtype xcom = *xsum / *weight;
+    	const uniform realtype ycom = *ysum / *weight;
 
 	realtype r2 = 0;
 	foreach(i = 0 ... nsources)
@@ -76,40 +73,22 @@ export void P2E_KERNEL(ORDER)(
 
 		const realtype src = vsources[i]; 
 
-		realtype rtmp = rprod_0 * src;
-		realtype itmp = iprod_0 * src;
-
-		TMP(rxp, 0) -= rtmp;
-		TMP(ixp, 0) -= itmp;
-		
-		realtype rprod = rprod_0, iprod = iprod_0;
-		
+		TMP(rxp, 0) -= rprod_0 * src;
+		TMP(ixp, 0) -= iprod_0 * src;
+				
 		LUNROLL(n, 1, eval(ORDER - 1),`
-		rtmp = rprod * TMP(rprod, 0) - iprod * TMP(iprod, 0);
-		itmp = rprod * TMP(iprod, 0) + iprod * TMP(rprod, 0);
+		const realtype TMP(rprod, n) = TMP(rprod, eval(n - 1)) * TMP(rprod, 0) - TMP(iprod, eval(n - 1)) * TMP(iprod, 0);
+		const realtype TMP(iprod, n) = TMP(rprod, eval(n - 1)) * TMP(iprod, 0) + TMP(iprod, eval(n - 1)) * TMP(rprod, 0);
 
-		const realtype TMP(term, n) = src * (realtype)(1 / eval(n+1).);
-
-		rprod = rtmp;
-		iprod = itmp;
+		const realtype TMP(term, n) = src * (realtype)(esyscmd(echo -1/eval(n + 1) | bc --mathlib ));
 		
-		rtmp = rprod * TMP(term, n);
-		itmp = iprod * TMP(term, n);
-
-		TMP(rxp, n) -= rtmp;
-		TMP(ixp, n) -= itmp;	
+		TMP(rxp, n) -= TMP(rprod, n) * TMP(term, n);
+		TMP(ixp, n) -= TMP(iprod, n) * TMP(term, n);	
 		')
 	}dnl
 
 	LUNROLL(i, 0, eval(ORDER - 1), `
-	{
-	   uniform realtype rsum = reduce_add(TMP(rxp, i));
-	   uniform realtype isum = reduce_add(TMP(ixp, i));
-	   
-	   if (programIndex == 0)
-	   {
-	      rexpansions[i] = rsum;
-	      iexpansions[i] = isum;
-	   }
-	}')
+	rexpansions[i] = reduce_add(TMP(rxp, i));
+	iexpansions[i] = reduce_add(TMP(ixp, i));
+	')
 }

@@ -20,7 +20,7 @@
 #include "upward.h"
 #include "upward-kernels.h"
 
-//#define  _INSTRUMENTATION_
+#define  _INSTRUMENTATION_
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
 #else
@@ -296,6 +296,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 	 (double)usecycles.second,(double)(usecycles.second * 100./ usecycles.first),
 	 (double)searchcycles.first,(double)(searchcycles.first * 100./ usecycles.first),
 	 (double)searchcycles.second,(double)(searchcycles.second * 100./ searchcycles.first));
+
+  printf("USECYCLE.first: %e\n", (double)usecycles.first);
 
 #endif
 }
