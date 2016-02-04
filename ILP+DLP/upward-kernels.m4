@@ -110,7 +110,11 @@ __device__ void upward_e2e(
 	realtype * const rcoeff = ary + ARYFP * (2 + 4 * slot);
 	realtype * const icoeff = ary + ARYFP * (3 + 4 * slot);
 	
-	const realtype r2z0 = x0 * x0 + y0 * y0;
+	realtype r2z0 = x0 * x0 + y0 * y0;
+
+	if (r2z0 == 0)
+	   r2z0 = 1;
+
 	ARY(rinvz, 1) = x0 / r2z0;
 	ARY(iinvz, 1) = - y0 / r2z0;
 	dnl

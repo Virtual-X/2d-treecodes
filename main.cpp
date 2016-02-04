@@ -338,11 +338,11 @@ int main(int argc, char ** argv)
      file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
     */
-    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
-/*    file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
-    file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
-    file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
-
+    //file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+    file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
+    //file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
+    //file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
+/*
     file2test("testSid/diegoSolverCylUniform", true, V_TEST);
     file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
     file2test("testSid/diegoVelTestsDec10", true, V_TEST);

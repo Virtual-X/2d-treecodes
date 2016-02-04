@@ -16,13 +16,12 @@ backend ?= sse
 real ?= double
 order ?= 12
 
-OBJS = 	order$(order)-upward-kernels.cuda.o 
+OBJS =order$(order)-upward-kernels.cuda.o 
 
 ifneq "$(MAKECMDGOALS)" "force"
 	OBJS += order$(order)-potential-kernels.cuda.o
 else
-	OBJS += order$(order)-force-kernels.o \
-		order$(order)-force-kernels-tiled.o \
+	OBJS += order$(order)-force-kernels.cuda.o \
 		order$(order)-downward-kernels.o 
 endif
 

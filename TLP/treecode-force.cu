@@ -37,53 +37,6 @@ namespace EvaluateForce
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
-    __device__ void e2p(const realtype mass,
-			const realtype * rxp, const realtype * ixp, 
-			const realtype rz, const realtype iz, realtype& xforce, realtype& yforce)
-    {
-	const realtype r2 = rz * rz + iz * iz;
-
-	const realtype rinvz_1 = rz / r2;
-	const realtype iinvz_1 = -iz / r2;
-	
-	realtype rsum = mass * rinvz_1, isum = mass * iinvz_1;
-	realtype rprod = rinvz_1, iprod = iinvz_1;
-
-	for(int j = 0; j < ORDER; ++j)
-	{
-	    const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
-	    const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
-	    
-		rprod = rtmp;
-		iprod = itmp;	
-		
-		rsum -= (j + 1) * (rxp[j] * rprod - ixp[j] * iprod);
-		isum -= (j + 1) * (rxp[j] * iprod + ixp[j] * rprod);
-	}
-	    
-	xforce += rsum;
-	yforce += -isum;
-    }
-
-    __device__ void p2p(const int s, const int e, const realtype xt, const realtype yt, realtype& xforce, realtype& yforce)
-    {		    
-	const double eps = 10 * __DBL_EPSILON__;
-
-	realtype xsum = 0, ysum = 0;
-	for(int i = s; i < e; ++i)
-	{
-	    const realtype xr = xt - xdata[i];
-	    const realtype yr = yt - ydata[i];
-	    const realtype factor =  vdata[i] / (xr * xr + yr * yr + eps);
-	    
-	    xsum += xr * factor;
-	    ysum += yr * factor;
-	}
-	
-	xforce += xsum;
-	yforce += ysum;
-    }
-    
     __global__ void  __launch_bounds__(128, 16)
     evaluate(const realtype thetasquared,
 	     const realtype * const x0s,
@@ -147,15 +100,18 @@ namespace EvaluateForce
 		const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
 		const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
 
-		e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + ty * h - ycom, xsum0, ysum0);
-		e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + (ty + 4) * h - ycom, xsum1, ysum1);
+		force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + ty * h - ycom, xsum0, ysum0);
+		force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + (ty + 4) * h - ycom, xsum1, ysum1);
 	    }
 	    else 
 	    {
 		if (!node->state.innernode)
 		{
-		    p2p(node->s, node->e,  x0 + tx * h, y0 + ty * h, xsum0, ysum0);
-		    p2p(node->s, node->e,  x0 + tx * h, y0 + (ty + 4) * h, xsum1, ysum1);
+		    const int s = node->s;
+		    const int count = node->e - s;
+		    
+		    force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + ty * h, xsum0, ysum0);
+		    force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + (ty + 4) * h, xsum1, ysum1);
 		}
 		else
 		{
