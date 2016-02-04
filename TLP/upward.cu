@@ -276,7 +276,7 @@ namespace Tree
 		{
 		    const int childid = parent->state.childbase + tid;
 		    const Node * chd = bufnodes + childid;
-
+			
 		    upward_e2e(chd->xcom - xcom_parent, chd->ycom - ycom_parent, chd->mass,
 			       bufexpansion + ORDER * (2 * childid + 0),
 			       bufexpansion + ORDER * (2 * childid + 1),
@@ -1024,6 +1024,7 @@ namespace TreeCheck
 	    if (fabs(a[i]) > 3e-13 || fabs(b[i]) > 3e-13)
 	    {
 		if (verbose) printf("element %d:\n", i);
+
 		int l = check_bits(a[i], b[i]);
 		const double x = a[i];
 		const double y = b[i];
@@ -1056,6 +1057,7 @@ namespace TreeCheck
 
 	if (b.w) assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 	if (b.w) assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
+
 	assert(check_bits(a.r, b.r) >= 32 );
 
 	{
