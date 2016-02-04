@@ -169,6 +169,12 @@ namespace Tree
 		   bufexpansion + ORDER * (2 * nodeid + 0),
 		   bufexpansion + ORDER * (2 * nodeid + 1));
 
+#ifndef NDEBUG
+	if (master)
+	    for(int i = 0; i < 2 * ORDER; ++i)
+		assert(!isnan(bufexpansion[ORDER * (2 * nodeid + 0) + i]));
+#endif
+
 	realtype r2 = 0;
 	for(int i = s + tid; i < e; i += WARPSIZE)
 	{
@@ -271,10 +277,6 @@ namespace Tree
 		    const int childid = parent->state.childbase + tid;
 		    const Node * chd = bufnodes + childid;
 
-		    const double rrrx = chd->xcom - xcom_parent;
-		    const double rrry = chd->ycom - ycom_parent;
-		    const double rrr2 = rrrx * rrrx + rrry * rrry;
- 
 		    upward_e2e(chd->xcom - xcom_parent, chd->ycom - ycom_parent, chd->mass,
 			       bufexpansion + ORDER * (2 * childid + 0),
 			       bufexpansion + ORDER * (2 * childid + 1),
@@ -839,8 +841,6 @@ namespace TreeCheck
 		    rinvz[0] = x0 / r2z0;
 		    iinvz[0] = - y0 / r2z0;
 
-		    //if (x == 1 && y == 8 && l == 4)
-		    //printf("PRESO! %e %e\n", rinvz[0], iinvz[0]);
 		    for(int j = 1; j < ORDER; ++j)
 		    {
 			rinvz[j] = rinvz[j - 1] * rinvz[0] - iinvz[j - 1] * iinvz[0];
@@ -944,9 +944,6 @@ namespace TreeCheck
 		node->wx += chd->wx;
 		node->wy += chd->wy;
 
-		if (x == 1 && y == 8 && l == 4)
-		    printf("PRESO! child : %d s e %d %d\n", c, chd->s, chd->e);
-
 		node->children[c] = chd;
 	    }
 
@@ -978,7 +975,7 @@ namespace TreeCheck
 	assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
 
-    bool verbose = true;
+    bool verbose = false;
 
     int check_bits(double x, double y)
     {
@@ -1004,7 +1001,9 @@ namespace TreeCheck
 	    {
 		if (((c1 >> b) & 1) != ((c2 >> b) & 1))
 		{
-		    if (verbose) printf("numbers differ from the %d most-significant bit\n", currbit);
+		    if (verbose) 
+			printf("numbers differ from the %d most-significant bit\n", currbit);
+
 		    return currbit;
 		}
 	    }
@@ -1015,24 +1014,30 @@ namespace TreeCheck
 
     int check_bits(const double *a , const double *b, const int n)
     {
-	if (verbose) printf("******************************* (%d elements)\n", n);
+	if (verbose) 
+	    printf("******************************* (%d elements)\n", n);
+
 	int r = 64;
 
 	for(int i = 0; i < n; ++i)
 	{
-	    if (fabs(a[i]) > 5.14e-15 || fabs(b[i]) > 5.14e-15)
+	    if (fabs(a[i]) > 3e-13 || fabs(b[i]) > 3e-13)
 	    {
 		if (verbose) printf("element %d:\n", i);
 		int l = check_bits(a[i], b[i]);
 		const double x = a[i];
 		const double y = b[i];
 		if (l < 48 )
-		    if (verbose) printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
+		    if (verbose) 
+			printf("strange case of %+.20e vs %+.20e relerr %e\n", x, y, (x - y) / y);
+
 		r= min(r, l );
 	    }
 	}
 
-	if (verbose) printf("********** end ***************\n");
+	if (verbose) 
+	    printf("********** end ***************\n");
+
 	return r;
     }
 
@@ -1047,18 +1052,19 @@ namespace TreeCheck
 	assert(a.s == b.s);
 	assert(a.e == b.e);
 	
-	//assert(check_bits(a.mass, b.mass) >= 40);
+	assert(check_bits(a.mass, b.mass) >= 40 || fabs(b.mass) < 1e-10 && check_bits(a.mass, b.mass) >= 20);
+
 	if (b.w) assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 	if (b.w) assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
 	assert(check_bits(a.r, b.r) >= 32 );
 
 	{
-	    /*    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
+	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);
 	    const realtype * resiexp = allexp + EXPORD * (2 * nodeid + 1);
 	    const realtype * refrexp = b.rexpansions;
 	    const realtype * refiexp = b.iexpansions;
 	    assert(24 <= check_bits(resrexp, refrexp, EXPORD) );
-	    assert(24 <= check_bits(resiexp, refiexp, EXPORD) );*/
+	    assert(24 <= check_bits(resiexp, refiexp, EXPORD) );
 	}
 
 	if (!b.leaf)

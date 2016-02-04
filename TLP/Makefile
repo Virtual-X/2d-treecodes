@@ -17,7 +17,7 @@ mrag-blocksize ?= 32
 #profiling = 1
 
 TLPFLAGS = -I../ILP+DLP/ -std=c++11 -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15 -O3
-NVCCFLAGS := $(TLPFLAGS) -arch=compute_35 -code=sm_35 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -Xcompiler -O4  -Xcompiler  -fassociative-math  -Xcompiler  -ffast-math
+NVCCFLAGS := $(TLPFLAGS) -arch=compute_35 -code=sm_35 -Xcompiler -fopenmp -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden' -Xcompiler -O4  -Xcompiler  -mfpmath=sse
 TLPFLAGS += -march=native -fopenmp -fvisibility=hidden  
 
 ifeq "$(config)" "release"
