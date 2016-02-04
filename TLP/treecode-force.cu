@@ -23,51 +23,102 @@
 
 namespace EvaluateForce
 {
-     struct SharedBuffers
+    enum { ntiles1d = BLOCKSIZE / 8 };
+
+    struct SharedBuffers
     {
 	realtype scratch[64];
-	int buffered_e2ps[8];
 	int stack[LMAX * 3];
     };
-
+    
 #ifndef NDEBUG
     __constant__ int nnodes;
 #endif
     __constant__ Tree::Node * nodes;
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
-    /*__global__ void  __launch_bounds__(128, 16)
-    evaluate(const realtype * const xts, const realtype * const yts, const realtype thetasquared, 
-	     realtype * const xforce, realtype * const yforce, const int ndst)
+    __device__ void e2p(const realtype mass,
+			const realtype * rxp, const realtype * ixp, 
+			const realtype rz, const realtype iz, realtype& xforce, realtype& yforce)
     {
+	const realtype r2 = rz * rz + iz * iz;
+
+	const realtype rinvz_1 = rz / r2;
+	const realtype iinvz_1 = -iz / r2;
+	
+	realtype rsum = mass * rinvz_1, isum = mass * iinvz_1;
+	realtype rprod = rinvz_1, iprod = iinvz_1;
+
+	for(int j = 0; j < ORDER; ++j)
+	{
+	    const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
+	    const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
+	    
+		rprod = rtmp;
+		iprod = itmp;	
+		
+		rsum -= (j + 1) * (rxp[j] * rprod - ixp[j] * iprod);
+		isum -= (j + 1) * (rxp[j] * iprod + ixp[j] * rprod);
+	}
+	    
+	xforce += rsum;
+	yforce += -isum;
+    }
+
+    __device__ void p2p(const int s, const int e, const realtype xt, const realtype yt, realtype& xforce, realtype& yforce)
+    {		    
+	const double eps = 10 * __DBL_EPSILON__;
+
+	realtype xsum = 0, ysum = 0;
+	for(int i = s; i < e; ++i)
+	{
+	    const realtype xr = xt - xdata[i];
+	    const realtype yr = yt - ydata[i];
+	    const realtype factor =  vdata[i] / (xr * xr + yr * yr + eps);
+	    
+	    xsum += xr * factor;
+	    ysum += yr * factor;
+	}
+	
+	xforce += xsum;
+	yforce += ysum;
+    }
+    
+    __global__ void  __launch_bounds__(128, 16)
+    evaluate(const realtype thetasquared,
+	     const realtype * const x0s,
+	     const realtype * const y0s,
+	     const realtype * const hs,
+	     realtype * const xforce, realtype * const yforce)
+    {
+
 	assert(blockDim.x == 32);
 	
 	const int tid = threadIdx.x;
 	const bool master = tid == 0;
 	
-	const int gid = threadIdx.y + blockDim.y * blockIdx.x;
+	const int blockid = blockIdx.y; 
+	const int tileid = threadIdx.y + 4 * blockIdx.x;
+	const int ix0 = 8 * (tileid % ntiles1d);
+	const int iy0 = 8 * (tileid / ntiles1d);
+	const int tx = tid % 8;
+	const int ty = tid / 8;
+	assert(ix0 + tx < BLOCKSIZE && iy0 + ty < BLOCKSIZE);
 
-	if (gid >= ndst)
-	    return;
-	
-	const realtype xt = xts[gid];
-	const realtype yt = yts[gid];
+	const realtype h = hs[blockid];
+	const realtype x0 = x0s[blockid] + h * ix0;
+	const realtype y0 = y0s[blockid] + h * iy0;
 
 	extern __shared__ SharedBuffers ary[];
 
-	realtype * scratch = ary[threadIdx.y].scratch;
-
-	int * stack = ary[threadIdx.y].stack;
-	int * buffered_e2ps = ary[threadIdx.y].buffered_e2ps;
-	int counter_e2ps = 0;
-	
+	int * stack = ary[threadIdx.y].stack;	
 	int stackentry = 0, maxentry = 0;
 
 	if (master)
 	    stack[0] = 0;
 	
-	realtype result = 0;
-
+	realtype xsum0 = 0, xsum1 = 0, ysum0 = 0, ysum1 = 0;
+	
 	while(stackentry > -1)
 	{
 	    const int nodeid = stack[stackentry--];
@@ -82,38 +133,29 @@ namespace EvaluateForce
 	    const realtype xcom = ACCESS(node->xcom);
 	    const realtype ycom = ACCESS(node->ycom);
 	    const realtype r = ACCESS(node->r);
+
+	    const double xt = max(x0, min(x0 + 8 * h, xcom));
+	    const double yt = max(y0, min(y0 + 8 * h, ycom));
+
 	    const realtype rx = xt - xcom;
 	    const realtype ry = yt - ycom;
 	    const realtype r2 = rx * rx + ry * ry;
 
 	    if (r * r < thetasquared * r2)
  	    {
-		if (master)
-		    buffered_e2ps[counter_e2ps] = nodeid;
+		const realtype mass = ACCESS(node->mass);
+		const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
+		const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
 
-		counter_e2ps++;
-
-		if (counter_e2ps == 8)
-		{
-		    counter_e2ps = 0;
-
-		    const int mynodeid = buffered_e2ps[tid / 4];
-		    assert(mynodeid < nnodes);
-	    
-		    const Tree::Node * mynode = nodes + mynodeid;
-
-		    result += force_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
-					expansions + ORDER * (0 + 2 * mynodeid), 
-					expansions + ORDER * (1 + 2 * mynodeid), scratch);
-		}
+		e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + ty * h - ycom, xsum0, ysum0);
+		e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + (ty + 4) * h - ycom, xsum1, ysum1);
 	    }
 	    else 
 	    {
 		if (!node->state.innernode)
 		{
-		    const int s = node->s;
-
-		    result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
+		    p2p(node->s, node->e,  x0 + tx * h, y0 + ty * h, xsum0, ysum0);
+		    p2p(node->s, node->e,  x0 + tx * h, y0 + (ty + 4) * h, xsum1, ysum1);
 		}
 		else
 		{
@@ -133,29 +175,14 @@ namespace EvaluateForce
 	    }
 	}
 
-  	if (tid / 4 < counter_e2ps)
-	{
-	    const int mynodeid = buffered_e2ps[tid / 4];
-	    assert(mynodeid < nnodes);
-	    
-	    const Tree::Node * mynode = nodes + mynodeid;
+	const int entry = (ix0 + tx) + BLOCKSIZE * (iy0 + ty) + BLOCKSIZE * BLOCKSIZE * blockid;
+	assert(entry + 4 * BLOCKSIZE < gridDim.y * BLOCKSIZE * BLOCKSIZE);
 
-	    result += force_e2p(ACCESS(mynode->mass), xt - ACCESS(mynode->xcom), yt - ACCESS(mynode->ycom), 
-				expansions + ORDER * (0 + 2 * mynodeid), 
-				expansions + ORDER * (1 + 2 * mynodeid), scratch);
-	}
-
-	result += __shfl_xor(result, 16 );
-	result += __shfl_xor(result, 8 );
-	result += __shfl_xor(result, 4 );
-	result += __shfl_xor(result, 2 );
-	result += __shfl_xor(result, 1 );
-
-	if (master)
-	    results[gid] = result;
-	    }*/
-
-
+	xforce[entry] = xsum0;
+	yforce[entry] = ysum0;
+	xforce[entry + 4 * BLOCKSIZE] = xsum1;
+	yforce[entry + 4 * BLOCKSIZE] = ysum1;
+    }
 }
 
 void reference_evaluate(realtype * const xforce, realtype * const yforce, 
@@ -195,8 +222,8 @@ void treecode_force_mrag_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyAsync(device_hs, hs, sizeof(realtype) * nblocks, cudaMemcpyHostToDevice));
     
     Tree::build(xsrc, ysrc, vsrc, nsrc, 512);
-    //CUDA_CHECK(cudaDeviceSynchronize());
-#if 0
+ 
+#if 1
     CUDA_CHECK(cudaMemcpyToSymbolAsync(xdata, &Tree::device_xdata, sizeof(Tree::device_xdata)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(ydata, &Tree::device_ydata, sizeof(Tree::device_ydata)));
     CUDA_CHECK(cudaMemcpyToSymbolAsync(vdata, &Tree::device_vdata, sizeof(Tree::device_vdata)));
@@ -208,13 +235,20 @@ void treecode_force_mrag_solve(const realtype theta,
     CUDA_CHECK(cudaMemcpyToSymbolAsync(expansions, &Tree::device_expansions, sizeof(Tree::device_expansions)));
 
     const int yblocksize = 4;
-    evaluate<<<(ndst + yblocksize - 1) / yblocksize, dim3(32, yblocksize),
-	sizeof(SharedBuffers) * yblocksize>>>(device_xdst, device_ydst, thetasquared, device_xforce, device_yforce, ndst);
+    const int xgridsize = (ntiles1d * ntiles1d) / yblocksize;
+    assert((ntiles1d * ntiles1d) % yblocksize == 0);
+
+    CUDA_CHECK(cudaMemset(device_xforce, 0xff, sizeof(realtype) * ndst));
+    CUDA_CHECK(cudaMemset(device_yforce, 0xff, sizeof(realtype) * ndst));
+
+    evaluate<<<dim3(xgridsize, nblocks), dim3(32, yblocksize), sizeof(SharedBuffers) * yblocksize>>>(
+	thetasquared, device_x0s, device_y0s, device_hs, device_xforce, device_yforce);
+
     CUDA_CHECK(cudaPeekAtLastError());
-         
-    CUDA_CHECK(cudaMemcpyAsync(xdst, device_xforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpyAsync(ydst, device_yforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
-#else
+  
+    CUDA_CHECK(cudaMemcpyAsync(xforce, device_xforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(yforce, device_yforce, sizeof(realtype) * ndst, cudaMemcpyDeviceToHost));
+ #else
     for(int c = 0, b = 0; b < nblocks; ++b)
 	for(int iy = 0; iy < BLOCKSIZE; ++iy)
 	    for(int ix = 0; ix < BLOCKSIZE; ++ix, ++c)

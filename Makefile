@@ -11,7 +11,7 @@
 #
 
 potential-order=12
-force-order=12
+force-order=24
 mrag-blocksize=32
 
 TESTOPT = real=double mrag-blocksize=32

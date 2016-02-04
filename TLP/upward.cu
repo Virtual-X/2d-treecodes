@@ -585,9 +585,9 @@ void Tree::build(const realtype * const xsrc,
     setup<<<1, 1>>>(nsrc);
 
 #ifndef NDEBUG
-    const int ysize = 16 ;/// (ORDER / 12);
+    const int ysize = 16 / (ORDER / 12);
 #else
-    const int ysize = 31 ;/// (ORDER / 12);
+    const int ysize = 31 / (ORDER / 12);
 #endif
     build_tree<<<nsmxs * 2, dim3(32, ysize), sizeof(realtype) * 4 * 4 * ORDER * ysize>>>(LEAF_MAXCOUNT, extent);
  CUDA_CHECK(cudaPeekAtLastError());
@@ -958,7 +958,7 @@ namespace TreeCheck
 	assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
 
-    bool verbose = true;
+    bool verbose = false;
 
     int check_bits(double x, double y)
     {
@@ -1002,7 +1002,7 @@ namespace TreeCheck
 	{
 	    if (fabs(a[i]) > 5.14e-15 || fabs(b[i]) > 5.14e-15)
 	    {
-		printf("element %d:\n", i);
+		if (verbose) printf("element %d:\n", i);
 		int l = check_bits(a[i], b[i]);
 		const double x = a[i];
 		const double y = b[i];
