@@ -90,7 +90,7 @@ __device__ void upward_p2e(const realtype xcom,
 	}
 }
 
-
+#define TOLDENOM 3e-26
 
 __device__ void upward_e2e(
 	const realtype x0,
@@ -112,16 +112,17 @@ __device__ void upward_e2e(
 	
 	realtype r2z0 = x0 * x0 + y0 * y0;
 
-	if (r2z0 == 0)
+	if (fabs(r2z0) < TOLDENOM)
 	   r2z0 = 1;
 
 	ARY(rinvz, 1) = x0 / r2z0;
 	ARY(iinvz, 1) = - y0 / r2z0;
-	dnl
+
 	LUNROLL(j, 1, eval(ORDER),`
 	ifelse(j, 1, , `
 	ARY(rinvz, j) = ARY(rinvz, eval(j - 1)) * ARY(rinvz, 1) - ARY(iinvz, eval(j - 1)) * ARY(iinvz, 1);
 	ARY(iinvz, j) = ARY(rinvz, eval(j - 1)) * ARY(iinvz, 1) + ARY(iinvz, eval(j - 1)) * ARY(rinvz, 1);')
+
 	ARY(rcoeff, j) = rsrcxp[eval(j - 1)] * ARY(rinvz, j) - isrcxp[eval(j - 1)] * ARY(iinvz, j);
 	ARY(icoeff, j) = rsrcxp[eval(j - 1)] * ARY(iinvz, j) + isrcxp[eval(j - 1)] * ARY(rinvz, j);
 	')
@@ -138,7 +139,8 @@ __device__ void upward_e2e(
 		popdef(`BINFAC')dnl
 
 		const realtype TMP(invz2, l) = ARY(rinvz, l) * ARY(rinvz, l) + ARY(iinvz, l) * ARY(iinvz, l);
-		const realtype TMP(invinvz2, l) = TMP(invz2, l) ? 1 / TMP(invz2, l) : 0;
+		const realtype TMP(invinvz2, l) = fabs(TMP(invz2, l)) > TOLDENOM ? 1 / TMP(invz2, l) : 0;
+
 		const realtype TMP(rz, l) = ARY(rinvz, l) * TMP(invinvz2, l);
 		const realtype TMP(iz, l) = - ARY(iinvz, l) * TMP(invinvz2, l);
 
@@ -152,6 +154,9 @@ __device__ void upward_e2e(
 		//realtype tmp0, tmp1;
 		if (tid == 0)
 		{
+			assert(!isnan(rpartial));
+			assert(!isnan(ipartial));
+
 			rdstxp[eval(l - 1)] = rpartial;
 			idstxp[eval(l - 1)] = ipartial;
 		}

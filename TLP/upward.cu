@@ -164,6 +164,9 @@ namespace Tree
 	const realtype xcom = wsum ? wxsum / wsum : 0;
 	const realtype ycom = wsum ? wysum / wsum : 0;
 
+	if (master && helper->x == 42 && helper->y == 15 && helper->l == 7)
+	    printf("DEVICE w: %.20e: wy: %.20e\n", wsum, wysum);
+
 	upward_p2e(xcom, ycom,
 		   xsorted + s, ysorted + s, vsorted + s, e - s,
 		   bufexpansion + ORDER * (2 * nodeid + 0),
@@ -225,14 +228,13 @@ namespace Tree
 		{
 		    const int childbase = parent->state.childbase;
 		    realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-
+		    
 		    for(int c = 0; c < 4; ++c)
 		    {
 			const int childid = childbase + c;
-
 			const Node * child = bufnodes + childid;
-			msum += child->mass;
-
+			msum += child->mass;		
+					
 			const NodeHelper * childhelper = bufhelpers + childid;
 			wsum += childhelper->w;
 			wxsum += childhelper->wx;
@@ -666,6 +668,7 @@ void Tree::dispose()
 #include <algorithm>
 #include <limits>
 #include <utility>
+#define TOLDENOM 3e-26
 
 namespace TreeCheck
 {   
@@ -835,7 +838,7 @@ namespace TreeCheck
 
 		    realtype rinvz[ORDER], iinvz[ORDER];
 
-		    if (r2z0 == 0)
+		    if (fabs(r2z0) <= TOLDENOM)
 			continue;
 
 		    rinvz[0] = x0 / r2z0;
@@ -868,7 +871,7 @@ namespace TreeCheck
 			}
 		
 			const realtype invz2 = rinvz[l] * rinvz[l] + iinvz[l] * iinvz[l];
-			const realtype invinvz2 = invz2 ? 1 / invz2 : 0;
+			const realtype invinvz2 = fabs(invz2) > TOLDENOM ? 1 / invz2 : 0;
 			const realtype rz = rinvz[l] * invinvz2;
 			const realtype iz = - iinvz[l] * invinvz2;
 
@@ -975,7 +978,7 @@ namespace TreeCheck
 	assert(node->xcom() >= x0 && node->xcom() < x0 + h && node->ycom() >= y0 && node->ycom() < y0 + h || node->e - node->s == 0);
     }
 
-    bool verbose = false;
+    bool verbose = true;
 
     int check_bits(double x, double y)
     {
@@ -1055,10 +1058,13 @@ namespace TreeCheck
 	
 	assert(check_bits(a.mass, b.mass) >= 40 || fabs(b.mass) < 1e-10 && check_bits(a.mass, b.mass) >= 20);
 
-	if (b.w) assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
-	if (b.w) assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
+	if (fabs(b.w) >= 1e-16) 
+	    assert(check_bits(a.xcom, b.wx / b.w) >= 32 || b.w == 0);
 
-	assert(check_bits(a.r, b.r) >= 32 );
+	if (fabs(b.w) >= 1e-16) 
+	    assert(check_bits(a.ycom, b.wy / b.w) >= 32 || b.w == 0);	
+
+	assert(check_bits(a.r, b.r) >= 24 );
 
 	{
 	    const realtype * resrexp = allexp + EXPORD * (2 * nodeid + 0);

@@ -17,6 +17,7 @@
 
 #include "cuda-common.h"
 #include "force-kernels.h"
+#include "force-downward-kernels.h"
 #include "upward.h"
 
 #define ACCESS(x) __ldg(&(x)) 
@@ -27,8 +28,9 @@ namespace EvaluateForce
 
     struct SharedBuffers
     {
-	realtype scratch[64];
 	int stack[LMAX * 3];
+	int e2lbuffer[32];
+	realtype localxp[2 * (ORDER + 1)];
     };
     
 #ifndef NDEBUG
@@ -38,7 +40,8 @@ namespace EvaluateForce
     __constant__ realtype * expansions, *xdata, *ydata, *vdata;
 
     __global__ void  __launch_bounds__(128, 16)
-    evaluate(const realtype thetasquared,
+    evaluate(const realtype theta,
+	     const realtype thetasquared,
 	     const realtype * const x0s,
 	     const realtype * const y0s,
 	     const realtype * const hs,
@@ -61,11 +64,22 @@ namespace EvaluateForce
 	const realtype h = hs[blockid];
 	const realtype x0 = x0s[blockid] + h * ix0;
 	const realtype y0 = y0s[blockid] + h * iy0;
+	const realtype rbrick = 1.4142135623730951 * h * (8 - 1) * 0.5;
+	const realtype xbrick = x0 + 3.5 * h;
+	const realtype ybrick = y0 + 3.5 * h;
 
 	extern __shared__ SharedBuffers ary[];
 
-	int * stack = ary[threadIdx.y].stack;	
+	int * const stack = ary[threadIdx.y].stack;	
 	int stackentry = 0, maxentry = 0;
+
+	int * const e2lbuf = ary[threadIdx.y].e2lbuffer;
+	int e2lcount = 0;
+
+	realtype * const lxp = ary[threadIdx.y].localxp;
+
+	for(int i = tid; i < 2 * (ORDER + 1); i += 32)
+	    lxp[i] = 0;
 
 	if (master)
 	    stack[0] = 0;
@@ -86,50 +100,97 @@ namespace EvaluateForce
 	    const realtype xcom = ACCESS(node->xcom);
 	    const realtype ycom = ACCESS(node->ycom);
 	    const realtype r = ACCESS(node->r);
+	    
+	    const realtype distance = sqrt(powf(xbrick - xcom, 2) + powf(ybrick - ycom, 2));
+	    const bool localexpansion_converges = (distance / r - 1) > (1 / theta) && rbrick <= node->r;
 
-	    const double xt = max(x0, min(x0 + 8 * h, xcom));
-	    const double yt = max(y0, min(y0 + 8 * h, ycom));
-
-	    const realtype rx = xt - xcom;
-	    const realtype ry = yt - ycom;
-	    const realtype r2 = rx * rx + ry * ry;
-
-	    if (r * r < thetasquared * r2)
- 	    {
-		const realtype mass = ACCESS(node->mass);
-		const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
-		const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
-
-		force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + ty * h - ycom, xsum0, ysum0);
-		force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + (ty + 4) * h - ycom, xsum1, ysum1);
-	    }
-	    else 
+	    if (localexpansion_converges)
 	    {
-		if (!node->state.innernode)
-		{
-		    const int s = node->s;
-		    const int count = node->e - s;
-		    
-		    force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + ty * h, xsum0, ysum0);
-		    force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + (ty + 4) * h, xsum1, ysum1);
-		}
-		else
-		{
-		    if (master)   
-		    {
-			const int childbase = ACCESS(node->state.childbase);
+		if (master)
+		    e2lbuf[e2lcount] = nodeid;
 
-			for(int c = 0; c < 4; ++c) 
-			    stack[++stackentry] = childbase + c;
+		if (++e2lcount == 32)
+		{
+		    e2lcount = 0;
+
+		    const int mynodeid = e2lbuf[tid];
+		    const Tree::Node * mynode = nodes + mynodeid;
+		    const realtype myxcom = mynode->xcom;
+		    const realtype myycom = mynode->ycom;
+		    const realtype mymass = mynode->mass;
+
+		    const realtype * rxp = expansions + ORDER * (0 + 2 * mynodeid);
+                    const realtype * ixp = expansions + ORDER * (1 + 2 * mynodeid);
+
+		    force_downward_e2l(myxcom - xbrick, myycom - ybrick, mymass, 
+				       rxp, ixp, lxp, lxp + ORDER + 1);
+		}
+	    }
+	    else
+	    {
+		const double xt = max(x0, min(x0 + 7 * h, xcom));
+		const double yt = max(y0, min(y0 + 7 * h, ycom));
+		
+		const realtype rx = xt - xcom;
+		const realtype ry = yt - ycom;
+		const realtype r2 = rx * rx + ry * ry;
+	    
+		if (r * r < thetasquared * r2)
+		{
+		    const realtype mass = ACCESS(node->mass);
+		    const realtype * rxp = expansions + ORDER * (0 + 2 * nodeid);
+		    const realtype * ixp = expansions + ORDER * (1 + 2 * nodeid);
+		    
+		    force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + ty * h - ycom, xsum0, ysum0);
+		    force_e2p(mass, rxp, ixp, x0 + tx * h - xcom, y0 + (ty + 4) * h - ycom, xsum1, ysum1);
+		}
+		else 
+		{
+		    if (!node->state.innernode)
+		    {
+			const int s = node->s;
+			const int count = node->e - s;
+			
+			force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + ty * h, xsum0, ysum0);
+			force_p2p(xdata + s, ydata + s, vdata + s, count, x0 + tx * h, y0 + (ty + 4) * h, xsum1, ysum1);
 		    }
 		    else
-			stackentry += 4;
+		    {
+			if (master)   
+			{
+			    const int childbase = ACCESS(node->state.childbase);
 			    
-		    maxentry = max(maxentry, stackentry);
-		    assert(maxentry < LMAX * 3);
+			    for(int c = 0; c < 4; ++c) 
+				stack[++stackentry] = childbase + c;
+			}
+			else
+			    stackentry += 4;
+			
+			maxentry = max(maxentry, stackentry);
+			assert(maxentry < LMAX * 3);
+		    }
 		}
 	    }
 	}
+
+	if (tid < e2lcount)
+	{
+	    const int mynodeid = e2lbuf[tid];
+	    const Tree::Node * mynode = nodes + mynodeid;
+
+	    const realtype myxcom = mynode->xcom;
+	    const realtype myycom = mynode->ycom;
+	    const realtype mymass = mynode->mass;
+	    
+	    const realtype * rxp = expansions + ORDER * (0 + 2 * mynodeid);
+	    const realtype * ixp = expansions + ORDER * (1 + 2 * mynodeid);
+	    
+	    force_downward_e2l(myxcom - xbrick, myycom - ybrick, mymass,
+			       rxp, ixp, lxp, lxp + ORDER + 1);
+	}
+
+	force_downward_l2p(x0 + tx * h, y0 + ty * h, lxp, lxp + ORDER + 1, xsum0, ysum0);
+	force_downward_l2p(x0 + tx * h, y0 + (ty + 4) * h, lxp, lxp + ORDER + 1, xsum1, ysum1);
 
 	const int entry = (ix0 + tx) + BLOCKSIZE * (iy0 + ty) + BLOCKSIZE * BLOCKSIZE * blockid;
 	assert(entry + 4 * BLOCKSIZE < gridDim.y * BLOCKSIZE * BLOCKSIZE);
@@ -198,7 +259,7 @@ void treecode_force_mrag_solve(const realtype theta,
     CUDA_CHECK(cudaMemset(device_yforce, 0xff, sizeof(realtype) * ndst));
 
     evaluate<<<dim3(xgridsize, nblocks), dim3(32, yblocksize), sizeof(SharedBuffers) * yblocksize>>>(
-	thetasquared, device_x0s, device_y0s, device_hs, device_xforce, device_yforce);
+	theta, thetasquared, device_x0s, device_y0s, device_hs, device_xforce, device_yforce);
 
     CUDA_CHECK(cudaPeekAtLastError());
   
@@ -224,6 +285,8 @@ void treecode_force_mrag_solve(const realtype theta,
     CUDA_CHECK(cudaFree(device_xforce));
     CUDA_CHECK(cudaFree(device_yforce));
 }
+
+#ifndef NDEBUG
 
 void reference_evaluate(realtype * const xforce, realtype * const yforce, 
 			const realtype xt, const realtype yt, realtype thetasquared)
@@ -307,3 +370,4 @@ void reference_evaluate(realtype * const xforce, realtype * const yforce,
 	    }
     }
 }
+#endif

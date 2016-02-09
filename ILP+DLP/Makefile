@@ -22,7 +22,7 @@ ifneq "$(MAKECMDGOALS)" "force"
 	OBJS += order$(order)-potential-kernels.cuda.o
 else
 	OBJS += order$(order)-force-kernels.cuda.o \
-		order$(order)-downward-kernels.o 
+		order$(order)-force-downward-kernels.cuda.o
 endif
 
 potential force: $(OBJS)
