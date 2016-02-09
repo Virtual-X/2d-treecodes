@@ -27,9 +27,16 @@ namespace EvaluatePotential
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
+
     void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & root)
     {
-	const NodePotential * stack[15 * 4 * 2];
+	enum { BUFSIZE = 16 };
+	
+	const NodePotential * stack[15 * 3 * 2];
+
+	int bufcount = 0;
+	realtype rzs[BUFSIZE], izs[BUFSIZE], masses[BUFSIZE];
+	const realtype * rxps[BUFSIZE], *ixps[BUFSIZE];
 
 	int stackentry = 0, maxentry = 0;
 
@@ -44,7 +51,21 @@ namespace EvaluatePotential
 	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
 
 	    if (node->r * node->r < thetasquared * r2)
-		*result += potential_e2p(node->mass, xt - node->xcom(), yt - node->ycom(), node->rexpansions, node->iexpansions);
+	    {
+		rzs[bufcount] = xt - node->xcom();
+		izs[bufcount] = yt - node->ycom();
+		masses[bufcount] = node->mass;
+		rxps[bufcount] = node->rexpansions;
+		ixps[bufcount] = node->iexpansions;
+		++bufcount;
+		
+		if (bufcount == BUFSIZE)
+		{
+		    bufcount = 0;
+		 
+		    ;//*result += potential_e2p(rzs, izs, masses, rxps, ixps, BUFSIZE);
+		}
+	    }
 	    else
 	    {
 		if (node->leaf)
@@ -62,6 +83,9 @@ namespace EvaluatePotential
 		}
 	    }
 	}
+
+	if (bufcount)
+	    ;//*result += potential_e2p(rzs, izs, masses, rxps, ixps, bufcount);
     }
 }
 

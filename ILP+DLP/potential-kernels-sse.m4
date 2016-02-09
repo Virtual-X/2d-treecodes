@@ -28,7 +28,7 @@ inline __m128d _mm_log_pd(const __m128d x)
 {
   double tmp[2];
   _mm_storeu_pd(tmp, x);
-  return _mm_set_pd(log(tmp[1]), log(tmp[0]));
+  return _mm_set_pd(log((float)tmp[1]), log((float)tmp[0]));
 }
 #endif
 
@@ -38,7 +38,7 @@ inline __m128d _mm_log_pd(const __m128d x)
 #ifdef __cplusplus
 extern "C"
 #endif
-realtype potential_p2p(const realtype * __restrict__ const _xsrc,
+realtype reference_potential_p2p(const realtype * __restrict__ const _xsrc,
   const realtype * __restrict__ const _ysrc,
   const realtype * __restrict__ const _vsrc,
   const int nsources,
@@ -86,7 +86,7 @@ realtype potential_p2p(const realtype * __restrict__ const _xsrc,
 #ifdef __cplusplus
 extern "C"
 #endif
-realtype potential_e2p(const realtype mass,
+realtype reference_potential_e2p(const realtype mass,
   const realtype rz,
   const realtype iz,
   const realtype * __restrict__ const rxp,

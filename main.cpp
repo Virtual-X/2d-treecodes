@@ -326,9 +326,9 @@ int main(int argc, char ** argv)
 
 	    fseek(fin, 0, SEEK_SET);
 
-	     if (!mragfile && (testt & P_TEST))
-		test(theta, tol, fin, true, verify);
-fseek(fin, 0, SEEK_SET);
+	    //    if (!mragfile && (testt & P_TEST))
+	    //	test(theta, tol, fin, true, verify);
+//fseek(fin, 0, SEEK_SET);
 	    if (testt & V_TEST)
 		test(theta, tol * 100, fin, false, verify, mragfile);
 	    fclose(fin);
@@ -338,7 +338,7 @@ fseek(fin, 0, SEEK_SET);
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
 
-    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+    /* file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
     file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
@@ -346,7 +346,7 @@ fseek(fin, 0, SEEK_SET);
     file2test("testSid/diegoSolverCylUniform", true, V_TEST);
     file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
     file2test("testSid/diegoVelTestsDec10", true, V_TEST);
-    file2test("testSid/diegoVelTestsDec14", true, V_TEST);
+    file2test("testSid/diegoVelTestsDec14", true, V_TEST);*/
 
 #if 0
     for(int itest = 0; itest < 10; ++itest)

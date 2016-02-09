@@ -22,7 +22,8 @@ UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 REFERENCE_UPWARDKERNELS_POTENTIAL = reference-upward-kernels-order$(treecode-potential-order)
 REFERENCE_UPWARDKERNELS_FORCE=reference-upward-kernels-order$(treecode-force-order)
 
-OBJS =  potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o $(UPWARDKERNELS_POTENTIAL).o  $(REFERENCE_UPWARDKERNELS_POTENTIAL).o
+OBJS =  potential-kernels.o reference-potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o \
+	$(UPWARDKERNELS_POTENTIAL).o  $(REFERENCE_UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
 	OBJS += $(UPWARDKERNELS_FORCE).o $(REFERENCE_UPWARDKERNELS_FORCE).o
@@ -44,10 +45,14 @@ kernels: $(OBJS)
 	$(CC) $(KERNELSFLAGS) -c $^
 
 %.o: %.ispc
-	ispc  $^ -O2 --arch=x86-64 --target=avx2-i64x4 -o $@
+	ispc  $^ -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math  -o $@
+#	ispc  $^ -O2 --arch=x86-64 --target=avx2-i64x4 --emit-asm -o $@.s
 
-potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > potential-kernels.c
+potential-kernels.ispc: potential-kernels.m4 unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > $@
+
+reference-potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > $@
 
 force-kernels.c: force-kernels-sse.m4 force-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > force-kernels.c

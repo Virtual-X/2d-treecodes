@@ -23,11 +23,44 @@ extern "C"
 			   const realtype _xt,
 			   const realtype _yt);
 
-    realtype potential_e2p(const realtype mass,
+    realtype reference_potential_p2p(const realtype * __restrict__ const _xsrc,
+  const realtype * __restrict__ const _ysrc,
+  const realtype * __restrict__ const _vsrc,
+  const int nsources,
+  const realtype _xt,
+				     const realtype _yt);
+    
+ 
+     realtype potential_e2p(
+      const realtype * rzs,
+      const realtype * izs,
+      const realtype * masses,
+      const realtype * const * rxps,
+      const realtype * const * ixps,
+      const int ndst);
+
+      realtype reference_potential_e2p(const realtype mass,
 			   const realtype rx,
 			   const realtype ry,
 			   const realtype * __restrict__ const rxp,
 			   const realtype * __restrict__ const ixp);
+  realtype treference_potential_e2p(
+      const realtype * rzs,
+      const realtype * izs,
+      const realtype * masses,
+      const realtype * const * rxps,
+      const realtype * const * ixps,
+      const int ndst)
+  {
+      realtype s = 0;
+      for(int c = 0; c < ndst; ++c)
+	  s += reference_potential_e2p(masses[c], rzs[c], izs[c], rxps[c], ixps[c]);
+
+      return s;
+  }
+	
+  
+    
 #ifdef __cplusplus
 }
 #endif
