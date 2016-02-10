@@ -1,5 +1,5 @@
 /*
- *  treecode.cpp
+ *  TLP/treecode-force.cu
  *  Part of MRAG/2d-treecode-potential
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
@@ -47,7 +47,6 @@ namespace EvaluateForce
 	     const realtype * const hs,
 	     realtype * const xforce, realtype * const yforce)
     {
-
 	assert(blockDim.x == 32);
 	
 	const int tid = threadIdx.x;
@@ -101,8 +100,10 @@ namespace EvaluateForce
 	    const realtype ycom = ACCESS(node->ycom);
 	    const realtype r = ACCESS(node->r);
 	    
-	    const realtype distance = sqrt(powf(xbrick - xcom, 2) + powf(ybrick - ycom, 2));
-	    const bool localexpansion_converges = (distance / r - 1) > (1 / theta) && rbrick <= node->r;
+	    const realtype xdistance = xbrick - xcom;
+	    const realtype ydistance = ybrick - ycom;
+	    const realtype distance = sqrt(xdistance * xdistance + ydistance * ydistance);
+	    const bool localexpansion_converges = (distance / r - 1) > (1 / theta) && rbrick <= r;
 
 	    if (localexpansion_converges)
 	    {
@@ -115,9 +116,9 @@ namespace EvaluateForce
 
 		    const int mynodeid = e2lbuf[tid];
 		    const Tree::Node * mynode = nodes + mynodeid;
-		    const realtype myxcom = mynode->xcom;
-		    const realtype myycom = mynode->ycom;
-		    const realtype mymass = mynode->mass;
+		    const realtype myxcom = ACCESS(mynode->xcom);
+		    const realtype myycom = ACCESS(mynode->ycom);
+		    const realtype mymass = ACCESS(mynode->mass);
 
 		    const realtype * rxp = expansions + ORDER * (0 + 2 * mynodeid);
                     const realtype * ixp = expansions + ORDER * (1 + 2 * mynodeid);
@@ -189,8 +190,8 @@ namespace EvaluateForce
 			       rxp, ixp, lxp, lxp + ORDER + 1);
 	}
 
-	force_downward_l2p(x0 + tx * h, y0 + ty * h, lxp, lxp + ORDER + 1, xsum0, ysum0);
-	force_downward_l2p(x0 + tx * h, y0 + (ty + 4) * h, lxp, lxp + ORDER + 1, xsum1, ysum1);
+	force_downward_l2p(x0 + tx * h - xbrick, y0 + ty * h - ybrick, lxp, lxp + ORDER + 1, xsum0, ysum0);
+	force_downward_l2p(x0 + tx * h - xbrick, y0 + (ty + 4) * h - ybrick, lxp, lxp + ORDER + 1, xsum1, ysum1);
 
 	const int entry = (ix0 + tx) + BLOCKSIZE * (iy0 + ty) + BLOCKSIZE * BLOCKSIZE * blockid;
 	assert(entry + 4 * BLOCKSIZE < gridDim.y * BLOCKSIZE * BLOCKSIZE);

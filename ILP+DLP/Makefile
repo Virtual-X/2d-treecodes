@@ -21,8 +21,7 @@ OBJS =order$(order)-upward-kernels.cuda.o
 ifneq "$(MAKECMDGOALS)" "force"
 	OBJS += order$(order)-potential-kernels.cuda.o
 else
-	OBJS += order$(order)-force-kernels.cuda.o \
-		order$(order)-force-downward-kernels.cuda.o
+	OBJS += order$(order)-force-kernels.cuda.o 
 endif
 
 potential force: $(OBJS)
@@ -30,19 +29,13 @@ potential force: $(OBJS)
 %.cuda.o: %.cu Makefile
 	nvcc -Xcompiler '-fPIC' -Xcompiler '-fvisibility=hidden'  -maxrregcount=32  -O4 -arch=compute_35 -code=sm_35 -use_fast_math -dc -c $< -o $@
 
-#-lineinfo
-
-%.o: %.c Makefile
-	gcc -fPIC -fvisibility=hidden -std=c99 -O4 -DNDEBUG -ftree-vectorize \
-	 -march=native -mtune=native -fassociative-math -ffast-math -c $<
-
-order$(order)-%.c order$(order)-%.cu: %.m4 Makefile
+order$(order)-%.cu: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@
 
 clean:
 	rm -f *.o *kernels*.c *kernels*.cu
 
-.PRECIOUS: order$(order)-%.c order$(order)-%.cu order$(order)-%.o order$(order)-%.o
+.PRECIOUS: order$(order)-%.cu order$(order)-%.o
 
 .PHONY = clean potential force
 

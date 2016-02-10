@@ -343,8 +343,8 @@ int main(int argc, char ** argv)
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
     */
-    //file2test("testSid/diegoSolverCylUniform", true, V_TEST);
-    //file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
+    file2test("testSid/diegoSolverCylUniform", true, V_TEST);
+    file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
     file2test("testSid/diegoVelTestsDec10", true, V_TEST);
     file2test("testSid/diegoVelTestsDec14", true, V_TEST);
 
