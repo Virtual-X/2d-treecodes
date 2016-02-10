@@ -24,7 +24,7 @@
 #include <limits>
 #include <vector>
 
-//#include "treecode-potential.h"
+#include "treecode-potential.h"
 #include "treecode-force.h"
 
 double  tol = 1e-8;
@@ -188,7 +188,7 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
     printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
     const double tstart = omp_get_wtime();
     if (potential)
-	;//treecode_potential_async(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
+	treecode_potential_async(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
     else
 	if (mrag)
 	{
@@ -201,7 +201,8 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 
     printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
 
-    //treecode_potential_wait();
+    if (potential)
+	treecode_potential_wait();
 
 #if 0 //while waiting clarifications from Sid, i overwrite his reference data with mine
     if (!f)
@@ -334,15 +335,15 @@ int main(int argc, char ** argv)
 	    fclose(fin);
 	};
 
-    /* file2test("testDiego/diegoBinaryN400", false, P_TEST);
-     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
+    file2test("testDiego/diegoBinaryN400", false, P_TEST);
+    file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
-    */
-    /* file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+    
+    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
     file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
-    */
+    
     file2test("testSid/diegoSolverCylUniform", true, V_TEST);
     file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
     file2test("testSid/diegoVelTestsDec10", true, V_TEST);
@@ -356,6 +357,4 @@ int main(int argc, char ** argv)
 	test(theta, tol * 100, NULL, false, verify);
     }
 #endif
-
-    // treecode_potential_shutdown();
 }
