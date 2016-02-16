@@ -63,7 +63,7 @@ namespace EvaluatePotential
 		{
 		    bufcount = 0;
 		 
-		    ;//*result += potential_e2p(rzs, izs, masses, rxps, ixps, BUFSIZE);
+		    *result += potential_e2p(rzs, izs, masses, rxps, ixps, BUFSIZE);
 		}
 	    }
 	    else
@@ -85,7 +85,7 @@ namespace EvaluatePotential
 	}
 
 	if (bufcount)
-	    ;//*result += potential_e2p(rzs, izs, masses, rxps, ixps, bufcount);
+	    *result += potential_e2p(rzs, izs, masses, rxps, ixps, bufcount);
     }
 }
 
