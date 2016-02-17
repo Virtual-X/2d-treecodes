@@ -111,4 +111,31 @@ export uniform int upper_bound_vec
 
     return s + 1;
 }
+
+export void minmax_vec(
+    const uniform realtype xsrc[],
+    const uniform realtype ysrc[],
+    const uniform int nsources,
+    uniform realtype xmin_xmax_ymin_ymax[])
+{
+    realtype lxmi = 1e13, lymi = 1e13, lxma = 0, lyma = 0;
+
+    foreach(i = 0 ... nsources)
+    {
+	const realtype xval = xsrc[i];
+	const realtype yval = ysrc[i];
+	
+	lxmi = min(lxmi, xval);
+	lxma = max(lxma, xval);
+	
+	lymi = min(lymi, yval);
+	lyma = max(lyma, yval);
+    }
+
+    xmin_xmax_ymin_ymax[0] = reduce_min(lxmi);
+    xmin_xmax_ymin_ymax[1] = reduce_max(lxma);
+    xmin_xmax_ymin_ymax[2] = reduce_min(lymi);
+    xmin_xmax_ymin_ymax[3] = reduce_max(lyma);
+}
+    
     
