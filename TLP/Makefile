@@ -9,6 +9,7 @@
 # to employ the present software for their own publications
 # before getting a written permission from the author of this file.
 #
+
 real ?= double
 order ?= 12
 mrag-blocksize ?= 32
@@ -28,9 +29,9 @@ ifeq "$(profiling)" "1"
 	TLPFLAGS += -pg
 endif
 
-potential: treecode-potential.o order$(order)-upward.o #sort-sources.o driver.o
+potential: treecode-potential.o order$(order)-upward.o sort-sources.o
 
-force: treecode-force.o order$(order)-upward.o #sort-sources.o
+force: treecode-force.o order$(order)-upward.o sort-sources.o
 
 treecode-potential.o: treecode-potential.cpp treecode-potential.h Makefile
 	$(CXX) $(CXXFLAGS) -c $<
@@ -41,8 +42,8 @@ treecode-force.o: treecode-force.cpp treecode-force.h Makefile
 order$(order)-upward.o: upward.cpp upward.h Makefile
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-#sort-sources.o: sort-sources.cpp sort-sources.h Makefile
-#	$(CXX) $(CXXFLAGS) -c $< -o $@
+sort-sources.o: sort-sources.cpp sort-sources.h Makefile
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o 

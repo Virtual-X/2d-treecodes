@@ -14,13 +14,13 @@ real ?= double
 order ?= 12
 mrag-blocksize ?= 32
 
-OBJS = TLP/order$(order)-upward.o #TLP/sort-sources.o
+OBJS = TLP/order$(order)-upward.o TLP/sort-sources.o
 
 ifeq "$(MAKECMDGOALS)" "libtreecode-force.so"
 	OBJS += TLP/treecode-force.o
 	TARGET=force
 else
-	OBJS += TLP/treecode-potential.o # TLP/driver.o
+	OBJS += TLP/treecode-potential.o
 	TARGET=potential
 endif
 

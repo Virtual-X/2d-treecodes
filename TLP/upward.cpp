@@ -19,15 +19,8 @@
 
 #include "upward.h"
 #include "upward-kernels.h"
+#include "sort-sources.h"
 
-//#define  _INSTRUMENTATION_
-#ifndef _INSTRUMENTATION_
-#define MYRDTSC 0
-#else
-#define MYRDTSC _rdtsc()
-#endif
-
-//#define LMAX 15
 
 namespace Tree
 {
@@ -151,9 +144,6 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   const int isdynamic = omp_get_dynamic();
   const int maxthreads = omp_get_max_threads();
 
-  //omp_set_dynamic(0);
-  //omp_set_num_threads(24);
-
   Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
 
   posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
@@ -161,105 +151,10 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
   posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
   posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
 
-  std::pair<int, int> * kv = NULL;
-  posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
-
   const double t1 = omp_get_wtime();
 
-  realtype ext0, ext1;
-
-  {
-    const int nthreads = maxthreads;
-
-    realtype xpartials[2][nthreads], ypartials[2][nthreads];
-
-#pragma omp parallel //num_threads(24)
-    {
-      realtype lxmi = HUGE_VAL, lymi = HUGE_VAL, lxma = 0, lyma = 0;
-
-#pragma omp for
-      for(int i = 0; i < nsrc; ++i)
-	{
-	  const realtype xval = xsrc[i];
-	  const realtype yval = ysrc[i];
-
-	  lxmi = std::min(lxmi, xval);
-	  lxma = std::max(lxma, xval);
-
-	  lymi = std::min(lymi, yval);
-	  lyma = std::max(lyma, yval);
-	}
-
-      const int tid = omp_get_thread_num();
-
-      xpartials[0][tid] = lxmi;
-      xpartials[1][tid] = lxma;
-      ypartials[0][tid] = lymi;
-      ypartials[1][tid] = lyma;
-    }
-
-    xmin = *std::min_element(xpartials[0], xpartials[0] + nthreads);
-    ymin = *std::min_element(ypartials[0], ypartials[0] + nthreads);
-
-    ext0 = (*std::max_element(xpartials[1], xpartials[1] + nthreads) - xmin);
-    ext1 = (*std::max_element(ypartials[1], ypartials[1] + nthreads) - ymin);
-
-  }
-  //xmin = *__gnu_parallel::min_element(xsrc, xsrc + nsrc);
-  //ymin = *__gnu_parallel::min_element(ysrc, ysrc + nsrc);
-
-  //const realtype ext0 = (*__gnu_parallel::max_element(xsrc, xsrc + nsrc) - xmin);
-  //const realtype ext1 = (*__gnu_parallel::max_element(ysrc, ysrc + nsrc) - ymin);
-
-  const realtype eps = 10000 * std::numeric_limits<realtype>::epsilon();
-
-  ext = std::max(ext0, ext1) * (1 + 2 * eps);
-  xmin -= eps * ext;
-  ymin -= eps * ext;
-  const double t2 = omp_get_wtime();
-
-#pragma omp parallel for //num_threads(24)
-  for(int i = 0; i < nsrc; ++i)
-    {
-      int x = floor((xsrc[i] - xmin) / ext * (1 << LMAX));
-      int y = floor((ysrc[i] - ymin) / ext * (1 << LMAX));
-
-      assert(x >= 0 && y >= 0);
-      assert(x < (1 << LMAX) && y < (1 << LMAX));
-
-      x = (x | (x << 8)) & 0x00FF00FF;
-      x = (x | (x << 4)) & 0x0F0F0F0F;
-      x = (x | (x << 2)) & 0x33333333;
-      x = (x | (x << 1)) & 0x55555555;
-
-      y = (y | (y << 8)) & 0x00FF00FF;
-      y = (y | (y << 4)) & 0x0F0F0F0F;
-      y = (y | (y << 2)) & 0x33333333;
-      y = (y | (y << 1)) & 0x55555555;
-
-      const int key = x | (y << 1);
-
-      kv[i].first = key;
-      kv[i].second = i;
-    }
-
-  const double t3 = omp_get_wtime();
-  __gnu_parallel::sort(kv, kv + nsrc);
-  const double t4 = omp_get_wtime();
-
-#pragma omp parallel for //num_threads(24)
-  for(int i = 0; i < nsrc; ++i)
-    {
-      keys[i] = kv[i].first;
-
-      const int entry = kv[i].second;
-      assert(entry >= 0 && entry < nsrc);
-
-      xdata[i] = xsrc[entry];
-      ydata[i] = ysrc[entry];
-      vdata[i] = vsrc[entry];
-    }
-
+  sort_sources(xsrc, ysrc, vsrc, nsrc, keys, xdata, ydata, vdata, &xmin, &ymin, &ext);
+  
   const double t5 = omp_get_wtime();
 
 #pragma omp parallel //num_threads(24)
@@ -268,38 +163,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     { _build(root, 0, 0, 0, 0, nsrc, 0); }
   }
 
-  free(kv);
+ 
   free(keys);
-
-  //omp_set_num_threads(maxthreads);
-  //omp_set_dynamic(isdynamic);
-
-  const double t6 = omp_get_wtime();
-#ifdef _INSTRUMENTATION_
-  printf("SETUP: %.2f ms (%.1f %%) REDUCE: %.2f ms (%.1f %%) KEY: %.2f ms (%.1f %%) SORT: %.2f ms (%.1f %%) REORDER: %.2f ms (%.1f %%) TREE: %.2f ms (%.1f%%)\n",
-	 (t1 - t0) * 1e3, (t1 - t0) / (t6 - t0) * 100,
-	 (t2 - t1) * 1e3, (t2 - t1) / (t6 - t0) * 100,
-	 (t3 - t2) * 1e3, (t3 - t2) / (t6 - t0) * 100,
-	 (t4 - t3) * 1e3, (t4 - t3) / (t6 - t0) * 100,
-	 (t5 - t4) * 1e3, (t5 - t4) / (t6 - t0) * 100,
-	 (t6 - t5) * 1e3, (t6 - t5) / (t6 - t0) * 100);
-
-  std::pair<int64_t, int64_t> allcycles = root->cycles(true, false);
-  std::pair<int64_t, int64_t> usecycles = root->cycles(false, false);
-  std::pair<int64_t, int64_t> searchcycles = root->cycles(false, true);
-  std::pair<int, int> nodes = root->nodes();
-  printf("TREE:\nNODES: %.2e LEAVES: %.2e (%.1f%%)\n ALL: %.2e c, CP: %.2e c (%.1f%%), WORK: %e (%.1f%%), USEFUL CP: %e (%.1f%% of WORK)\nSEARCH: %.2e (%.1f%%) CP: %.2e (%.1f%%)\n",
-	 (double)nodes.first, (double)nodes.second, (double)nodes.second * 100. / nodes.first,
-	 (double)allcycles.first,
-	 (double)allcycles.second,(double)(allcycles.second * 100. / allcycles.first),
-	 (double)usecycles.first, (double)(usecycles.first * 100. / allcycles.first),
-	 (double)usecycles.second,(double)(usecycles.second * 100./ usecycles.first),
-	 (double)searchcycles.first,(double)(searchcycles.first * 100./ usecycles.first),
-	 (double)searchcycles.second,(double)(searchcycles.second * 100./ searchcycles.first));
-
-  printf("USECYCLE.first: %e\n", (double)usecycles.first);
-
-#endif
 }
 
 void Tree::dispose()
