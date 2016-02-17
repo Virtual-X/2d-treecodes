@@ -23,7 +23,7 @@
 #include "upward.h"
 
 
-#define _INSTRUMENTATION_ 1
+//#define _INSTRUMENTATION_ 1
 #if ORDER <= 12
 #define _MIXPREC_
 #endif
@@ -578,7 +578,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 
 	Tree::dispose();
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
+	//report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
     }
 
     extern "C"
@@ -641,6 +641,6 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 #endif
 	Tree::dispose();
 
-	report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
+	//report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, E2L_TILED_IC, E2P_TILED_IC);
     }
 }

@@ -56,9 +56,8 @@ drivers: kernels
 	treecode-force-order=$(treecode-force-order)
 
 kernels:
-	make -C ILP+DLP kernels backend="$(backend)" CC="$(CC)" \
-		treecode-potential-order=$(treecode-potential-order) \
-		treecode-force-order=$(treecode-force-order)
+	make -C ILP+DLP potential order=$(treecode-potential-order)
+	make -C ILP+DLP force order=$(treecode-force-order)	
 
 clean:
 	rm -f test libtreecode.a treecode.h
