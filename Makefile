@@ -1,6 +1,6 @@
 #
 # Makefile
-# 2d-treecodes
+# Part of 2d-treecodes
 #
 # Created and authored by Diego Rossinelli on 2015-09-25.
 # Copyright 2015. All rights reserved.
