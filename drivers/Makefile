@@ -14,6 +14,7 @@ real ?= double
 order ?= 12
 mrag-blocksize ?= 32
 CXX ?= g++
+config ?= release
 
 CXXFLAGS = -I../kernels/ -std=c++11 -fPIC
 CXXFLAGS += -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15

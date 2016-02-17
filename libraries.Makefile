@@ -1,6 +1,6 @@
 #
 # libraries.Makefile
-# Part of MRAG/2d-treecodes
+# 2d-treecodes
 #
 # Created and authored by Diego Rossinelli on 2015-09-25.
 # Copyright 2015. All rights reserved.
@@ -16,7 +16,7 @@ mrag-blocksize ?= 32
 
 OBJS = drivers/order$(order)-upward.o drivers/sort-sources.o
 
-ifeq "$(MAKECMDGOALS)" "libtreecode-force.so"
+ifeq "$(MAKECMDGOALS)" "lib2d-treecodes-force.so"
 	OBJS += drivers/treecode-force.o
 	TARGET=force
 else
@@ -26,14 +26,14 @@ endif
 
 OBJS += $(wildcard kernels/order$(order)-*.o) kernels/upward-common.o
 
-libtreecode-potential.so: drivers/treecode-potential.h alldrivers
+lib2d-treecodes-potential.so: drivers/treecode-potential.h alldrivers
 	m4 -D realtype=$(real) drivers/treecode-potential.h | \
-	sed '/typedef/d' | sed '/attribute/d' > treecode-potential.h
+	sed '/typedef/d' | sed '/attribute/d' > 2d-treecodes-potential.h
 	g++ -shared -o $@ $(OBJS)
 
-libtreecode-force.so: drivers/treecode-force.h alldrivers
+lib2d-treecodes-force.so: drivers/treecode-force.h alldrivers
 	m4 -D realtype=$(real) drivers/treecode-force.h | \
-	sed '/typedef/d' | sed '/attribute/d' > treecode-force.h
+	sed '/typedef/d' | sed '/attribute/d' > 2d-treecodes-force.h
 	g++ -shared -o $@ $(OBJS)
 
 alldrivers: allkernels
@@ -43,7 +43,7 @@ allkernels:
 	make -C kernels $(TARGET)
 
 clean:
-	rm -f test *.so treecode-potential.h treecode-force.h
+	rm -f test *.so 2d-treecodes-potential.h 2d-treecodes-force.h
 	make -C drivers clean
 	make -C kernels clean
 

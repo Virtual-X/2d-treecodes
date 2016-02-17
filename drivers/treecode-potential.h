@@ -1,6 +1,6 @@
 /*
  *  treecode-potential.h
- *  Part of MRAG/2d-treecode-potential
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -16,8 +16,8 @@ typedef REAL realtype;
 
 #ifdef __cplusplus
 extern "C"
-#endif
 __attribute__ ((visibility ("default")))
+#endif
 void treecode_potential(const realtype theta,
 			const realtype * const xsources,
 			const realtype * const ysources,

@@ -16,34 +16,16 @@ typedef REAL realtype;
 
 #ifdef __cplusplus
 extern "C"
-{
+__attribute__ ((visibility ("default")))
 #endif
-    
-    __attribute__ ((visibility ("default")))
-    void treecode_force(const realtype theta,
-			const realtype * const xsources,
-			const realtype * const ysources,
-			const realtype * const sourcevalues,
-			const int nsources,
-			const realtype * const xtargets,
-			const realtype * const ytargets,
-			const int ntargets,
-			realtype * const xresult,
-			realtype * const yresult);
-    
-    __attribute__ ((visibility ("default")))
-    void treecode_force_mrag(const realtype theta,
-			     const realtype * const xsources,
-			     const realtype * const ysources,
-			     const realtype * const sourcevalues,
-			     const int nsources,
-			     const realtype * const x0s,
-			     const realtype * const y0s,
-			     const realtype * const hs,
-			     const int nblocks,
-			     realtype * const xresults,
-			     realtype * const yresults);
-
-#ifdef __cplusplus
-}
-#endif
+void treecode_force_mrag(const realtype theta,
+			 const realtype * const xsources,
+			 const realtype * const ysources,
+			 const realtype * const sourcevalues,
+			 const int nsources,
+			 const realtype * const x0s,
+			 const realtype * const y0s,
+			 const realtype * const hs,
+			 const int nblocks,
+			 realtype * const xresults,
+			 realtype * const yresults);

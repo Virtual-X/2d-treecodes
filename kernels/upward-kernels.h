@@ -17,6 +17,13 @@ typedef REAL realtype;
 extern "C"
 {
     __attribute__ ((visibility ("hidden"))) 
+    void minmax_vec(
+	const  realtype xsrc[],
+	const  realtype ysrc[],
+	const  int nsources,
+	realtype xmin_xmax_ymin_ymax[]);
+    
+    __attribute__ ((visibility ("hidden"))) 
     int lower_bound_vec(int s, int e, const  int val, const int keys[]);
 	
     __attribute__ ((visibility ("hidden"))) 

@@ -1,6 +1,6 @@
 /*
  *  main.cpp
- *  Part of MRAG/2d-treecode-potential
+ *  2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -24,8 +24,8 @@
 #include <limits>
 #include <vector>
 
-#include "treecode-force.h"
-#include "treecode-potential.h"
+#include "2d-treecodes-force.h"
+#include "2d-treecodes-potential.h"
 
 double  tol = 1e-8;
 

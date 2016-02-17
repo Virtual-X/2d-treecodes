@@ -11,7 +11,10 @@
  */
 #include <cassert>
 #include <cstdio>
+#include <omp.h>
 #include <parallel/algorithm>
+
+#include "upward-kernels.h"
 
 typedef REAL realtype;
 
@@ -35,24 +38,28 @@ void sort_sources(const realtype * const xsrc,
 	
 	realtype xpartials[2][nthreads], ypartials[2][nthreads];
 
+	enum { chunksize = 1024 * 4 };
+		
 #pragma omp parallel
 	{
+	    const int tid = omp_get_thread_num();
+	    
 	    realtype lxmi = HUGE_VAL, lymi = HUGE_VAL, lxma = 0, lyma = 0;
 
-#pragma omp for
-	    for(int i = 0; i < nsrc; ++i)
+	    const int start = tid * chunksize;
+	    const int step = nthreads * chunksize;
+	    
+	    for(int i = start; i < nsrc; i += step)
 	    {
-		const realtype xval = xsrc[i];
-		const realtype yval = ysrc[i];
-
-		lxmi = std::min(lxmi, xval);
-		lxma = std::max(lxma, xval);
-
-		lymi = std::min(lymi, yval);
-		lyma = std::max(lyma, yval);
+		realtype result[4];
+		
+		minmax_vec(xsrc + i, ysrc + i, std::min((int)chunksize, nsrc - i), result);
+		
+		lxmi = std::min(lxmi, result[0]);
+		lxma = std::max(lxma, result[1]);
+		lymi = std::min(lymi, result[2]);
+		lyma = std::max(lyma, result[3]);
 	    }
-
-	    const int tid = omp_get_thread_num();
 
 	    xpartials[0][tid] = lxmi;
 	    xpartials[1][tid] = lxma;
