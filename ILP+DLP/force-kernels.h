@@ -86,12 +86,12 @@ extern "C"
 			 realtype * const xresult,
 			 realtype * const yresult);
     
-   void downward_e2l(const realtype * x0s,
+    void downward_e2l(const realtype * x0s,
 		      const realtype * y0s,
-		      const realtype * masses,
-		      const realtype ** __restrict__ const vrexpansions,
-		      const realtype ** __restrict__ const viexpansions,
-		      const int nexpansions,
+		     const realtype * masses,
+		     const realtype * __restrict__ * const vrexpansions,
+		     const realtype * __restrict__ * const viexpansions,
+		     const int nexpansions,
 		      realtype * __restrict__ const rlocal,
 		      realtype * __restrict__ const ilocal);
 

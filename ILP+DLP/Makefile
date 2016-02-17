@@ -45,8 +45,7 @@ kernels: $(OBJS)
 	$(CC) $(KERNELSFLAGS) -c $^
 
 %.o: %.ispc
-	ispc  $^ -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4  -o $@
-#--math-lib=fast --opt=disable-assertions --opt=fast-math 
+	ispc  $^ -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math --wno-perf -o $@
 #	ispc  $^ -O2 --arch=x86-64 --target=avx2-i64x4 --emit-asm -o $@.s
 
 potential-kernels.ispc: potential-kernels.m4 unroll.m4 Makefile

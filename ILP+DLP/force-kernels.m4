@@ -87,16 +87,14 @@ export void downward_e2l(
 	uniform const realtype x0s[],
 	uniform const realtype y0s[],
 	uniform const realtype masses[],
-	uniform const realtype * uniform vrxps[],
-	uniform const realtype * uniform vixps[],
+	uniform const realtype * uniform rxps[],
+	uniform const realtype * uniform ixps[],
 	uniform const int nexpansions,
 	uniform realtype rlocal[],
 	uniform realtype ilocal[])
 {
 	foreach(i = 0 ... nexpansions)
 	{
-		uniform const realtype * const rxp = vrxps[i];
-		uniform const realtype * const ixp = vixps[i];
 		const realtype mass = masses[i];
 		
 		const realtype x0 = x0s[i];
@@ -106,28 +104,29 @@ export void downward_e2l(
     		const realtype rinvz_1 = x0 / r2z0;
     		const realtype iinvz_1 = -y0 / r2z0;
 
+		uniform const realtype * const rxp = rxps[i];
+		uniform const realtype * const ixp = ixps[i];
+		
 		dnl
     		LUNROLL(j, 1, eval(ORDER),`
     		ifelse(j, 1, , `
       	  		  const realtype TMP(rinvz, j) = TMP(rinvz, eval(j - 1)) * rinvz_1 - TMP(iinvz, eval(j - 1)) * iinvz_1;
       	  		  const realtype TMP(iinvz, j) = TMP(rinvz, eval(j - 1)) * iinvz_1 + TMP(iinvz, eval(j - 1)) * rinvz_1;')
 
-	  		  const realtype TMP(rcoeff, j) =  rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);
-      	  		  const realtype TMP(icoeff, j) =  rxp[eval(j - 1)] * TMP(iinvz, j) + ixp[eval(j - 1)] * TMP(rinvz, j);
+	  		  const realtype TMP(rcoeff, j) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);
+      	  		  const realtype TMP(icoeff, j) = rxp[eval(j - 1)] * TMP(iinvz, j) + ixp[eval(j - 1)] * TMP(rinvz, j);
       		')
 		
 		LUNROLL(l, 1, eval(ORDER),`
       		{
-			const realtype TMP(prefac, l) = ifelse(l,1,
-			` - mass', 
-			`mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
-
+			realtype TMP(rtmp, l) = ifelse(l,1,` - mass', `mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
+			realtype TMP(itmp, l) = 0;
+			
 			pushdef(`BINFAC', `BINOMIAL(eval(l + k - 1), eval(k - 1)).')dnl
-			const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, eval(ORDER),`
-       			mysign(k) ifelse(BINFAC,1.f,,`BINFAC *') TMP(rcoeff, k)');
-
-       			const realtype TMP(itmp, l) =  LUNROLL(k, 1, eval(ORDER),`
-       			mysign(k) ifelse(BINFAC,1.f,,`BINFAC *') TMP(icoeff, k)');
+			 LUNROLL(k, 1, eval(ORDER),`
+			 TMP(rtmp, l) mysign(k)= ifelse(BINFAC,1.f,,`BINFAC *') TMP(rcoeff, k);
+			 TMP(itmp, l) mysign(k)= ifelse(BINFAC,1.f,,`BINFAC *') TMP(icoeff, k);
+			 ')
 			popdef(`BINFAC')dnl
         		
        			realtype rpartial = TMP(rtmp, l) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);

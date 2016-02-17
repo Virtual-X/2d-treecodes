@@ -274,7 +274,7 @@ long long combi(int n,int k)
 	void _flush()
 	    {
 	      const int64_t startc = MYRDTSC;
-	     naive_downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+	      downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
 	      
 	      const int64_t endc = MYRDTSC;
 
