@@ -14,36 +14,36 @@ real ?= double
 order ?= 12
 mrag-blocksize ?= 32
 
-OBJS = TLP/order$(order)-upward.o TLP/sort-sources.o
+OBJS = drivers/order$(order)-upward.o drivers/sort-sources.o
 
 ifeq "$(MAKECMDGOALS)" "libtreecode-force.so"
-	OBJS += TLP/treecode-force.o
+	OBJS += drivers/treecode-force.o
 	TARGET=force
 else
-	OBJS += TLP/treecode-potential.o
+	OBJS += drivers/treecode-potential.o
 	TARGET=potential
 endif
 
-OBJS += $(wildcard ILP+DLP/order$(order)-*.o)
+OBJS += $(wildcard kernels/order$(order)-*.o)
 
-libtreecode-potential.so: TLP/treecode-potential.h drivers
-	m4 -D realtype=$(real) TLP/treecode-potential.h | \
+libtreecode-potential.so: drivers/treecode-potential.h alldrivers
+	m4 -D realtype=$(real) drivers/treecode-potential.h | \
 	sed '/typedef/d' | sed '/attribute/d' > treecode-potential.h
 	g++ -shared -o $@ $(OBJS)
 
-libtreecode-force.so: TLP/treecode-force.h drivers
-	m4 -D realtype=$(real) TLP/treecode-force.h | \
+libtreecode-force.so: drivers/treecode-force.h alldrivers
+	m4 -D realtype=$(real) drivers/treecode-force.h | \
 	sed '/typedef/d' | sed '/attribute/d' > treecode-force.h
 	g++ -shared -o $@ $(OBJS)
 
-drivers: kernels
-	make -C TLP $(TARGET)
+alldrivers: allkernels
+	make -C drivers $(TARGET)
 
-kernels:
-	make -C ILP+DLP $(TARGET)
+allkernels:
+	make -C kernels $(TARGET)
 
 clean:
 	rm -f test *.so treecode-potential.h treecode-force.h
-	make -C TLP clean
-	make -C ILP+DLP clean
+	make -C drivers clean
+	make -C kernels clean
 

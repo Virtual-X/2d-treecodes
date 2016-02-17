@@ -1,5 +1,5 @@
 /*
- *  treecode.cpp
+ *  upward.h
  *  Part of MRAG/2d-treecode-potential
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
@@ -34,7 +34,6 @@ namespace Tree
 	    bool innernode;
 	    int childbase;
 	} state;
-
 	
 	void setup(int s, int e)
 	    {
@@ -52,7 +51,7 @@ namespace Tree
 	       const realtype * const ysrc,
 	       const realtype * const vsrc,
 	       const int nsrc,
-	       const int LEAF_MAXCOUNT);
+	       const int leaf_maxcapacity);
     
     void dispose();
 };
