@@ -8,59 +8,11 @@ export void upward_p2e(
        const uniform realtype ysources[],
        const uniform realtype vsources[],
        const uniform int nsources,
-       const uniform realtype x0,
-       const uniform realtype y0,
-       const uniform realtype h,
-       uniform realtype * uniform mass,
-       uniform realtype * uniform weight,
-       uniform realtype * uniform xsum,
-       uniform realtype * uniform ysum,
-       uniform realtype * uniform radius,
+       const uniform realtype xcom,
+       const uniform realtype ycom,
        uniform realtype rexpansions[],
        uniform realtype iexpansions[])
-{
-	realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-	
-	foreach(i = 0 ... nsources)
-	{
-	    const realtype x = xsources[i];
-	    const realtype y = ysources[i];
-	    const realtype m = vsources[i];
-	    const realtype w = abs(m);
-
-	    msum += m;
-	    wsum += w;
-	    wxsum += x * w;
-	    wysum += y * w;
-	}
-
-	*mass = reduce_add(msum);
-	*weight = reduce_add(wsum);
-	*xsum = reduce_add(wxsum);
-	*ysum = reduce_add(wysum);
-
-
-	   if (*weight == 0)
-    	   {
-      	      *weight = 1e-13;
-      	      *xsum = (x0 + 0.5 * h) * *weight;
-      	      *ysum = (y0 + 0.5 * h) * *weight;
-    	   }
-
-    	const realtype xcom = *xsum / *weight;
-    	const realtype ycom = *ysum / *weight;
-
-	realtype r2 = 0;
-	foreach(i = 0 ... nsources)
-	{
-	    const realtype xr = xsources[i] - xcom;
-	    const realtype yr = ysources[i] - ycom;
-
-	    r2 = max(r2, xr * xr + yr * yr);
-	}
-
-	*radius = sqrt(reduce_max(r2));
-	
+{	
 	realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
             TMP(rxp, n) = 0, TMP(ixp, n) = 0');
 
@@ -146,6 +98,7 @@ export void upward_e2e(
                  const realtype mass = masses[programIndex];
 
                  const realtype r2z0 = x0 * x0 + y0 * y0;
+		 //const realtype inv_r2z0 = 1 / r2z0;
                  const realtype rinvz_1 =  x0 / r2z0;
                  const realtype iinvz_1 = -y0 / r2z0;
 		 dnl

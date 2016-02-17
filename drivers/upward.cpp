@@ -15,7 +15,6 @@
 
 #include <parallel/algorithm>
 #include <limits>
-#include <utility>
 
 #include "upward.h"
 #include "upward-kernels.h"
@@ -64,15 +63,18 @@ namespace Tree
     {
 	Node * node = nodes + nodeid;
 	NodeHelper * helper = bufhelpers + nodeid;
+
+	upward_setup(xdata + s, ydata + s, vdata + s, e - s,
+		     &node->mass, &helper->w, &helper->wx, &helper->wy, &node->r);
+
+	node->xcom = helper->w ? helper->wx / helper->w : (x0 + 0.5 * h);
+	node->ycom = helper->w ? helper->wy / helper->w : (y0 + 0.5 * h);
 	
 	upward_p2e(xdata + s, ydata + s, vdata + s, e - s,
-		   x0, y0, h, &node->mass, &helper->w, &helper->wx, &helper->wy, &node->r,
+		   node->xcom, node->ycom,
 		   expansions + ORDER * (2 * nodeid + 0),
 		   expansions + ORDER * (2 * nodeid + 1));
-	
-	node->xcom = helper->w ? helper->wx / helper->w : 0;
-	node->ycom = helper->w ? helper->wy / helper->w : 0;
-	
+		
 	assert(node->r < 1.5 * h);
 
 #ifndef NDEBUG
@@ -147,31 +149,56 @@ namespace Tree
 	    }
 #endif
 	    
+	    int zcount = 0, nzentry = 0;
+	    for(int c = 0; c < 4; ++c)
 	    {
-		realtype srcmass[4], rx[4], ry[4];
-		const realtype * chldrxp[4], *chldixp[4];
+		const realtype val = bufhelpers[childbase + c].w;
+		const bool negligible = fabs(val) < 1e-16;
 		
-		for(int c = 0; c < 4; ++c)
-		{
-		    const int childid = childbase + c;
-		    Node * chd = nodes + childid;
-		    
-		    srcmass[c] = chd->mass;
-		    rx[c] = chd->xcom - parent->xcom;
-		    ry[c] = chd->ycom - parent->ycom;
-		    chldrxp[c] = expansions + ORDER * (2 * childid + 0);
-		    chldixp[c] = expansions + ORDER * (2 * childid + 1);
-		}
-		
-		upward_e2e(rx, ry, srcmass, chldrxp, chldixp,
-			   expansions + ORDER * (2 * helper->parent + 0),
-			   expansions + ORDER * (2 * helper->parent + 1));
+		zcount += negligible;
+		nzentry += (!negligible) * (childbase + c);
 	    }
-	
+		
+	    realtype * const dst = expansions + ORDER * (2 * helper->parent + 0);
+
+	    if (zcount == 4)
+		for(int i = 0; i < 2 * ORDER; ++i)
+		    dst[i] =0;
+	    else
+		if (zcount == 3)
+		{
+		    realtype * const src = expansions + ORDER * (2 * nzentry + 0);
+		    
+		    for(int i = 0; i < 2 * ORDER; ++i)
+			dst[i] = src[i];
+		}	
+		else
+		{
+		    realtype srcmass[4], rx[4], ry[4];
+		    const realtype * chldrxp[4], *chldixp[4];
+		    
+		    for(int c = 0; c < 4; ++c)
+		    {
+			const int childid = childbase + c;
+		    
+			srcmass[c] = nodes[childid].mass;
+			rx[c] = nodes[childid].xcom - parent->xcom;
+			ry[c] = nodes[childid].ycom - parent->ycom;
+		
+			if (bufhelpers[childid].w == 0)
+			    rx[c] = ry[c] = 1;
+			
+			chldrxp[c] = expansions + ORDER * (2 * childid + 0);
+			chldixp[c] = expansions + ORDER * (2 * childid + 1);
+		    }
+
+		    upward_e2e(rx, ry, srcmass, chldrxp, chldixp, dst, dst + ORDER);
+		}
 #ifndef NDEBUG
-	    for(int i = 0; i < 2 * ORDER; ++i)
-		assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
+		for(int i = 0; i < 2 * ORDER; ++i)
+		    assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
 #endif
+		
 	    node = parent; 
 	    helper = parenthelper;
 	}
@@ -220,8 +247,8 @@ namespace Tree
 		const int key1 = mask | (c << shift);
 		const int key2 = key1 + (1 << shift) - 1;
 	
-		const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
-		const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
+		const size_t indexmin = c == 0 ? s : lower_bound_vec(s, e, key1, keys);
+		const size_t indexsup = c == 3 ? e : upper_bound_vec(s, e, key2, keys);
 
 		const int childid = childbase + c;
 		nodes[childid].setup(indexmin, indexsup);
@@ -238,13 +265,13 @@ namespace Tree
 
 void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc,
 		 const int nsrc,
-		 const int LEAF_MAXCOUNT)
+		 const int leaf_maxcapacity)
 {
     const double t0 = omp_get_wtime();
     const int isdynamic = omp_get_dynamic();
     const int maxthreads = omp_get_max_threads();
 
-    Tree::LEAF_MAXCOUNT = LEAF_MAXCOUNT;
+    Tree::LEAF_MAXCOUNT = leaf_maxcapacity;
 
     posix_memalign((void **)&keys, 32, sizeof(int) * nsrc);
     posix_memalign((void **)&xdata, 32, sizeof(*xdata) * nsrc);

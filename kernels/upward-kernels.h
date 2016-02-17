@@ -15,31 +15,43 @@
 typedef REAL realtype;
 
 extern "C"
-__attribute__ ((visibility ("hidden")))
-void upward_p2e(
-    const  realtype xsources[],
-    const  realtype ysources[],
-    const  realtype vsources[],
-    const  int nsources,
-    const  realtype x0,
-    const  realtype y0,
-    const  realtype h,
-    realtype *  mass,
-    realtype *  weight,
-    realtype *  xsum,
-    realtype *  ysum,
-    realtype *  radius,
-    realtype rexpansions[],
-    realtype iexpansions[]);
+{
+    __attribute__ ((visibility ("hidden"))) 
+    int lower_bound_vec(int s, int e, const  int val, const int keys[]);
+	
+    __attribute__ ((visibility ("hidden"))) 
+    int upper_bound_vec(int s, int e, const  int val, const int keys[]);
 
+    __attribute__ ((visibility ("hidden")))    
+    void upward_setup(
+	const realtype xsources[],
+	const realtype ysources[],
+	const realtype vsources[],
+	const int nsources,
+	realtype * const mass,
+	realtype * const w,
+	realtype * const wx,
+	realtype * const wy,
+	realtype * const radius);
+    
+    __attribute__ ((visibility ("hidden")))
+    void upward_p2e(
+	const  realtype xsources[],
+	const  realtype ysources[],
+	const  realtype vsources[],
+	const int nsources,
+	const realtype xcom,
+	const realtype ycom,
+	realtype * __restrict__ const rexpansions,
+	realtype * __restrict__ const iexpansions);
 
-extern "C"
-__attribute__ ((visibility ("hidden")))
-void upward_e2e(
-    const realtype x0s[],
-    const realtype y0s[],
-    const realtype masses[],
-    const realtype *  vrxps[],
-    const realtype *  vixps[],
-    realtype rdstxp[],
-    realtype idstxp[]);
+    __attribute__ ((visibility ("hidden")))
+    void upward_e2e(
+	const realtype x0s[],
+	const realtype y0s[],
+	const realtype masses[],
+	const realtype *  vrxps[],
+	const realtype *  vixps[],
+	realtype rdstxp[],
+	realtype idstxp[]);
+}

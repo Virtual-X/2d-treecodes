@@ -12,7 +12,7 @@
 real ?= double
 order ?= 12
 
-OBJS = order$(order)-upward-kernels.o 
+OBJS = order$(order)-upward-kernels.o upward-common.o
 
 ifneq "$(MAKECMDGOALS)" "force"
 	OBJS += order$(order)-potential-kernels.o
@@ -23,7 +23,10 @@ endif
 potential force: $(OBJS)
 
 %.o: %.ispc Makefile
-	ispc  $< -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math --wno-perf --pic -o $@
+	ispc  $< -Drealtype=$(real) -O3 --arch=x86-64 --math-lib=fast \
+	--opt=disable-assertions --opt=fast-math \
+	--cpu=core-avx2 --target=avx2-i64x4 \
+	--wno-perf --pic -o $@
 
 order$(order)-%.ispc: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@

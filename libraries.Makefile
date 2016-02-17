@@ -24,7 +24,7 @@ else
 	TARGET=potential
 endif
 
-OBJS += $(wildcard kernels/order$(order)-*.o)
+OBJS += $(wildcard kernels/order$(order)-*.o) kernels/upward-common.o
 
 libtreecode-potential.so: drivers/treecode-potential.h alldrivers
 	m4 -D realtype=$(real) drivers/treecode-potential.h | \
