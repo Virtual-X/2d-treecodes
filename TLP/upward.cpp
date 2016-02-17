@@ -1,6 +1,6 @@
 /*
- *  treecode.cpp
- *  Part of MRAG/2d-treecode-potential
+ *  upward.cpp
+ *  2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -49,18 +49,17 @@ namespace Tree
 	return value;
     }
 
+    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL, * expansions = NULL;
+    
     Node * nodes;
-
     NodeHelper * bufhelpers = NULL;
-    realtype * expansions = NULL;
+    
     int currnnodes, maxnodes;
 
     int * keys = NULL;
-    realtype *xdata = NULL, *ydata = NULL, *vdata = NULL;
-    
     realtype ext, xmin, ymin;
     
-    void process_leaf(const int nodeid, const int s, const int e,
+    void build_leaf(const int nodeid, const int s, const int e,
 		      const realtype x0, const realtype y0, const realtype h)
     {
 	Node * node = nodes + nodeid;
@@ -180,10 +179,18 @@ namespace Tree
 
     int LEAF_MAXCOUNT;
     
-    void build_tree(const int nodeid,
-		const int x, const int y, const int l, const int s, const int e, const int mask,
-		const int parentid)
+    void build_tree(const int nodeid)
     {
+	Node * const node = nodes + nodeid;
+	NodeHelper * const helper = bufhelpers + nodeid;
+	
+	const int s = node->s;
+	const int e = node->e;
+	const int x = helper->x;
+	const int y = helper->y;
+	const int l = helper->l;
+	const int mask = helper->mask;
+	
 	const double h = ext / (1 << l);
 	const double x0 = xmin + h * x, y0 = ymin + h * y;
 
@@ -194,15 +201,10 @@ namespace Tree
 	    assert(xdata[i] >= x0 && xdata[i] < x0 + h && ydata[i] >= y0 && ydata[i] < y0 + h);
 #endif
 
-	Node * const node = nodes + nodeid;
-	node->setup(s, e);
-	
-	NodeHelper * const helper = bufhelpers + nodeid;
-	helper->setup(x, y, l, mask, parentid);
-
 	const bool leaf = e - s <= LEAF_MAXCOUNT || l + 1 > LMAX;
+	
 	if (leaf)
-	    process_leaf(nodeid, s, e, x0, y0, h);
+	    build_leaf(nodeid, s, e, x0, y0, h);
 	else
 	{
 	    const int childbase = fetch_and_add(&currnnodes, 4);
@@ -220,11 +222,14 @@ namespace Tree
 	
 		const size_t indexmin = c == 0 ? s : std::lower_bound(keys + s, keys + e, key1) - keys;
 		const size_t indexsup = c == 3 ? e : std::upper_bound(keys + s, keys + e, key2) - keys;
+
+		const int childid = childbase + c;
+		nodes[childid].setup(indexmin, indexsup);
+		bufhelpers[childid].setup((x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1, key1, nodeid);
 		
-#pragma omp task firstprivate(childbase, c, x, y, l, indexmin, indexsup, key1, nodeid) if (indexsup - indexmin > 5e3 && c < 3)
+#pragma omp task firstprivate(childid) if (indexsup - indexmin > 5e3 && c < 3)
 		{
-		    build_tree(childbase + c, (x << 1) + (c & 1), (y << 1) + (c >> 1), l + 1,
-			   indexmin, indexsup, key1, nodeid);
+		    build_tree(childid);
 		}
 	    }
 	}
@@ -257,11 +262,16 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     posix_memalign((void **)&nodes, 32, sizeof(Node) * maxnodes);
     posix_memalign((void **)&bufhelpers, 32, sizeof(NodeHelper) * maxnodes);
     posix_memalign((void **)&expansions, 32, sizeof(realtype) * 2 * ORDER * maxnodes);
-  
+    
 #pragma omp parallel
     {
 #pragma omp single
-	{ build_tree(0, 0, 0, 0, 0, nsrc, 0, -1); }
+	{
+	    nodes[0].setup(0, nsrc);
+	    bufhelpers[0].setup(0, 0, 0, 0, -1);
+
+	    build_tree(0);
+	}
     }
 
     free(keys);
