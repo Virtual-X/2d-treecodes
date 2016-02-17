@@ -40,7 +40,7 @@ drivers: kernels
 	make -C TLP $(TARGET)
 
 kernels:
-	make -C ILP+DLP order=$(order) $(TARGET)
+	make -C ILP+DLP $(TARGET)
 
 clean:
 	rm -f test *.so treecode-potential.h treecode-force.h

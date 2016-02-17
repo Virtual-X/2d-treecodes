@@ -17,12 +17,12 @@ CXX ?= g++
 
 CXXFLAGS = -I../ILP+DLP/ -std=c++11 -fPIC
 CXXFLAGS += -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15
-CXXFLAGS += -O3 -march=native -fopenmp -fvisibility=hidden  
+CXXFLAGS += -O3 -march=native -fopenmp -fvisibility=hidden  -fstrict-aliasing
 
 ifeq "$(config)" "release"
-	TLPFLAGS +=  -DNDEBUG
+	CXXFLAGS +=  -DNDEBUG --fast-math 
 else
-#TLPFLAGS += -g -G
+	CXXFLAGS += -g -G
 endif
 
 ifeq "$(profiling)" "1"
