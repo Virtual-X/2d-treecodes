@@ -1,4 +1,4 @@
- /*
+/*
  *  force-kernels.h
  *  Part of MRAG/2d-treecode-potential
  *
@@ -28,6 +28,17 @@ extern "C"
 		   realtype * const xresult,
 		   realtype * const yresult);
 
+    void reference_force_p2p_tiled(const realtype * __restrict__ const xsources,
+				   const realtype * __restrict__ const ysources,
+				   const realtype * __restrict__ const sources,
+				   const int nsources,
+				   const realtype xt,
+				   const realtype yt,
+				   const realtype h,
+				   realtype * const xresult,
+				   realtype * const yresult, const int );
+
+    
     void force_p2p_tiled(const realtype * __restrict__ const xsources,
 			 const realtype * __restrict__ const ysources,
 			 const realtype * __restrict__ const sources,
@@ -36,18 +47,18 @@ extern "C"
 			 const realtype yt,
 			 const realtype h,
 			 realtype * const xresult,
-			 realtype * const yresult, const int stride);
+			 realtype * const yresult);
 
-  void force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
-			       const float * __restrict__ const ysrc,
-			       const float * __restrict__ const vsrc,
-			       const int nsources,
-			       const float _xt,
-			       const float _yt,
-			       const float h,
-			       float * const xresult,
-			       float * const yresult,
-			       const int stride);
+    void reference_force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
+					   const float * __restrict__ const ysrc,
+					   const float * __restrict__ const vsrc,
+					   const int nsources,
+					   const float _xt,
+					   const float _yt,
+					   const float h,
+					   float * const xresult,
+					   float * const yresult,
+					   const int stride);
 
     void force_e2p(const realtype mass,
 		   const realtype rx,
@@ -57,6 +68,15 @@ extern "C"
 		   realtype * const xresult,
 		   realtype * const yresult);
 
+    void reference_force_e2p_tiled(const realtype mass,
+				   const realtype rx,
+				   const realtype ry,
+				   const realtype h,
+				   const realtype * __restrict__ const rxp,
+				   const realtype * __restrict__ const ixp,
+				   realtype * const xresult,
+				   realtype * const yresult, const int stride);
+
     void force_e2p_tiled(const realtype mass,
 			 const realtype rx,
 			 const realtype ry,
@@ -64,8 +84,25 @@ extern "C"
 			 const realtype * __restrict__ const rxp,
 			 const realtype * __restrict__ const ixp,
 			 realtype * const xresult,
-			 realtype * const yresult, const int stride);
+			 realtype * const yresult);
     
+   void downward_e2l(const realtype * x0s,
+		      const realtype * y0s,
+		      const realtype * masses,
+		      const realtype ** __restrict__ const vrexpansions,
+		      const realtype ** __restrict__ const viexpansions,
+		      const int nexpansions,
+		      realtype * __restrict__ const rlocal,
+		      realtype * __restrict__ const ilocal);
+
+    void downward_l2p_tiled( const realtype rx,
+				    const realtype ry,
+			     const realtype h,
+			     const realtype * __restrict__ const rlocal,
+			     const realtype * __restrict__ const ilocal,
+			     realtype * const xresult,
+			     realtype * const yresult);
+
 #ifdef __cplusplus
 }
 #endif

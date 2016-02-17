@@ -33,7 +33,7 @@ define(`INNERLOOPSIZE', 4)
 #ifdef __cplusplus
 extern "C"
 #endif
-	void force_p2p_tiled(const realtype * __restrict__ const xsrc,
+	void reference_force_p2p_tiled(const realtype * __restrict__ const xsrc,
 			 const realtype * __restrict__ const ysrc,
 			 const realtype * __restrict__ const vsrc,
 			 const int nsources,
@@ -48,11 +48,11 @@ extern "C"
 		const __m128d xtB = _mm_set1_pd(_xt) + _mm_set_pd(3,2) * _mm_set1_pd(h);
 		const __m128d eps = _mm_set1_pd(EPS);
 
-		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);	
+		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);
 
 		LUNROLL(iy, 0, 3, `
 		const realtype TMP(syt, iy) = _yt + iy * h;
-		const __m128d TMP(yt, iy) = _mm_set1_pd(TMP(syt, iy)); 
+		const __m128d TMP(yt, iy) = _mm_set1_pd(TMP(syt, iy));
 
 		__m128d TMP(xsA, iy) =_mm_setzero_pd();
 		__m128d TMP(xsB, iy) =_mm_setzero_pd();
@@ -118,7 +118,7 @@ define(`INNERLOOPSIZE', 4)
 #ifdef __cplusplus
 extern "C"
 #endif
-	void force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
+	void reference_force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
 	     		 const float * __restrict__ const ysrc,
 			 const float * __restrict__ const vsrc,
 			 const int nsources,
@@ -131,11 +131,11 @@ extern "C"
 	{
 		const __m128 xt = _mm_set1_ps(_xt) + _mm_set_ps(3, 2, 1, 0) * _mm_set1_ps(h);
 
-		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);	
+		const int nnice = INNERLOOPSIZE * (nsources / INNERLOOPSIZE);
 
 		LUNROLL(iy, 0, 3, `
 		const float TMP(syt, iy) = _yt + iy * h;
-		const __m128 TMP(yt, iy) = _mm_set1_ps(TMP(syt, iy)); 
+		const __m128 TMP(yt, iy) = _mm_set1_ps(TMP(syt, iy));
 
 		__m128 TMP(xs, iy) =_mm_setzero_ps();
 		__m128 TMP(ys, iy) =_mm_setzero_ps();')
@@ -147,15 +147,15 @@ extern "C"
  				const __m128 xcurr = _mm_set1_ps(xsrc[j + pass]);
  				const __m128 ycurr = _mm_set1_ps(ysrc[j + pass]);
  				const __m128 vcurr = _mm_set1_ps(vsrc[j + pass]);
- 
+
  				const __m128 xr = xt - xcurr;
- 
+
  				const __m128 xr2 = xr * xr;
-		
+
 				LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
 
 				LUNROLL(iy, 0, 3, `const __m128 TMP(denom, iy) = xr2 + TMP(yr, iy) * TMP(yr, iy);')
-				LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')			
+				LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')
 				LUNROLL(iy, 0, 3, `
 				const __m128 TMP(valid, iy) = _mm_cmpnle_ps(TMP(denom, iy), _mm_setzero_ps());
 				const __m128 TMP(factor, iy) = _mm_and_ps(_mm_mul_ps (vcurr * TMP(rcp, iy),  _mm_set1_ps (2.0f) -  TMP(denom, iy) * TMP(rcp, iy)), TMP(valid, iy));')
@@ -173,10 +173,10 @@ extern "C"
 			const __m128 xr = xt - _mm_set1_ps(xsrc[j]);
 
 			const __m128 xr2 = xr * xr;
-			
+
 			LUNROLL(iy, 0, 3, `const __m128 TMP(yr, iy) = TMP(yt, iy) - ycurr;')
 			LUNROLL(iy, 0, 3, `const __m128 TMP(denom, iy) = xr2 + TMP(yr, iy) * TMP(yr, iy);')
-			LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')			
+			LUNROLL(iy, 0, 3, `const __m128 TMP(rcp, iy) = _mm_rcp_ps (TMP(denom, iy));')
 			LUNROLL(iy, 0, 3, `
 			const __m128 TMP(valid, iy) = _mm_cmpnle_ps(TMP(denom, iy), _mm_setzero_ps());
 			const __m128 TMP(factor, iy) = _mm_and_ps(_mm_mul_ps (vcurr * TMP(rcp, iy),  _mm_set1_ps (2.0f) -  TMP(denom, iy) * TMP(rcp, iy)), TMP(valid, iy));')
@@ -195,7 +195,7 @@ extern "C"
 #ifdef __cplusplus
 extern "C"
 #endif
-	void force_e2p_tiled(
+	void reference_force_e2p_tiled(
 		const realtype mass,
 		const realtype scalar_rz,
 		const realtype scalar_iz,
@@ -208,7 +208,7 @@ extern "C"
 		{
 			const __m128d mass2 = _mm_set1_pd(mass);
 			const __m128d xdisplA = _mm_set_pd(1,0) * _mm_set1_pd(h);
-			const __m128d xdisplB = _mm_set_pd(3,2) * _mm_set1_pd(h);	   
+			const __m128d xdisplB = _mm_set_pd(3,2) * _mm_set1_pd(h);
 			const __m128d rz0A = _mm_set1_pd(scalar_rz);
 			const __m128d rz0B = _mm_set1_pd(scalar_rz);
 
@@ -233,7 +233,7 @@ extern "C"
 			const __m128d TMP(iinvzB,iy) = _mm_setzero_pd() -TMP(iz, iy) / TMP(r2B, iy);
 
 			__m128d TMP(xsA, iy) = mass2 * TMP(rinvzA, iy);
-			__m128d TMP(xsB, iy) = mass2 * TMP(rinvzB, iy); 
+			__m128d TMP(xsB, iy) = mass2 * TMP(rinvzB, iy);
 
 			__m128d TMP(ysA, iy) = mass2 * TMP(iinvzA, iy);
 			__m128d TMP(ysB, iy) = mass2 * TMP(iinvzB, iy);
@@ -242,7 +242,7 @@ extern "C"
 			__m128d TMP(rprodB, iy) = TMP(rinvzB, iy);
 
 			__m128d TMP(iprodA, iy) = TMP(iinvzA, iy);
-			__m128d TMP(iprodB, iy) = TMP(iinvzB, iy); 
+			__m128d TMP(iprodB, iy) = TMP(iinvzB, iy);
 
 			LUNROLL(n, 0, eval(ORDER - 1), `
 			{
@@ -262,7 +262,7 @@ extern "C"
 			   pushdef(`FACTOR', ifelse(1,eval(n + 1), ,TMP(pre4, n) *))
 			   const __m128d TMP(rxp4, n) = FACTOR _mm_set1_pd(rxp[n]);
 			   const __m128d TMP(ixp4, n) = FACTOR _mm_set1_pd(ixp[n]);
-	   
+
 			   TMP(xsA, iy) -= TMP(rprodA, iy) * TMP(rxp4, n) - TMP(iprodA, iy) * TMP(ixp4, n);
 			   TMP(xsB, iy) -= TMP(rprodB, iy) * TMP(rxp4, n) - TMP(iprodB, iy) * TMP(ixp4, n);
 

@@ -34,7 +34,7 @@ inline __m128d operator -= (__m128d& a, __m128d b){ return a = _mm_sub_pd(a, b);
 #ifdef __cplusplus
 extern "C"
 #endif
-void downward_e2l(
+void reference_downward_e2l(
      const realtype * x0s,
      const realtype * y0s,
      const realtype * masses,
@@ -134,7 +134,7 @@ __asm__("L_DOWNWARD_E2L_ITERATION:");
 #ifdef __cplusplus
 extern "C"
 #endif
-    void downward_l2p_tiled( const realtype rxbase,
+    void reference_downward_l2p_tiled( const realtype rxbase,
       const realtype rybase,
       const realtype h,
       const realtype * __restrict__ const rlocal,

@@ -17,7 +17,7 @@ extern "C"
 {
 #endif
 
-    void downward_e2l(const realtype * x0s,
+    void reference_downward_e2l(const realtype * x0s,
 		      const realtype * y0s,
 		      const realtype * masses,
 		      const realtype ** __restrict__ const vrexpansions,
@@ -26,13 +26,14 @@ extern "C"
 		      realtype * __restrict__ const rlocal,
 		      realtype * __restrict__ const ilocal);
 
-    void downward_l2p_tiled( const realtype rx,
+    void reference_downward_l2p_tiled( const realtype rx,
 			     const realtype ry,
 			     const realtype h,
 			     const realtype * __restrict__ const rlocal,
 			     const realtype * __restrict__ const ilocal,
 			     realtype * const xresult,
 			     realtype * const yresult, const int stride);
+    
 
 #ifdef __cplusplus
 }

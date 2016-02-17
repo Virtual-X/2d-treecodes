@@ -22,7 +22,7 @@ UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
 REFERENCE_UPWARDKERNELS_POTENTIAL = reference-upward-kernels-order$(treecode-potential-order)
 REFERENCE_UPWARDKERNELS_FORCE=reference-upward-kernels-order$(treecode-force-order)
 
-OBJS =  potential-kernels.o reference-potential-kernels.o force-kernels.o force-kernels-tiled.o downward-kernels.o \
+OBJS =  potential-kernels.o reference-potential-kernels.o reference-force-kernels.o reference-force-kernels-tiled.o force-kernels.o  downward-kernels.o \
 	$(UPWARDKERNELS_POTENTIAL).o  $(REFERENCE_UPWARDKERNELS_POTENTIAL).o
 
 ifneq "$(treecode-potential-order)" "$(treecode-force-order)"
@@ -45,7 +45,8 @@ kernels: $(OBJS)
 	$(CC) $(KERNELSFLAGS) -c $^
 
 %.o: %.ispc
-	ispc  $^ -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math  -o $@
+	ispc  $^ -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4  -o $@
+#--math-lib=fast --opt=disable-assertions --opt=fast-math 
 #	ispc  $^ -O2 --arch=x86-64 --target=avx2-i64x4 --emit-asm -o $@.s
 
 potential-kernels.ispc: potential-kernels.m4 unroll.m4 Makefile
@@ -54,11 +55,14 @@ potential-kernels.ispc: potential-kernels.m4 unroll.m4 Makefile
 reference-potential-kernels.c: potential-kernels-sse.m4 potential-kernels.h unroll.m4 Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-potential-order) $<  > $@
 
-force-kernels.c: force-kernels-sse.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > force-kernels.c
+reference-force-kernels.c: reference-force-kernels-sse.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > reference-force-kernels.c
 
-force-kernels-tiled.c: force-kernels-tiled-sse.m4 force-kernels.h Makefile
-	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > force-kernels-tiled.c
+force-kernels.ispc: force-kernels.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > $@
+
+reference-force-kernels-tiled.c: reference-force-kernels-tiled-sse.m4 force-kernels.h Makefile
+	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > reference-force-kernels-tiled.c
 
 downward-kernels.c:  downward-kernels-sse.m4 downward-kernels.h Makefile
 	m4 $(M4FLAGS) -D ORDER=$(treecode-force-order) $<  > downward-kernels.c

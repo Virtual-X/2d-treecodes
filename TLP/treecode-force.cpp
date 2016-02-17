@@ -185,7 +185,8 @@ namespace EvaluateForce
 	void _flush()
 	    {
 	      const int64_t startc = MYRDTSC;
-	      downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+	     downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+	      
 	      const int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
@@ -293,11 +294,14 @@ namespace EvaluateForce
 			{
 			    int64_t startc = MYRDTSC;
 
-			    for(int ty = 0; ty < BRICKSIZE; ty += 4)
+			    /*  for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				for(int tx = 0; tx < BRICKSIZE; tx += 4)
-				    force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
-						    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
-
+				    reference_force_e2p_tiled(node->mass, x0 + (bx + tx) * h - xcom, y0 + (by + ty) * h - ycom, h,
+				    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);*/
+			    
+			    force_e2p_tiled(node->mass, x0 + (bx + 0) * h - xcom, y0 + (by + 0) * h - ycom, h,
+					    node->rexpansions, node->iexpansions, &xresult[0][0],
+					    &yresult[0][0]);
 			    int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
@@ -313,19 +317,23 @@ namespace EvaluateForce
 
 				int64_t startc = MYRDTSC;
 
-				for(int ty = 0; ty < BRICKSIZE; ty += 4)
+				/*for(int ty = 0; ty < BRICKSIZE; ty += 4)
 				    for(int tx = 0; tx < BRICKSIZE; tx += 4)
 				      {
 #ifdef _MIXPREC_
-					force_p2p_tiled_mixprec(&xdata_fp32[s], &ydata_fp32[s], &vdata_fp32[s], node->e - s,
+					reference_force_p2p_tiled_mixprec(&xdata_fp32[s], &ydata_fp32[s], &vdata_fp32[s], node->e - s,
 								(float)(x0 + (bx + tx) * h), (float)(y0 + (by + ty) * h), (float)h, 
 								&xresult_fp32[ty][tx], &yresult_fp32[ty][tx], BRICKSIZE);
 #else
-					force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+					reference_force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
 							x0 + (bx + tx) * h, y0 + (by + ty) * h, h, 
 							&xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
 #endif
-				      }
+}*/
+				
+				force_p2p_tiled(&xdata[s], &ydata[s], &vdata[s], node->e - s,
+						x0 + (bx + 0) * h, y0 + (by + 0) * h, h, 
+						&xresult[0][0], &yresult[0][0]);
 
 				int64_t endc = MYRDTSC;
 
@@ -347,13 +355,19 @@ namespace EvaluateForce
 		}
 
 		e2lwork.finalize();
-
+/*
 		for(int ty = 0; ty < BRICKSIZE; ty += 4)
 		    for(int tx = 0; tx < BRICKSIZE; tx += 4)
-			downward_l2p_tiled(h * (tx - 0.5 * (BRICKSIZE - 1)),
+			reference_downward_l2p_tiled(h * (tx - 0.5 * (BRICKSIZE - 1)),
 					   h * (ty - 0.5 * (BRICKSIZE - 1)),
 					   h, rlocal, ilocal,
 					   &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);
+*/
+
+		downward_l2p_tiled(h * (0 - 0.5 * (BRICKSIZE - 1)),
+				   h * (0 - 0.5 * (BRICKSIZE - 1)),
+				   h, rlocal, ilocal,
+				   &xresult[0][0], &yresult[0][0]);
 #ifdef _MIXPREC_
 		for(int iy = 0; iy < BRICKSIZE; ++iy)
 		  for(int ix = 0; ix < BRICKSIZE; ++ix)
