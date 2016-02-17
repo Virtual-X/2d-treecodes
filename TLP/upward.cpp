@@ -20,14 +20,14 @@
 #include "upward.h"
 #include "upward-kernels.h"
 
-#define  _INSTRUMENTATION_
+//#define  _INSTRUMENTATION_
 #ifndef _INSTRUMENTATION_
 #define MYRDTSC 0
 #else
 #define MYRDTSC _rdtsc()
 #endif
 
-#define LMAX 15
+//#define LMAX 15
 
 namespace Tree
 {

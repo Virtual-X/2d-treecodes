@@ -16,7 +16,7 @@
 #include <tuple>
 #include <algorithm>
 
-#include "treecode.h"
+#include "treecode-force.h"
 #include "upward-kernels.h"
 #include "downward-kernels.h"
 #include "force-kernels.h"
@@ -36,7 +36,7 @@
 
 namespace EvaluateForce
 {
-    struct NodeForce : Tree::NodeImplementation<ORDER> { };
+    struct NodeForce : Tree::NodeImplementation { };
 
     realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
     float *xdata_fp32 = nullptr, *ydata_fp32 = nullptr, *vdata_fp32 = nullptr;
@@ -99,8 +99,8 @@ namespace EvaluateForce
 
     } perfmon;
 
-#pragma omp threadprivate(perfmon)
-
+//#pragma omp threadprivate(perfmon)
+/*
     void evaluate(realtype * const xresult, realtype * const yresult,
 		  const realtype xt, const realtype yt,
 		  const NodeForce & root, const realtype thetasquared)
@@ -169,7 +169,7 @@ namespace EvaluateForce
 	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
 #endif
     }
-    
+*/
 long long combi(int n,int k)
 	    {
 		long long ans = 1;
@@ -541,7 +541,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 	printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1-t0)*1e3, (t2-t1)*1e3, (t2 - t1) / (t2 - t0) * 100);
 #endif
     }
-
+/*
     extern "C"
     void treecode_force(const realtype theta,
 			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
@@ -580,8 +580,9 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 
 	//report_instrumentation(perf, sizeof(perf) / sizeof(*perf), t0, t1, 0, E2P_IC);
     }
-
+*/
     extern "C"
+    __attribute__ ((visibility ("default")))
     void treecode_force_mrag(const realtype theta,
 			     const realtype * const xsrc,
 			     const realtype * const ysrc,

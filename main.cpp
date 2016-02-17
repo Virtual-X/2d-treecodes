@@ -24,7 +24,8 @@
 #include <limits>
 #include <vector>
 
-#include "treecode.h"
+#include "treecode-force.h"
+#include "treecode-potential.h"
 
 double  tol = 1e-8;
 
@@ -57,22 +58,22 @@ void check(const double * ref, const double * res, const int N)
     printf("       l-1 errors: %.03e (absolute) %.03e (relative)\n", l1, l1_rel);
 }
 
-void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bool verify = true, bool mragfile = false)
+void test(double theta, double tol, FILE * f = NULL, bool potential = true, bool verify = true, bool mragfile = false)
 {
     int NSRC = 1e5 * (0.1 + drand48());
 
     if (f)
 	fread(&NSRC, sizeof(int), 1, f);
 
-    realtype * xsrc = new realtype[NSRC];
-    realtype * ysrc = new realtype[NSRC];
-    realtype * sources = new realtype[NSRC];
+    double * xsrc = new double[NSRC];
+    double * ysrc = new double[NSRC];
+    double * sources = new double[NSRC];
 
     if (f)
     {
-	fread(xsrc, sizeof(realtype), NSRC, f);
-	fread(ysrc, sizeof(realtype), NSRC, f);
-	fread(sources, sizeof(realtype), NSRC, f);
+	fread(xsrc, sizeof(double), NSRC, f);
+	fread(ysrc, sizeof(double), NSRC, f);
+	fread(sources, sizeof(double), NSRC, f);
     }
     else
 	for(int i = 0; i < NSRC; ++i)
@@ -89,30 +90,30 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 
     int NBLOCKS = 0;
     const int BS2 = BLOCKSIZE * BLOCKSIZE;
-    realtype * x0s = nullptr, *y0s = nullptr, *hs = nullptr;
+    double * x0s = nullptr, *y0s = nullptr, *hs = nullptr;
 
     if (mragfile)
     {
 	NBLOCKS = NDST;
 	NDST = NBLOCKS * BS2;
-	x0s = new realtype[NBLOCKS];
-	y0s = new realtype[NBLOCKS];
-	hs = new realtype[NBLOCKS];
+	x0s = new double[NBLOCKS];
+	y0s = new double[NBLOCKS];
+	hs = new double[NBLOCKS];
     }
 
-    realtype * xdst = new realtype[NDST];
-    realtype * ydst = new realtype[NDST];
-    realtype * xref = new realtype[NDST];
-    realtype * yref = new realtype[NDST];
+    double * xdst = new double[NDST];
+    double * ydst = new double[NDST];
+    double * xref = new double[NDST];
+    double * yref = new double[NDST];
 
     if (f)
     {
 	if (mragfile)
 	{
 	    printf("mrag file!\n");
-	    fread(x0s, sizeof(realtype), NBLOCKS, f);
-	    fread(y0s, sizeof(realtype), NBLOCKS, f);
-	    fread(hs, sizeof(realtype), NBLOCKS, f);
+	    fread(x0s, sizeof(double), NBLOCKS, f);
+	    fread(y0s, sizeof(double), NBLOCKS, f);
+	    fread(hs, sizeof(double), NBLOCKS, f);
 
 	    for(int b =0; b < NBLOCKS; b++)
 		for(int iy = 0; iy < BLOCKSIZE; ++iy)
@@ -124,19 +125,19 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	}
 	else //if (!mragfile)
 	{
-	    fread(xdst, sizeof(realtype), NDST, f);
-	    fread(ydst, sizeof(realtype), NDST, f);
-	    fread(xref, sizeof(realtype), NDST, f);
+	    fread(xdst, sizeof(double), NDST, f);
+	    fread(ydst, sizeof(double), NDST, f);
+	    fread(xref, sizeof(double), NDST, f);
 	}
 
 	if (!potential)
 	{
-	    fread(yref, sizeof(realtype), NDST, f);
+	    fread(yref, sizeof(double), NDST, f);
 
 	    for(int i = 0; i < NDST; ++i)
 	    {
-		const realtype tmp0 = xref[i] * (2 * M_PI);
-		const realtype tmp1 = yref[i] * (2 * M_PI);
+		const double tmp0 = xref[i] * (2 * M_PI);
+		const double tmp1 = yref[i] * (2 * M_PI);
 
 		xref[i] = -tmp1;
 		yref[i] = tmp0;
@@ -161,9 +162,9 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	printf("ndst: %d i have found %d blocks\n", NDST, NBLOCKS);
 	assert(NDST % BS2 == 0);
 
-	x0s = new realtype[NBLOCKS];
-	y0s = new realtype[NBLOCKS];
-	hs = new realtype[NBLOCKS];
+	x0s = new double[NBLOCKS];
+	y0s = new double[NBLOCKS];
+	hs = new double[NBLOCKS];
 
 	for(int i = 0; i < NBLOCKS; ++i)
 	{
@@ -179,10 +180,10 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 	}
     }
 
-    const realtype eps = std::numeric_limits<realtype>::epsilon() * 10;
+    const double eps = std::numeric_limits<double>::epsilon() * 10;
 
-    realtype * xtargets = new realtype[NDST];
-    realtype * ytargets = new realtype[NDST];
+    double * xtargets = new double[NDST];
+    double * ytargets = new double[NDST];
 
     printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
     const double tstart = omp_get_wtime();
@@ -212,16 +213,16 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 #pragma omp parallel for
 		for(int i = OFFSET; i < NDST; i += JUMP)
 		{
-		    const realtype xd = xdst[i];
-		    const realtype yd = ydst[i];
+		    const double xd = xdst[i];
+		    const double yd = ydst[i];
 
-		    realtype s = 0;
+		    double s = 0;
 
 		    for(int j = 0; j < NSRC; ++j)
 		    {
-			const realtype xr = xd - xsrc[j];
-			const realtype yr = yd - ysrc[j];
-			const realtype r = sqrt(xr * xr + yr * yr + eps);
+			const double xr = xd - xsrc[j];
+			const double yr = yd - ysrc[j];
+			const double r = sqrt(xr * xr + yr * yr + eps);
 			s += log(r) * sources[j];
 		    }
 
@@ -231,16 +232,16 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 #pragma omp parallel for
 		for(int i = OFFSET; i < NDST; i += JUMP)
 		{
-		    const realtype xd = xdst[i];
-		    const realtype yd = ydst[i];
+		    const double xd = xdst[i];
+		    const double yd = ydst[i];
 
-		    realtype xs = 0, ys = 0;
+		    double xs = 0, ys = 0;
 
 		    for(int j = 0; j < NSRC; ++j)
 		    {
-			const realtype xr = xd - xsrc[j];
-			const realtype yr = yd - ysrc[j];
-			const realtype factor = sources[j] / (xr * xr + yr * yr + eps);
+			const double xr = xd - xsrc[j];
+			const double yr = yd - ysrc[j];
+			const double factor = sources[j] / (xr * xr + yr * yr + eps);
 			xs += xr * factor;
 			ys += yr * factor;
 		    }
@@ -251,7 +252,7 @@ void test(realtype theta, double tol, FILE * f = NULL, bool potential = true, bo
 
 	    if (verify)
 	    {
-		std::vector<realtype> a, b, c, d;
+		std::vector<double> a, b, c, d;
 
 		for(int i = OFFSET; i < NDST; i += JUMP)
 		{
@@ -320,7 +321,7 @@ int main(int argc, char ** argv)
 		printf("reading from <%s> ...\n", filename);
 
 	    FILE * fin = fopen(filename, "r");
-	    assert(fin && sizeof(realtype) == sizeof(double));
+	    assert(fin && sizeof(double) == sizeof(double));
 	    if (!mragfile && (testt & P_TEST))
 		test(theta, tol, fin, true, verify);
 
@@ -334,10 +335,10 @@ int main(int argc, char ** argv)
 	    fclose(fin);
 	};
 
-/*    file2test("testDiego/diegoBinaryN400", false, P_TEST);
+    file2test("testDiego/diegoBinaryN400", false, P_TEST);
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
-
+/*
      file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
     file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);

@@ -10,20 +10,21 @@
  *  before getting a written permission from the author of this file.
  */
 
+
 #include <cassert>
 #include <cmath>
 #include <cstring>
 
-#include "treecode.h"
-#include "upward-kernels.h"
-#include "potential-kernels.h"
-#include "upward.h"
 
-#define _INSTRUMENTATION_
+#include "upward-kernels.h"
+#include "upward.h"
+#include "potential-kernels.h"
+
+//#define _INSTRUMENTATION_
 
 namespace EvaluatePotential
 {
-    struct NodePotential : Tree::NodeImplementation<ORDER> { }; 
+    struct NodePotential : Tree::NodeImplementation { }; 
 
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
@@ -92,6 +93,7 @@ namespace EvaluatePotential
 using namespace EvaluatePotential;
 
 extern "C"
+__attribute__ ((visibility ("default")))
 void treecode_potential(const realtype theta,
 			const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
 			const realtype * const xdst, const realtype * const ydst, const int ndst, realtype * const vdst)

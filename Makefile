@@ -10,58 +10,28 @@
 # before getting a written permission from the author of this file.
 #
 
+potential-order=12
+force-order=24
+mrag-blocksize=32
 CXX ?= g++
-CC = gcc -std=c99
-LOCKLESS_ALLOCATOR_OBJ = ~/lockless_allocator/libllalloc.o
 
-real ?= double
-treecode-potential-order ?= 12
-treecode-force-order ?= 24
-mrag-blocksize ?= 32
-config ?= release
-backend ?= sse
-
-CXXFLAGS = -std=c++11  -fopenmp -Drealtype=$(real)  -DORDER=$(treecode-potential-order) -DBLOCKSIZE=$(mrag-blocksize)
+TESTOPT = real=double mrag-blocksize=32
+CXXFLAGS = -std=c++11 -fopenmp \
+	-DBLOCKSIZE=$(mrag-blocksize)
 
 ifeq "$(gprof)" "1"
-	CXXFLAGS += -pg
 	TLPFLAGS += -pg
 endif
 
-test: main.cpp libtreecode.a
-	$(CXX) $(CXXFLAGS) -g $^ -o test
+test: main.cpp libraries
+	$(CXX) $(CXXFLAGS) -g $<  libtreecode-potential.so libtreecode-force.so -o test 
 
-libtreecode.a: $(OBJS) TLP/treecode.h kernels drivers header svml
-	ar rcs libtreecode.a TLP/*.o ILP+DLP/*.o $(LOCKLESS_ALLOCATOR_OBJ)
-
-#	svml/svml_d_log2_iface_la.o \
-	svml/svml_d_feature_flag_.o \
-	svml/cpu_feature_disp.o \
-	svml/svml_d_log2_core_h9la.o \
-	svml/svml_d_log2_core_exla.o \
-	svml/svml_d_log2_core_e7la.o
-
-svml:
-	$(shell mkdir svml ; cd svml; \
-	ar -x /opt/intel/composer_xe_2013_sp1.2.144/compiler/lib/intel64/libsvml.a; \
-	ar -x /opt/intel/composer_xe_2013_sp1.2.144/compiler/lib/intel64/libirc.a; \
-	cd ..)
-
-header:
-	m4 -D realtype=$(real) TLP/treecode.h | sed '/typedef/d'  > treecode.h
-
-drivers: kernels
-	make -C TLP drivers CXX="$(CXX)" \
-	treecode-potential-order=$(treecode-potential-order) \
-	treecode-force-order=$(treecode-force-order)
-
-kernels:
-	make -C ILP+DLP potential order=$(treecode-potential-order)
-	make -C ILP+DLP force order=$(treecode-force-order)	
+libraries:
+	make -f libraries.Makefile order=$(potential-order) libtreecode-potential.so
+	make -f libraries.Makefile order=$(force-order) mrag-blocksize=32 libtreecode-force.so
 
 clean:
-	rm -f test libtreecode.a treecode.h
-	make -C TLP clean
-	make -C ILP+DLP clean
+	rm -f test
+	make -f libraries.Makefile clean
 
-.PHONY = clean header drivers kernels
+.PHONY = clean

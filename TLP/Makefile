@@ -9,48 +9,42 @@
 # to employ the present software for their own publications
 # before getting a written permission from the author of this file.
 #
-
-CXX ?= g++
 real ?= double
-
-treecode-potential-order ?= 12
-treecode-force-order ?= 24
+order ?= 12
 mrag-blocksize ?= 32
+CXX ?= g++
 
-UPWARDKERNELS_POTENTIAL = upward-kernels-order$(treecode-potential-order)
-UPWARDKERNELS_FORCE=upward-kernels-order$(treecode-force-order)
-
-OBJS = treecode-potential.o treecode-force.o upward.o
-
-config ?=release
-
-TLPFLAGS = -I../ILP+DLP/ -Wno-psabi -std=c++11 -march=native -fopenmp -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize)
+CXXFLAGS = -I../ILP+DLP/ -std=c++11 -fPIC
+CXXFLAGS += -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15
+CXXFLAGS += -O3 -march=native -fopenmp -fvisibility=hidden  
 
 ifeq "$(config)" "release"
-	TLPFLAGS += -O3 -DNDEBUG 
+	TLPFLAGS +=  -DNDEBUG
 else
-	TLPFLAGS += -g
+#TLPFLAGS += -g -G
 endif
 
-ifeq "$(gprof)" "1"
-	CXXFLAGS += -pg
+ifeq "$(profiling)" "1"
 	TLPFLAGS += -pg
 endif
 
-drivers: $(OBJS)
+potential: treecode-potential.o order$(order)-upward.o #sort-sources.o driver.o
 
-treecode-potential.o: treecode-potential.cpp treecode.h Makefile
-	$(CXX) $(TLPFLAGS) -DORDER=$(treecode-potential-order) -c $<
+force: treecode-force.o order$(order)-upward.o #sort-sources.o
 
-treecode-force.o: treecode-force.cpp treecode.h Makefile
-	$(CXX) $(TLPFLAGS) \
-	$(shell ../ILP+DLP/instruction-count.sh  FORCE_E2P_TILED ../ILP+DLP/force-kernels-tiled.o) \
-	-DORDER=$(treecode-force-order) -c $<
+treecode-potential.o: treecode-potential.cpp treecode-potential.h Makefile
+	$(CXX) $(CXXFLAGS) -c $<
 
-upward.o: upward.cpp upward.h Makefile
-	$(CXX) $(TLPFLAGS) -c $<
+treecode-force.o: treecode-force.cpp treecode-force.h Makefile
+	$(CXX) $(CXXFLAGS) -c $<
+
+order$(order)-upward.o: upward.cpp upward.h Makefile
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+#sort-sources.o: sort-sources.cpp sort-sources.h Makefile
+#	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
 	rm -f *.o 
 
-.PHONY = clean
+.PHONY = clean potential force

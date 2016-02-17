@@ -23,7 +23,7 @@ endif
 potential force: $(OBJS)
 
 %.o: %.ispc Makefile
-	ispc  $< -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math --wno-perf -o $@
+	ispc  $< -O3 --arch=x86-64 --cpu=core-avx2  --target=avx2-i64x4 --math-lib=fast --opt=disable-assertions --opt=fast-math --wno-perf --pic -o $@
 
 order$(order)-%.ispc: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@

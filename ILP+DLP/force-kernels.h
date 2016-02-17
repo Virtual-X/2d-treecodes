@@ -19,25 +19,6 @@ extern "C"
 {
 #endif
 
-    void force_p2p(const realtype * __restrict__ const xsources,
-		   const realtype * __restrict__ const ysources,
-		   const realtype * __restrict__ const sources,
-		   const int nsources,
-		   const realtype _xt,
-		   const realtype _yt,
-		   realtype * const xresult,
-		   realtype * const yresult);
-
-    void reference_force_p2p_tiled(const realtype * __restrict__ const xsources,
-				   const realtype * __restrict__ const ysources,
-				   const realtype * __restrict__ const sources,
-				   const int nsources,
-				   const realtype xt,
-				   const realtype yt,
-				   const realtype h,
-				   realtype * const xresult,
-				   realtype * const yresult, const int );
-
     
     void force_p2p_tiled(const realtype * __restrict__ const xsources,
 			 const realtype * __restrict__ const ysources,
@@ -48,7 +29,7 @@ extern "C"
 			 const realtype h,
 			 realtype * const xresult,
 			 realtype * const yresult);
-
+/*
     void reference_force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
 					   const float * __restrict__ const ysrc,
 					   const float * __restrict__ const vsrc,
@@ -59,23 +40,10 @@ extern "C"
 					   float * const xresult,
 					   float * const yresult,
 					   const int stride);
+*/
 
-    void force_e2p(const realtype mass,
-		   const realtype rx,
-		   const realtype ry,
-		   const realtype * __restrict__ const rxp,
-		   const realtype * __restrict__ const ixp,
-		   realtype * const xresult,
-		   realtype * const yresult);
 
-    void reference_force_e2p_tiled(const realtype mass,
-				   const realtype rx,
-				   const realtype ry,
-				   const realtype h,
-				   const realtype * __restrict__ const rxp,
-				   const realtype * __restrict__ const ixp,
-				   realtype * const xresult,
-				   realtype * const yresult, const int stride);
+   
 
     void force_e2p_tiled(const realtype mass,
 			 const realtype rx,

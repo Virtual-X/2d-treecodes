@@ -12,68 +12,34 @@
 
 #pragma once
 
-#define _CONCATENATE_BODY(a, b) a ## b
-#define _CONCATENATE(a, b) _CONCATENATE_BODY(a, b)
+typedef REAL realtype;
 
-#define P2E_KERNEL _CONCATENATE(upward_p2e_order, ORDER)
-#define REFERENCE_P2E_KERNEL _CONCATENATE(reference_upward_p2e_order, ORDER)
-#define E2E_KERNEL _CONCATENATE(upward_e2e_order, ORDER)
-#define REFERENCE_E2E_KERNEL _CONCATENATE(reference_upward_e2e_order, ORDER)
-
-#ifdef __cplusplus
 extern "C"
-{
-#endif
-    void P2E_KERNEL(const realtype * __restrict__ const xsources,
-		    const realtype * __restrict__ const ysources,
-		    const realtype * __restrict__ const sources,
-		    const int nsources,
-		    const realtype x0,
-		    const realtype y0,
-		    const realtype h,
-		    realtype * const mass,
-		    realtype * const weight,
-		    realtype * const xsum,
-		    realtype * const ysum,
-		    realtype * const radius,
-		    realtype * __restrict__ const rexpansions,
-		    realtype * __restrict__ const iexpansions);
+__attribute__ ((visibility ("hidden")))
+void upward_p2e(
+    const  realtype xsources[],
+    const  realtype ysources[],
+    const  realtype vsources[],
+    const  int nsources,
+    const  realtype x0,
+    const  realtype y0,
+    const  realtype h,
+    realtype *  mass,
+    realtype *  weight,
+    realtype *  xsum,
+    realtype *  ysum,
+    realtype *  radius,
+    realtype rexpansions[],
+    realtype iexpansions[]);
 
-     void REFERENCE_P2E_KERNEL(const realtype * __restrict__ const xsources,
-		    const realtype * __restrict__ const ysources,
-		    const realtype * __restrict__ const sources,
-		    const int nsources,
-		    const realtype x0,
-		    const realtype y0,
-		    const realtype h,
-		    realtype * const mass,
-		    realtype * const weight,
-		    realtype * const xsum,
-		    realtype * const ysum,
-		    realtype * const radius,
-		    realtype * __restrict__ const rexpansions,
-		    realtype * __restrict__ const iexpansions);
 
-    typedef realtype V4 __attribute__ ((vector_size (sizeof(realtype) * 4)));
-
-    void E2E_KERNEL(const realtype * const x0s, 
-		    const realtype * const y0s,
-		    const realtype * const masses, 
-		    const realtype * __restrict__ const * vrexpansions,
-		    const realtype * __restrict__ const * viexpansions,
-		    realtype * __restrict__ const rdstxp,
-		    realtype * __restrict__ const idstxp);
-    
- void REFERENCE_E2E_KERNEL(const realtype * const x0s, 
-		    const realtype * const y0s,
-		    const realtype * const masses, 
-		    const realtype * __restrict__ const * vrexpansions,
-		    const realtype * __restrict__ const * viexpansions,
-		    realtype * __restrict__ const rdstxp,
-		    realtype * __restrict__ const idstxp);
-    
-    
-#ifdef __cplusplus
-}
-#endif
-
+extern "C"
+__attribute__ ((visibility ("hidden")))
+void upward_e2e(
+    const realtype x0s[],
+    const realtype y0s[],
+    const realtype masses[],
+    const realtype *  vrxps[],
+    const realtype *  vixps[],
+    realtype rdstxp[],
+    realtype idstxp[]);

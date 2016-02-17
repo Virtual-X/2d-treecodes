@@ -3,10 +3,7 @@ divert(-1)
 define(GANGSIZE, 8)
 divert(0) dnl dnl dnl
 
-define(P2E_KERNEL, upward_p2e_order$1)
-define(E2E_KERNEL, upward_e2e_order$1)
-
-export void P2E_KERNEL(ORDER)(
+export void upward_p2e(
        const uniform realtype xsources[],
        const uniform realtype ysources[],
        const uniform realtype vsources[],
@@ -132,7 +129,7 @@ export void P2E_KERNEL(ORDER)(
 }
 
 
-export void E2E_KERNEL(ORDER)(
+export void upward_e2e(
             uniform const realtype x0s[],
             uniform const realtype y0s[],
             uniform const realtype masses[],

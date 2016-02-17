@@ -1,5 +1,5 @@
 /*
- *  treecode-kernels.c
+ *  treecode-force.h
  *  Part of MRAG/2d-treecode-potential
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
@@ -18,16 +18,8 @@ typedef REAL realtype;
 extern "C"
 {
 #endif
-    void treecode_potential(const realtype theta,
-			    const realtype * const xsources,
-			    const realtype * const ysources,
-			    const realtype * const sourcevalues,
-			    const int nsources,
-			    const realtype * const xtargets,
-			    const realtype * const ytargets,
-			    const int ntargets,
-			    realtype * const targetvalues);
-
+    
+    __attribute__ ((visibility ("default")))
     void treecode_force(const realtype theta,
 			const realtype * const xsources,
 			const realtype * const ysources,
@@ -38,7 +30,8 @@ extern "C"
 			const int ntargets,
 			realtype * const xresult,
 			realtype * const yresult);
-
+    
+    __attribute__ ((visibility ("default")))
     void treecode_force_mrag(const realtype theta,
 			     const realtype * const xsources,
 			     const realtype * const ysources,

@@ -19,7 +19,7 @@
 #include <limits>
 #include <utility>
 
-typedef REAL realtype;
+#include "upward-kernels.h"
 
 namespace Tree
 {
@@ -110,7 +110,7 @@ namespace Tree
     };
 
 #ifdef ORDER
-    template<int XXXDONTCARE>
+  
 	struct NodeImplementation : Node
     {
 	typedef realtype alignedvec[ORDER] __attribute__ ((aligned (32)));
@@ -131,7 +131,7 @@ namespace Tree
 	{
 	 
 #if 1
-	    P2E_KERNEL(xsources, ysources, vsources, e - s,
+	    upward_p2e(xsources, ysources, vsources, e - s,
 		       x0, y0, h, &mass, &w, &wx, &wy, &r,
 		       rexpansions, iexpansions);
 #else
@@ -144,7 +144,7 @@ namespace Tree
 	void e2e() override
 	{
 	  realtype srcmass[4], rx[4], ry[4];
-	  realtype * chldrxp[4], *chldixp[4];
+	  const realtype * chldrxp[4], *chldixp[4];
 
 	    for(int c = 0; c < 4; ++c)
 	    {
@@ -157,7 +157,7 @@ namespace Tree
 		chldixp[c] = chd->iexpansions;
 	    }
 #if 1
-	    E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
+	    upward_e2e(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
 #else
 	    REFERENCE_E2E_KERNEL(rx, ry, srcmass, chldrxp, chldixp, rexpansions, iexpansions);
 #endif
