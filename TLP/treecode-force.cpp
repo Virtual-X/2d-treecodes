@@ -169,7 +169,96 @@ namespace EvaluateForce
 	perfmon.failed = maxentry >= sizeof(stack) / sizeof(*stack);
 #endif
     }
+    
+long long combi(int n,int k)
+	    {
+		long long ans = 1;
 
+		k = k > n - k ? n - k : k;
+		
+		for(int j = 1; j <= k; j++, n--)
+		{
+		    if(n % j == 0)
+		    {
+			ans *= n / j;
+		    }
+		    else
+			if(ans % j == 0)
+			{
+			    ans = ans / j * n;
+			}
+			else
+			{
+			    ans = (ans * n) / j;
+			}
+		}
+
+		return ans;
+	    }
+
+#define TMP(a, b) (a)[b]
+    
+   void naive_downward_e2l(
+	const realtype x0s[],
+	const realtype y0s[],
+	const realtype masses[],
+	const realtype * vrxps[],
+	const realtype * vixps[],
+	const int nexpansions,
+	realtype rlocal[],
+	realtype ilocal[])
+{
+    for(int i = 0;  i < nexpansions; ++i)
+	{
+		const realtype * const rxp = vrxps[i];
+		const realtype * const ixp = vixps[i];
+		const realtype mass = masses[i];
+		
+		const realtype x0 = x0s[i];
+		const realtype y0 = y0s[i];
+		
+		const realtype r2z0 = x0 * x0 + y0 * y0;
+		realtype rinvz[100], iinvz[100], rcoeff[100], icoeff[100];
+		
+    		rinvz[1] = x0 / r2z0;
+    		iinvz[1] = -y0 / r2z0;
+
+		for(int j = 1; j <= ORDER; ++j)
+		{
+		    if (j > 1)
+		    {
+			TMP(rinvz, j) = TMP(rinvz,  (j - 1)) * rinvz[1] - TMP(iinvz,  (j - 1)) * iinvz[1];
+			TMP(iinvz, j) = TMP(rinvz,  (j - 1)) * iinvz[1] + TMP(iinvz,  (j - 1)) * rinvz[1];
+		    }
+		    
+		    TMP(rcoeff, j) =  rxp[ (j - 1)] * TMP(rinvz, j) - ixp[ (j - 1)] * TMP(iinvz, j);
+		    TMP(icoeff, j) =  rxp[ (j - 1)] * TMP(iinvz, j) + ixp[ (j - 1)] * TMP(rinvz, j);
+		}
+		
+		for(int l = 1; l <= ORDER; ++l)
+      		{
+		    const realtype prefac =  -mass / l;
+
+		    realtype rtmp = prefac, itmp = 0;
+		    
+		    for(int k = 1; k <= ORDER; ++k)
+		    {
+			const realtype BINFAC = combi(l + k - 1, k - 1);
+			const int mysign = k % 2 ? -1 : +1;
+			rtmp += mysign * BINFAC * TMP(rcoeff, k);
+			itmp += mysign * BINFAC * TMP(icoeff, k);
+		    }
+		    
+		    realtype rpartial =  (rtmp ) * TMP(rinvz, l) -  (itmp) * TMP(iinvz, l);
+		    realtype ipartial =  (rtmp ) * TMP(iinvz, l) +  (itmp) * TMP(rinvz, l);
+
+			rlocal[l] += (rpartial);
+			ilocal[l] += (ipartial);
+		}
+	}
+}
+
+    
     template<int size>
     struct E2LWork
     {
@@ -185,7 +274,7 @@ namespace EvaluateForce
 	void _flush()
 	    {
 	      const int64_t startc = MYRDTSC;
-	     downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
+	     naive_downward_e2l(x0s, y0s, masses, rxps, ixps, count, rdst, idst);
 	      
 	      const int64_t endc = MYRDTSC;
 

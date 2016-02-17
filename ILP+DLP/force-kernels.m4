@@ -122,7 +122,7 @@ export void downward_e2l(
 			` - mass', 
 			`mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
 
-			pushdef(`BINFAC', `BINOMIAL(eval(l + k - 1), eval(k - 1)).f')dnl
+			pushdef(`BINFAC', `BINOMIAL(eval(l + k - 1), eval(k - 1)).')dnl
 			const realtype TMP(rtmp, l) = TMP(prefac, l) LUNROLL(k, 1, eval(ORDER),`
        			mysign(k) ifelse(BINFAC,1.f,,`BINFAC *') TMP(rcoeff, k)');
 
