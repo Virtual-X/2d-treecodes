@@ -25,6 +25,41 @@ namespace Tree
 {
     struct Node
     {
+	int s, e;
+	
+	realtype mass, xcom, ycom, r;
+
+	union
+	{
+	    bool innernode;
+	    int childbase;
+	} state;
+
+	
+	void setup(int s, int e)
+	    {
+		this->s = s;
+		this->e = e;
+		this->state.childbase = 0;
+	    }
+    };
+
+    extern realtype *xdata, *ydata, *vdata, *expansions;
+
+    extern Node *nodes;
+    
+    void build(const realtype * const xsrc,
+	       const realtype * const ysrc,
+	       const realtype * const vsrc,
+	       const int nsrc,
+	       const int LEAF_MAXCOUNT);
+    
+    void dispose();
+};
+
+    /*
+    struct Node
+    {
 	int x, y, l, s, e;
 	bool leaf;
       int64_t e2ecycles, p2ecycles, searchcycles, allcycles;
@@ -181,11 +216,6 @@ namespace Tree
 	}
     };
 #endif
-
-    extern realtype *xdata, *ydata, *vdata;
-
-    void build(const realtype * const xsrc, const realtype * const ysrc, const realtype * const vsrc, const int nsrc,
-	       Node * const root, const int LEAF_MAXCOUNT);
-
-    void dispose();
-};
+    */
+    
+   

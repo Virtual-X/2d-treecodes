@@ -36,8 +36,6 @@
 
 namespace EvaluateForce
 {
-    struct NodeForce : Tree::NodeImplementation { };
-
     realtype *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
     float *xdata_fp32 = nullptr, *ydata_fp32 = nullptr, *vdata_fp32 = nullptr;
 
@@ -310,12 +308,12 @@ long long combi(int n,int k)
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
-		  const NodeForce & root, const realtype theta)
+		  const realtype theta)
     {
 	//const bool localexp = true;
 	int maxentry = 0;
 
-	const NodeForce * stack[15 * 4 * 2];
+	int stack[LMAX * 4 * 2];
 
 	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 
@@ -357,21 +355,24 @@ long long combi(int n,int k)
 #endif
 
 		int stackentry = 0;
-		stack[0] = &root;
+		stack[0] = 0;
 
 		while(stackentry > -1)
 		{
-		    const NodeForce * const node = stack[stackentry--];
+		    const int nodeid = stack[stackentry--];
+		    const Tree::Node * const node = Tree::nodes + nodeid;
 
-		    const realtype xcom = node->xcom();
-		    const realtype ycom = node->ycom();
+		    const realtype xcom = node->xcom;
+		    const realtype ycom = node->ycom;
 
 		    const realtype distance = sqrt(pow(x0brick - xcom, 2) + pow(y0brick - ycom, 2));
 
 		    const bool localexpansion_converges = (distance / node->r - 1) > (1 / theta) && rbrick <= node->r;
 
 		    if (localexpansion_converges)
-			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass, node->rexpansions, node->iexpansions);
+			e2lwork.push(xcom - x0brick, ycom - y0brick, node->mass,
+				     Tree::expansions + ORDER * (2 * nodeid + 0),
+				     Tree::expansions + ORDER * (2 * nodeid + 1));
 		    else
 		    {
 			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
@@ -389,8 +390,9 @@ long long combi(int n,int k)
 				    node->rexpansions, node->iexpansions, &xresult[ty][tx], &yresult[ty][tx], BRICKSIZE);*/
 			    
 			    force_e2p_tiled(node->mass, x0 + (bx + 0) * h - xcom, y0 + (by + 0) * h - ycom, h,
-					    node->rexpansions, node->iexpansions, &xresult[0][0],
-					    &yresult[0][0]);
+					    Tree::expansions + ORDER * (2 * nodeid + 0),
+					    Tree::expansions + ORDER * (2 * nodeid + 1),
+					    &xresult[0][0], &yresult[0][0]);
 			    int64_t endc = MYRDTSC;
 
 #ifdef _INSTRUMENTATION_
@@ -400,7 +402,7 @@ long long combi(int n,int k)
 			}
 			else
 			{
-			    if (node->leaf)
+			    if (!node->state.innernode)
 			    {
 				const int s = node->s;
 
@@ -435,7 +437,7 @@ long long combi(int n,int k)
 			    else
 			    {
 				for(int c = 0; c < 4; ++c)
-				    stack[++stackentry] = (NodeForce *)node->children[c];
+				    stack[++stackentry] = node->state.childbase + c;
 
 				maxentry = std::max(maxentry, stackentry);
 			    }
@@ -595,10 +597,10 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 			     realtype * const xdst,
 			     realtype * const ydst)
     {
-	NodeForce root;
+	
 
 	const double t0 = omp_get_wtime();
-	Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 192); //before: 128
+	Tree::build(xsrc, ysrc, vsrc, nsrc, 192); //before: 128
 	const double t1 = omp_get_wtime();
 
 	xdata = Tree::xdata;
@@ -627,7 +629,7 @@ printf("EVALUATION TRAVERSAL CYCLES ===============================\n");
 
 #pragma omp for schedule(dynamic,1)
 	    for(int i = 0; i < nblocks; ++i)
-		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], root, theta);
+		evaluate(xdst + i * BLOCKSIZE * BLOCKSIZE, ydst + i * BLOCKSIZE * BLOCKSIZE, x0s[i], y0s[i], hs[i], theta);
 
 	    perfmon.endc = MYRDTSC;
 #ifdef _INSTRUMENTATION_

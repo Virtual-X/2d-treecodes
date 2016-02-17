@@ -24,16 +24,14 @@
 
 namespace EvaluatePotential
 {
-    struct NodePotential : Tree::NodeImplementation { }; 
-
     realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
 
 
-    void evaluate(realtype * const result, const realtype xt, const realtype yt, const NodePotential & root)
+    void evaluate(realtype * const result, const realtype xt, const realtype yt)
     {
 	enum { BUFSIZE = 16 };
 	
-	const NodePotential * stack[15 * 3 * 2];
+	int stack[LMAX * 3 * 2];
 
 	int bufcount = 0;
 	realtype rzs[BUFSIZE], izs[BUFSIZE], masses[BUFSIZE];
@@ -41,23 +39,26 @@ namespace EvaluatePotential
 
 	int stackentry = 0, maxentry = 0;
 
-	stack[0] = &root;
+	stack[0] = 0;
 	*result = 0;
 	while(stackentry > -1)
 	{
-	    const NodePotential * const node = stack[stackentry--];
+	    const int nodeid = stack[stackentry--];
+	    const Tree::Node * const node = Tree::nodes + nodeid;
+
+	    assert(nodeid < node->state.childbase || !node->state.innernode);
 
 	    realtype tmp[2];
-
-	    const realtype r2 = pow(xt - node->xcom(), 2) + pow(yt - node->ycom(), 2);
+	    
+	    const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
 
 	    if (node->r * node->r < thetasquared * r2)
 	    {
-		rzs[bufcount] = xt - node->xcom();
-		izs[bufcount] = yt - node->ycom();
+		rzs[bufcount] = xt - node->xcom;
+		izs[bufcount] = yt - node->ycom;
 		masses[bufcount] = node->mass;
-		rxps[bufcount] = node->rexpansions;
-		ixps[bufcount] = node->iexpansions;
+		rxps[bufcount] = Tree::expansions + ORDER * (2 * nodeid + 0);
+		ixps[bufcount] = Tree::expansions + ORDER * (2 * nodeid + 1);
 		++bufcount;
 		
 		if (bufcount == BUFSIZE)
@@ -69,7 +70,7 @@ namespace EvaluatePotential
 	    }
 	    else
 	    {
-		if (node->leaf)
+		if (!node->state.innernode)
 		{
 		    const int s = node->s;
 
@@ -78,7 +79,7 @@ namespace EvaluatePotential
 		else
 		{
 		    for(int c = 0; c < 4; ++c)
-			stack[++stackentry] = (NodePotential *)node->children[c];
+			stack[++stackentry] = node->state.childbase + c;
 
 		    maxentry = std::max(maxentry, stackentry);
 		}
@@ -100,18 +101,17 @@ void treecode_potential(const realtype theta,
 {
     thetasquared = theta * theta;
 
-    NodePotential root;
     const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, &root, 32 * 16); //before: 64
+    Tree::build(xsrc, ysrc, vsrc, nsrc, 32 * 16); //before: 64
     const double t1 = omp_get_wtime();
 
     xdata = Tree::xdata;
     ydata = Tree::ydata;
     vdata = Tree::vdata;
-
+    printf("heeello\n");
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
-	evaluate(vdst + i, xdst[i], ydst[i], root);
+	evaluate(vdst + i, xdst[i], ydst[i]);
 
     Tree::dispose();    
     const double t2 = omp_get_wtime();
