@@ -1,8 +1,6 @@
 # 2d-treecode-potential
-This repository is about efficient 2D fast multipole solver implementation for multicore CPUs and GPUs.
-
-This libraries implements two FMM 2D solvers with open boundary conditions.
-The libraries expose two function signatures:
+This repository is about efficient 2D fast multipole solver (open BC) implementation for multicore CPUs and GPUs.
+Two function signatures are exposed to the client code:
 
      void treecode_potential(const double theta,
 		const double * const xsources,
