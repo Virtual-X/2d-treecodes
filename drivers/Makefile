@@ -14,14 +14,14 @@ real ?= double
 order ?= 12
 mrag-blocksize ?= 32
 config ?= release
-CXX ?= g++
+CXX = icpc
 
 CXXFLAGS = -I../kernels/ -std=c++11 -fPIC
 CXXFLAGS += -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX=15
 CXXFLAGS += -O3 -march=native -fopenmp -fvisibility=hidden -fstrict-aliasing
 
 ifeq "$(config)" "release"
-	CXXFLAGS +=  -DNDEBUG --fast-math 
+	CXXFLAGS +=  -DNDEBUG -Ofast
 else
 	CXXFLAGS += -g
 endif

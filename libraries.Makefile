@@ -29,12 +29,12 @@ OBJS += $(wildcard kernels/order$(order)-*.o) kernels/upward-common.o
 lib2d-treecodes-potential.so: drivers/treecode-potential.h alldrivers
 	m4 -D realtype=$(real) drivers/treecode-potential.h | \
 	sed '/typedef/d' | sed '/attribute/d' > 2d-treecodes-potential.h
-	g++ -shared -o $@ $(OBJS)
+	icpc -shared -o $@ $(OBJS)
 
 lib2d-treecodes-force.so: drivers/treecode-force.h alldrivers
 	m4 -D realtype=$(real) drivers/treecode-force.h | \
 	sed '/typedef/d' | sed '/attribute/d' > 2d-treecodes-force.h
-	g++ -shared -o $@ $(OBJS)
+	icpc -shared -o $@ $(OBJS) -L/opt/intel/lib/intel64/
 
 alldrivers: allkernels
 	make -C drivers $(TARGET)

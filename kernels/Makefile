@@ -23,7 +23,7 @@ endif
 potential force: $(OBJS)
 
 %.o: %.cpp Makefile
-	$(CXX) -O4 -fstrict-aliasing -march=native -mtune=native -ffast-math \
+	icpc -Ofast -march=native -mtune=native -fno-alias \
 	 -fPIC -Drealtype=$(real) -c  $< 
 
 order$(order)-%.cpp: %.m4 Makefile

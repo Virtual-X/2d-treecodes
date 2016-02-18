@@ -13,7 +13,7 @@
 potential-order=12
 force-order=24
 mrag-blocksize=32
-CXX ?= g++
+CXX = icpc
 
 CXXFLAGS = -std=c++11 -fopenmp \
 	-DBLOCKSIZE=$(mrag-blocksize)
