@@ -25,7 +25,7 @@ potential force: $(OBJS)
 %.o: %.ispc Makefile
 	ispc  $< -Drealtype=$(real) -O3 --arch=x86-64 --math-lib=fast \
 	--opt=disable-assertions --opt=fast-math \
-	--cpu=core-avx2 --target=avx2-i64x4 \
+	--cpu=haswell --target=avx2-i64x4 \
 	--wno-perf --pic -o $@
 
 order$(order)-%.ispc: %.m4 Makefile
