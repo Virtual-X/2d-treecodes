@@ -162,7 +162,7 @@ namespace EvaluateForce
 			xresultbase[bx + ix + BLOCKSIZE * (by + iy)] = result[ix + TILE * iy];
 
 		for(int iy = 0; iy < TILE; ++iy)
-		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+		    for(int ix = 0; ix < TILE; ++ix)
 			yresultbase[bx + ix + BLOCKSIZE * (by + iy)] = result[BRICKSIZE + ix + TILE * iy];
 	    }
     }
