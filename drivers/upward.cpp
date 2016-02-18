@@ -59,7 +59,7 @@ namespace Tree
     realtype ext, xmin, ymin;
     
     void build_leaf(const int nodeid, const int s, const int e,
-		      const realtype x0, const realtype y0, const realtype h)
+		    const realtype x0, const realtype y0, const realtype h)
     {
 	Node * node = nodes + nodeid;
 	NodeHelper * helper = bufhelpers + nodeid;
@@ -195,8 +195,8 @@ namespace Tree
 		    upward_e2e(rx, ry, srcmass, chldrxp, chldixp, dst, dst + ORDER);
 		}
 #ifndef NDEBUG
-		for(int i = 0; i < 2 * ORDER; ++i)
-		    assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
+	    for(int i = 0; i < 2 * ORDER; ++i)
+		assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
 #endif
 		
 	    node = parent; 

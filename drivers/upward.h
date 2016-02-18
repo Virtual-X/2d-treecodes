@@ -19,7 +19,7 @@
 #include <limits>
 #include <utility>
 
-#include "upward-kernels.h"
+typedef REAL realtype;
 
 namespace Tree
 {

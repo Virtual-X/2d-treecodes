@@ -1,6 +1,6 @@
 /*
  *  main.cpp
- *  2d-treecodes
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -11,7 +11,6 @@
  */
 
 #include <unistd.h>
-
 #include <omp.h>
 
 #include <cstdlib>
@@ -27,12 +26,12 @@
 #include "2d-treecodes-force.h"
 #include "2d-treecodes-potential.h"
 
-double  tol = 1e-8;
+double tol = 1e-8;
 
 void check(const double * ref, const double * res, const int N)
 {
     double linf = 0, l1 = 0, linf_rel = 0, l1_rel = 0;
-    
+
     for(int i = 0; i < N; ++i)
     {
 	assert(!std::isnan(ref[i]));
@@ -141,7 +140,6 @@ void test(double theta, double tol, FILE * f = NULL, bool potential = true, bool
 
 		xref[i] = -tmp1;
 		yref[i] = tmp0;
-		;//xref[i] /= 2.0 * M_PI;
 	    }
 	}
     }
@@ -171,12 +169,6 @@ void test(double theta, double tol, FILE * f = NULL, bool potential = true, bool
 	    x0s[i] = xdst[i * BS2];
 	    y0s[i] = ydst[i * BS2];
 	    hs[i] = xdst[i * BS2 + 1] - xdst[i * BS2];
-	    /*printf("h: %f test: %f %f %f %f\n",
-	      hs[i],
-	      xdst[i * BS2 + 1] - xdst[i * BS2],
-	      ydst[i * BS2 + BLOCKSIZE] - ydst[i * BS2],
-	      xdst[i * BS2 + BLOCKSIZE + 1] - xdst[i * BS2 + BLOCKSIZE],
-	      ydst[i * BS2 + BLOCKSIZE + 1] - ydst[i * BS2 + 1]);*/
 	}
     }
 
@@ -187,6 +179,7 @@ void test(double theta, double tol, FILE * f = NULL, bool potential = true, bool
 
     printf("Testing %s with %d sources and %d targets (theta %.3e)...\n", (potential ? "POTENTIAL" : "FORCE"), NSRC, NDST, theta);
     const double tstart = omp_get_wtime();
+    
     if (potential)
 	treecode_potential(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets);
     else
@@ -196,78 +189,79 @@ void test(double theta, double tol, FILE * f = NULL, bool potential = true, bool
 	    treecode_force_mrag(theta, xsrc, ysrc, sources, NSRC, x0s, y0s, hs, NBLOCKS, xtargets, ytargets);
 	}
 	else
-	    ;//treecode_force(theta, xsrc, ysrc, sources, NSRC, xdst, ydst, NDST, xtargets, ytargets);
+	{
+	    printf("This file format is not support for velocities.\n");
+	    abort();
+	}
+    
     const double tend = omp_get_wtime();
 
     printf("\x1b[94msolved in %.2f ms\x1b[0m\n", (tend - tstart) * 1e3);
 
-#if 0 //while waiting clarifications from Sid, i overwrite his reference data with mine
-    if (!f)
-#endif
+    if (verify)
+    {
+	const int OFFSET = 7;
+	const int JUMP = 433;
+
+	if (potential)
+#pragma omp parallel for
+	    for(int i = OFFSET; i < NDST; i += JUMP)
+	    {
+		const double xd = xdst[i];
+		const double yd = ydst[i];
+
+		double s = 0;
+
+		for(int j = 0; j < NSRC; ++j)
+		{
+		    const double xr = xd - xsrc[j];
+		    const double yr = yd - ysrc[j];
+		    const double r = sqrt(xr * xr + yr * yr + eps);
+		    s += log(r) * sources[j];
+		}
+
+		xref[i] = s;
+	    }
+	else
+#pragma omp parallel for
+	    for(int i = OFFSET; i < NDST; i += JUMP)
+	    {
+		const double xd = xdst[i];
+		const double yd = ydst[i];
+
+		double xs = 0, ys = 0;
+
+		for(int j = 0; j < NSRC; ++j)
+		{
+		    const double xr = xd - xsrc[j];
+		    const double yr = yd - ysrc[j];
+		    const double factor = sources[j] / (xr * xr + yr * yr + eps);
+		    xs += xr * factor;
+		    ys += yr * factor;
+		}
+
+		xref[i] = xs;
+		yref[i] = ys;
+	    }
+
 	if (verify)
 	{
-	    const int OFFSET = 7;
-	    const int JUMP = 433;
+	    std::vector<double> a, b, c, d;
 
-	    if (potential)
-#pragma omp parallel for
-		for(int i = OFFSET; i < NDST; i += JUMP)
-		{
-		    const double xd = xdst[i];
-		    const double yd = ydst[i];
-
-		    double s = 0;
-
-		    for(int j = 0; j < NSRC; ++j)
-		    {
-			const double xr = xd - xsrc[j];
-			const double yr = yd - ysrc[j];
-			const double r = sqrt(xr * xr + yr * yr + eps);
-			s += log(r) * sources[j];
-		    }
-
-		    xref[i] = s;
-		}
-	    else
-#pragma omp parallel for
-		for(int i = OFFSET; i < NDST; i += JUMP)
-		{
-		    const double xd = xdst[i];
-		    const double yd = ydst[i];
-
-		    double xs = 0, ys = 0;
-
-		    for(int j = 0; j < NSRC; ++j)
-		    {
-			const double xr = xd - xsrc[j];
-			const double yr = yd - ysrc[j];
-			const double factor = sources[j] / (xr * xr + yr * yr + eps);
-			xs += xr * factor;
-			ys += yr * factor;
-		    }
-
-		    xref[i] = xs;
-		    yref[i] = ys;
-		}
-
-	    if (verify)
+	    for(int i = OFFSET; i < NDST; i += JUMP)
 	    {
-		std::vector<double> a, b, c, d;
-
-		for(int i = OFFSET; i < NDST; i += JUMP)
-		{
-		    a.push_back(xref[i]);
-		    b.push_back(xtargets[i]);
-		    c.push_back(yref[i]);
-		    d.push_back(ytargets[i]);
-		}
-
-		check(&a[0], &b[0], a.size());
-
-		if (!potential)
-		    check(&c[0], &d[0], c.size());
+		a.push_back(xref[i]);
+		b.push_back(xtargets[i]);
+		c.push_back(yref[i]);
+		d.push_back(ytargets[i]);
 	    }
+
+	    check(&a[0], &b[0], a.size());
+
+	    if (!potential)
+		check(&c[0], &d[0], c.size());
 	}
+    }
 
     if (mrag)
     {
@@ -321,15 +315,14 @@ int main(int argc, char ** argv)
 		printf("reading from <%s> ...\n", filename);
 
 	    FILE * fin = fopen(filename, "r");
+
 	    assert(fin && sizeof(double) == sizeof(double));
+
 	    if (!mragfile && (testt & P_TEST))
 		test(theta, tol, fin, true, verify);
 
 	    fseek(fin, 0, SEEK_SET);
 
-	    //    if (!mragfile && (testt & P_TEST))
-	    //	test(theta, tol, fin, true, verify);
-//fseek(fin, 0, SEEK_SET);
 	    if (testt & V_TEST)
 		test(theta, tol * 100, fin, false, verify, mragfile);
 	    fclose(fin);
@@ -338,12 +331,12 @@ int main(int argc, char ** argv)
     file2test("testDiego/diegoBinaryN400", false, P_TEST);
     file2test("testDiego/diegoBinaryN2000", false, P_TEST);
     file2test("testDiego/diegoBinaryN12000", false, P_TEST);
-/*
-     file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
+
+    file2test("diegoVel/velocityPoissonFishLmax6", false, V_TEST);
     file2test("diegoVel/velocityPoissonCylUnif2048", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Early", false, V_TEST);
     file2test("diegoVel/velocityPoissonFishLmax8Late", false, V_TEST);
-*/
+
     file2test("testSid/diegoSolverCylUniform", true, V_TEST);
     file2test("testSid/diegoSolverAdaptiveGrid", true, V_TEST);
     file2test("testSid/diegoVelTestsDec10", true, V_TEST);

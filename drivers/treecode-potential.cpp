@@ -10,28 +10,22 @@
  *  before getting a written permission from the author of this file.
  */
 
-
 #include <cassert>
 #include <cmath>
 #include <cstring>
 
-
-#include "upward-kernels.h"
 #include "upward.h"
 #include "potential-kernels.h"
 
-//#define _INSTRUMENTATION_
-
 namespace EvaluatePotential
 {
-    realtype thetasquared, *xdata = nullptr, *ydata = nullptr, *vdata = nullptr;
-
-
+    realtype thetasquared;
+    
     void evaluate(realtype * const result, const realtype xt, const realtype yt)
     {
 	enum { BUFSIZE = 16 };
 	
-	int stack[LMAX * 3 * 2];
+	int stack[LMAX * 3];
 
 	int bufcount = 0;
 	realtype rzs[BUFSIZE], izs[BUFSIZE], masses[BUFSIZE];
@@ -74,7 +68,7 @@ namespace EvaluatePotential
 		{
 		    const int s = node->s;
 
-		    *result += potential_p2p(&xdata[s], &ydata[s], &vdata[s], node->e - s, xt, yt);
+		    *result += potential_p2p(&Tree::xdata[s], &Tree::ydata[s], &Tree::vdata[s], node->e - s, xt, yt);
 		}
 		else
 		{
@@ -101,23 +95,12 @@ void treecode_potential(const realtype theta,
 {
     thetasquared = theta * theta;
 
-    const double t0 = omp_get_wtime();
-    Tree::build(xsrc, ysrc, vsrc, nsrc, 32 * 16); //before: 64
-    const double t1 = omp_get_wtime();
+    Tree::build(xsrc, ysrc, vsrc, nsrc, 32 * 16);
 
-    xdata = Tree::xdata;
-    ydata = Tree::ydata;
-    vdata = Tree::vdata;
-    printf("heeello\n");
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i]);
-
+    
     Tree::dispose();    
-    const double t2 = omp_get_wtime();
-
-#ifdef _INSTRUMENTATION_
-    printf("UPWARD: %.2f ms EVAL: %.2f ms (%.1f %%)\n", (t1 - t0) * 1e3, (t2 - t1) * 1e3, (t2 - t1) / (t2 - t0) * 100);
-#endif
 }
 

@@ -1,6 +1,6 @@
 /*
  *  force-kernels.h
- *  Part of MRAG/2d-treecode-potential
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-11-25.
  *  Copyright 2015. All rights reserved.
@@ -14,63 +14,46 @@
 
 typedef REAL realtype;
 
-#ifdef __cplusplus
 extern "C"
 {
-#endif
-
+    __attribute__ ((visibility ("hidden")))
+    void force_p2p_8x8(const realtype * __restrict__ const xsources,
+		       const realtype * __restrict__ const ysources,
+		       const realtype * __restrict__ const sources,
+		       const int nsources,
+		       const realtype xt,
+		       const realtype yt,
+		       const realtype h,
+		       realtype * const xresult,
+		       realtype * const yresult);
     
-    void force_p2p_tiled(const realtype * __restrict__ const xsources,
-			 const realtype * __restrict__ const ysources,
-			 const realtype * __restrict__ const sources,
-			 const int nsources,
-			 const realtype xt,
-			 const realtype yt,
-			 const realtype h,
-			 realtype * const xresult,
-			 realtype * const yresult);
-/*
-    void reference_force_p2p_tiled_mixprec(const float * __restrict__ const xsrc,
-					   const float * __restrict__ const ysrc,
-					   const float * __restrict__ const vsrc,
-					   const int nsources,
-					   const float _xt,
-					   const float _yt,
-					   const float h,
-					   float * const xresult,
-					   float * const yresult,
-					   const int stride);
-*/
-
-
-   
-
-    void force_e2p_tiled(const realtype mass,
-			 const realtype rx,
-			 const realtype ry,
-			 const realtype h,
-			 const realtype * __restrict__ const rxp,
-			 const realtype * __restrict__ const ixp,
-			 realtype * const xresult,
-			 realtype * const yresult);
+    __attribute__ ((visibility ("hidden")))
+    void force_e2p_8x8(const realtype mass,
+		       const realtype rx,
+		       const realtype ry,
+		       const realtype h,
+		       const realtype * __restrict__ const rxp,
+		       const realtype * __restrict__ const ixp,
+		       realtype * const xresult,
+		       realtype * const yresult);
     
+    __attribute__ ((visibility ("hidden")))
     void downward_e2l(const realtype * x0s,
 		      const realtype * y0s,
-		     const realtype * masses,
-		     const realtype * __restrict__ * const vrexpansions,
-		     const realtype * __restrict__ * const viexpansions,
-		     const int nexpansions,
+		      const realtype * masses,
+		      const realtype * __restrict__ * const vrexpansions,
+		      const realtype * __restrict__ * const viexpansions,
+		      const int nexpansions,
 		      realtype * __restrict__ const rlocal,
 		      realtype * __restrict__ const ilocal);
 
-    void downward_l2p_tiled( const realtype rx,
-				    const realtype ry,
-			     const realtype h,
-			     const realtype * __restrict__ const rlocal,
-			     const realtype * __restrict__ const ilocal,
-			     realtype * const xresult,
-			     realtype * const yresult);
-
-#ifdef __cplusplus
+    __attribute__ ((visibility ("hidden")))
+    void downward_l2p_8x8(const realtype rx,
+			  const realtype ry,
+			  const realtype h,
+			  const realtype * __restrict__ const rlocal,
+			  const realtype * __restrict__ const ilocal,
+			  realtype * const xresult,
+			  realtype * const yresult);
 }
-#endif
+

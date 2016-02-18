@@ -1,7 +1,18 @@
-
+/*
+ *  force-kernels.m4, force-kernels.ispc
+ *  Part of 2d-treecodes
+ *
+ *  Created and authored by Diego Rossinelli on 2015-11-25.
+ *  Copyright 2015. All rights reserved.
+ *
+ *  Users are NOT authorized
+ *  to employ the present software for their own publications
+ *  before getting a written permission from the author of this file.
+ */
+ 
 include(unroll.m4)
 
-export void force_p2p_tiled(
+export void force_p2p_8x8(
 			 uniform const realtype xsources[],
 			 uniform const realtype ysources[],
 			 uniform const realtype vsources[],
@@ -38,7 +49,7 @@ export void force_p2p_tiled(
 	}
 }
 
-export void force_e2p_tiled(
+export void force_e2p_8x8(
 			uniform const realtype mass,
 			uniform const realtype x0,
 			uniform const realtype y0,
@@ -138,7 +149,7 @@ export void downward_e2l(
 	}
 }
 
-export void downward_l2p_tiled(
+export void downward_l2p_8x8(
        uniform const realtype x0,
        uniform const realtype y0,
        uniform const realtype h,
@@ -173,4 +184,4 @@ export void downward_l2p_tiled(
 		yresult[d] -= TMP(iresult, ORDER);
 	}
 }
-       
+

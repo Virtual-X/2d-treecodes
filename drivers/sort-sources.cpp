@@ -1,6 +1,6 @@
 /*
  *  sort-sources.cpp
- *  Part of MRAG/2d-treecode-potential
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-11-25.
  *  Copyright 2015. All rights reserved.
@@ -9,6 +9,7 @@
  *  to employ the present software for their own publications
  *  before getting a written permission from the author of this file.
  */
+
 #include <cassert>
 #include <cstdio>
 #include <omp.h>
@@ -35,26 +36,26 @@ void sort_sources(const realtype * const xsrc,
 
     {
 	const int nthreads = omp_get_max_threads();
-	
+
 	realtype xpartials[2][nthreads], ypartials[2][nthreads];
 
 	enum { chunksize = 1024 * 4 };
-		
+
 #pragma omp parallel
 	{
 	    const int tid = omp_get_thread_num();
-	    
+
 	    realtype lxmi = HUGE_VAL, lymi = HUGE_VAL, lxma = 0, lyma = 0;
 
 	    const int start = tid * chunksize;
 	    const int step = nthreads * chunksize;
-	    
+
 	    for(int i = start; i < nsrc; i += step)
 	    {
 		realtype result[4];
-		
+
 		minmax_vec(xsrc + i, ysrc + i, std::min((int)chunksize, nsrc - i), result);
-		
+
 		lxmi = std::min(lxmi, result[0]);
 		lxma = std::max(lxma, result[1]);
 		lymi = std::min(lymi, result[2]);
@@ -82,7 +83,7 @@ void sort_sources(const realtype * const xsrc,
 
     std::pair<int, int> * kv = NULL;
     posix_memalign((void **)&kv, 32, sizeof(*kv) * nsrc);
-    
+
 #pragma omp parallel for
     for(int i = 0; i < nsrc; ++i)
     {
@@ -107,10 +108,10 @@ void sort_sources(const realtype * const xsrc,
 	kv[i].first = key;
 	kv[i].second = i;
     }
-    
+
     __gnu_parallel::sort(kv, kv + nsrc);
 
-#pragma omp parallel for //num_threads(24)
+#pragma omp parallel for
     for(int i = 0; i < nsrc; ++i)
     {
 	keysorted[i] = kv[i].first;
@@ -122,9 +123,9 @@ void sort_sources(const realtype * const xsrc,
 	ysorted[i] = ysrc[entry];
 	vsorted[i] = vsrc[entry];
     }
-    
+
     free(kv);
-     
+
     *output_xmin = xmin;
     *output_ymin = ymin;
     *output_extent = ext;
