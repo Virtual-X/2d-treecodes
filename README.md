@@ -1,8 +1,8 @@
 # 2d-treecode-potential
-2d fast multipole treecode implementation for multicore CPUs
+This repository is about efficient 2D fast multipole solver implementation for multicore CPUs and GPUs.
 
-
-This libraries implements two FMM solvers, with two function signatures:
+This libraries implements two FMM 2D solvers with open boundary conditions.
+The libraries expose two function signatures:
 
      void treecode_potential(const double theta,
 			const double * const xsources,
@@ -32,6 +32,21 @@ however the pointers cannot be aliased. Two copies of the same vectors must be s
 Theta is the opening criterion "c" as in the [short course on FMM][1].
 This function has a complexity of O(M log(N)), where M is the number of targets, and N is the number of sources.
 
-The second function 
+The second function is solving a 2-components Poisson equation in a 2D domain.
+The sources are represented as pointwise particles, whereas the destination are organized into 2D blocks.
+The number of destinations within a block can be choosen at compile time (default is 32x32 points).
+The destination coordinates are computed by the block's origin and spacing (h represents the gridspacing between two adjacent grid points within the same block). This function can be straightforwardly integrated into multiresolution flow solvers such as [MRAG][2].
+
+The repository contains a benchmark that can be compiled.
+The data necessary for the benchmark can be downloaded here as 3 different TAR+GZ packages:
+* [Dataset for testing the scalar Poisson solver][3]
+* [Dataset for testing the vector Poisson solver at moderate system sizes][4]
+* [Dataset for testing the vector Poisson solver at larger system sizes[5]
+Unpack the datasets in the top level folder.
+
 
 [1]: https://web.njit.edu/~jiang/math614/beatson-greengard.pdf
+[2]: http://www.sciencedirect.com/science/article/pii/S002199911500039X
+[3]: https://n.ethz.ch/~diegor/testDiego.tgz
+[4]: https://n.ethz.ch/~diegor/diegoVel.tgz
+[5]: https://n.ethz.ch/~diegor/testSid.tgz
