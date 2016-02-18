@@ -13,7 +13,7 @@
 real ?= double
 order ?= 12
 mrag-blocksize ?= 32
-#config ?= release
+config ?= release
 CXX ?= g++
 
 CXXFLAGS = -I../kernels/ -std=c++11 -fPIC

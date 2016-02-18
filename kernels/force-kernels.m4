@@ -54,11 +54,14 @@ extern "C" void force_e2p_8x8(
 			 const realtype x0,
 			 const realtype y0,
 			 const realtype h,
-			 const realtype rxp[],
-			 const realtype ixp[],
+			 const realtype rxpdata[],
+			 const realtype ixpdata[],
 			 realtype xresult[],
 			 realtype yresult[])
 {
+	realtype LUNROLL(l, 0, eval(ORDER - 1),` ifelse(l, 0,,`, ')
+	TMP(rxp, l) = rxpdata[l], TMP(ixp, l) = ixpdata[l]');
+
 	for(int d = 0; d < 64 ; ++d)
 	{
 		const int ix = d & 7;
@@ -83,8 +86,8 @@ extern "C" void force_e2p_8x8(
 			rprod = rtmp;
 	    		iprod = itmp;
 
-			rsum -= (j + 1) * (rxp[j] * rprod - ixp[j] * iprod);
-	    		isum -= (j + 1) * (rxp[j] * iprod + ixp[j] * rprod);
+			rsum -= (j + 1) * (TMP(rxp, j) * rprod - TMP(ixp, j) * iprod);
+	    		isum -= (j + 1) * (TMP(rxp, j) * iprod + TMP(ixp, j) * rprod);
 		}')
 
 	    	xresult[d] += rsum;
@@ -158,6 +161,9 @@ extern "C" void downward_l2p_8x8(
         realtype xresult[],
         realtype yresult[])
 {
+	realtype LUNROLL(l, 1, eval(ORDER),` ifelse(l, 1,,`, ')
+	TMP(rlxp, l) = rlocal[l], TMP(ilxp, l) = ilocal[l]');
+	
 	for(int d = 0; d < 64 ; ++d)
 	{
 		const int ix = d & 7;
@@ -166,18 +172,18 @@ extern "C" void downward_l2p_8x8(
 		const realtype rz_1 = x0 + ix * h;
 		const realtype iz_1 = y0 + iy * h;
 
-		const realtype TMP(rresult, 1) = rlocal[1];
-          	const realtype TMP(iresult, 1) = ilocal[1];
+		const realtype TMP(rresult, 1) = TMP(rlxp, 1);
+          	const realtype TMP(iresult, 1) = TMP(ilxp, 1);
 
 		LUNROLL(l, 2, eval(ORDER),`
           	const realtype TMP(rz, l) = TMP(rz, eval(l - 1)) * rz_1 - TMP(iz, eval(l - 1)) * iz_1;
           	const realtype TMP(iz, l) = TMP(rz, eval(l - 1)) * iz_1 + TMP(iz, eval(l - 1)) * rz_1;
 
           	const realtype TMP(rresult, l) = TMP(rresult, eval(l - 1)) +
-          	l * (rlocal[l] * TMP(rz, eval(l - 1)) - ilocal[l] * TMP(iz, eval(l - 1)));
+          	l * (TMP(rlxp, l) * TMP(rz, eval(l - 1)) - TMP(ilxp, l) * TMP(iz, eval(l - 1)));
 
           	const realtype TMP(iresult, l) = TMP(iresult, eval(l - 1)) +
-          	l * (rlocal[l] * TMP(iz, eval(l - 1)) + ilocal[l] * TMP(rz, eval(l - 1)));
+          	l * (TMP(rlxp, l) * TMP(iz, eval(l - 1)) + TMP(ilxp, l) * TMP(rz, eval(l - 1)));
           	')
 
 		xresult[d] += TMP(rresult, ORDER);
