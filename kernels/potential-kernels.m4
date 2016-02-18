@@ -1,3 +1,15 @@
+/*
+ *  potential-kernels.m4, potential-kernels.ispc
+ *  Part of 2d-treecodes
+ *
+ *  Created and authored by Diego Rossinelli on 2015-11-25.
+ *  Copyright 2015. All rights reserved.
+ *
+ *  Users are NOT authorized
+ *  to employ the present software for their own publications
+ *  before getting a written permission from the author of this file.
+ */
+
 include(unroll.m4)
 
 #define EPS (10 * __DBL_EPSILON__)
@@ -13,7 +25,7 @@ export uniform realtype potential_p2p(
    uniform const realtype yt)
    {
    const realtype eps = EPS;
-   
+
    realtype LUNROLL(`i', 0, eval(NACC - 1), `
    ifelse(i,0,,`,') TMP(s,i) = 0') ;
    uniform const int nnice = eval(4 * NACC) * (nsources / eval(4 * NACC));
@@ -31,21 +43,19 @@ export uniform realtype potential_p2p(
 	')
     	}
 
-	REDUCE(`+=', LUNROLL(`i', 0, eval(NACC - 1), `ifelse(i,0,,`,') TMP(s,i)')) 
-	
+	REDUCE(`+=', LUNROLL(`i', 0, eval(NACC - 1), `ifelse(i,0,,`,') TMP(s,i)'))
+
 	foreach( i = nnice ... nsources)
-	//	   for(int i = 0; i <nnice; ++i)
     	{
 	    const realtype xr = xt - _xsrc[i];
       	    const realtype yr = yt - _ysrc[i];
 
       	    s_0 += log(xr * xr + yr * yr + eps) * _vsrc[i];
     	}
-    
+
 	return reduce_add(s_0) * 0.5;
    }
 
-   
 export uniform realtype potential_e2p(
       uniform const realtype rzs[],
       uniform const realtype izs[],
@@ -55,9 +65,8 @@ export uniform realtype potential_e2p(
       uniform const int ndst)
   {
 	realtype result = 0;
-	
+
 	foreach(i = 0 ... ndst)
-	//for(int i = 0; i < ndst; ++i)
 	{
 	   const realtype rz = rzs[i];
 	   const realtype iz = izs[i];

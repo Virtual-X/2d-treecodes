@@ -153,7 +153,7 @@ namespace Tree
 	    for(int c = 0; c < 4; ++c)
 	    {
 		const realtype val = bufhelpers[childbase + c].w;
-		const bool negligible = fabs(val) < 1e-16;
+		const bool negligible = fabs(val) < 1e-20;
 		
 		zcount += negligible;
 		nzentry += (!negligible) * (childbase + c);
@@ -267,7 +267,6 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
 		 const int nsrc,
 		 const int leaf_maxcapacity)
 {
-    const double t0 = omp_get_wtime();
     const int isdynamic = omp_get_dynamic();
     const int maxthreads = omp_get_max_threads();
 
@@ -278,12 +277,8 @@ void Tree::build(const realtype * const xsrc, const realtype * const ysrc, const
     posix_memalign((void **)&ydata, 32, sizeof(*ydata) * nsrc);
     posix_memalign((void **)&vdata, 32, sizeof(*vdata) * nsrc);
 
-    const double t1 = omp_get_wtime();
-
     sort_sources(xsrc, ysrc, vsrc, nsrc, keys, xdata, ydata, vdata, &xmin, &ymin, &ext);
   
-    const double t5 = omp_get_wtime();
-
     currnnodes = 1;
     maxnodes = 8e4;
     posix_memalign((void **)&nodes, 32, sizeof(Node) * maxnodes);

@@ -1,6 +1,6 @@
 /*
- *  treecode.cpp
- *  Part of MRAG/2d-treecode-potential
+ *  treecode-potential.cpp
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
+#include <parallel/algorithm>
 
 #include "upward.h"
 #include "potential-kernels.h"
@@ -20,16 +21,16 @@
 namespace EvaluatePotential
 {
     realtype thetasquared;
-    
+
     void evaluate(realtype * const result, const realtype xt, const realtype yt)
     {
 	enum { BUFSIZE = 16 };
-	
+
 	int stack[LMAX * 3];
 
 	int bufcount = 0;
 	realtype rzs[BUFSIZE], izs[BUFSIZE], masses[BUFSIZE];
-	const realtype * rxps[BUFSIZE], *ixps[BUFSIZE];
+	const realtype *rxps[BUFSIZE], *ixps[BUFSIZE];
 
 	int stackentry = 0, maxentry = 0;
 
@@ -43,7 +44,7 @@ namespace EvaluatePotential
 	    assert(nodeid < node->state.childbase || !node->state.innernode);
 
 	    realtype tmp[2];
-	    
+
 	    const realtype r2 = pow(xt - node->xcom, 2) + pow(yt - node->ycom, 2);
 
 	    if (node->r * node->r < thetasquared * r2)
@@ -54,11 +55,11 @@ namespace EvaluatePotential
 		rxps[bufcount] = Tree::expansions + ORDER * (2 * nodeid + 0);
 		ixps[bufcount] = Tree::expansions + ORDER * (2 * nodeid + 1);
 		++bufcount;
-		
+
 		if (bufcount == BUFSIZE)
 		{
 		    bufcount = 0;
-		 
+
 		    *result += potential_e2p(rzs, izs, masses, rxps, ixps, BUFSIZE);
 		}
 	    }
@@ -100,7 +101,6 @@ void treecode_potential(const realtype theta,
 #pragma omp parallel for schedule(static,1)
     for(int i = 0; i < ndst; ++i)
 	evaluate(vdst + i, xdst[i], ydst[i]);
-    
-    Tree::dispose();    
-}
 
+    Tree::dispose();
+}

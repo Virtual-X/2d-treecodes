@@ -9,7 +9,7 @@
  *  to employ the present software for their own publications
  *  before getting a written permission from the author of this file.
  */
- 
+
 include(unroll.m4)
 
 export void force_p2p_8x8(
@@ -29,7 +29,7 @@ export void force_p2p_8x8(
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;
-		
+
 		const realtype xt = x0 + ix * h;
 		const realtype yt = y0 + iy * h;
 
@@ -39,7 +39,7 @@ export void force_p2p_8x8(
 			const realtype xr = xt - xsources[s];
 	    		const realtype yr = yt - ysources[s];
 	    		const realtype factor = vsources[s] / (xr * xr + yr * yr + eps);
-	    
+
 			xsum += xr * factor;
 	    		ysum += yr * factor;
 		}
@@ -63,7 +63,7 @@ export void force_e2p_8x8(
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;
-		
+
 		const realtype rz = x0 + ix * h;
 		const realtype iz = y0 + iy * h;
 
@@ -71,22 +71,22 @@ export void force_e2p_8x8(
 
 		const realtype rinvz_1 = rz / r2;
 		const realtype iinvz_1 = -iz / r2;
-	
+
 		realtype rsum = mass * rinvz_1, isum = mass * iinvz_1;
 		realtype rprod = rinvz_1, iprod = iinvz_1;
 
-		LUNROLL(j, 0, eval(ORDER - 1),` 
+		LUNROLL(j, 0, eval(ORDER - 1),`
 		{
 			const realtype rtmp = rprod * rinvz_1 - iprod * iinvz_1;
 	    		const realtype itmp = rprod * iinvz_1 + iprod * rinvz_1;
-	    
+
 			rprod = rtmp;
-	    		iprod = itmp;	
-	    
+	    		iprod = itmp;
+
 			rsum -= (j + 1) * (rxp[j] * rprod - ixp[j] * iprod);
 	    		isum -= (j + 1) * (rxp[j] * iprod + ixp[j] * rprod);
 		}')
-		
+
 	    	xresult[d] += rsum;
 		yresult[d] -= isum;
 	}
@@ -107,17 +107,17 @@ export void downward_e2l(
 	foreach(i = 0 ... nexpansions)
 	{
 		const realtype mass = masses[i];
-		
+
 		const realtype x0 = x0s[i];
 		const realtype y0 = y0s[i];
-		
+
 		const realtype r2z0 = x0 * x0 + y0 * y0;
     		const realtype rinvz_1 = x0 / r2z0;
     		const realtype iinvz_1 = -y0 / r2z0;
 
 		uniform const realtype * const rxp = rxps[i];
 		uniform const realtype * const ixp = ixps[i];
-		
+
 		dnl
     		LUNROLL(j, 1, eval(ORDER),`
     		ifelse(j, 1, , `
@@ -127,19 +127,19 @@ export void downward_e2l(
 	  		  const realtype TMP(rcoeff, j) = rxp[eval(j - 1)] * TMP(rinvz, j) - ixp[eval(j - 1)] * TMP(iinvz, j);
       	  		  const realtype TMP(icoeff, j) = rxp[eval(j - 1)] * TMP(iinvz, j) + ixp[eval(j - 1)] * TMP(rinvz, j);
       		')
-		
+
 		LUNROLL(l, 1, eval(ORDER),`
       		{
 			realtype TMP(rtmp, l) = ifelse(l,1,` - mass', `mass * esyscmd(echo -1/eval(l) | bc --mathlib )');
 			realtype TMP(itmp, l) = 0;
-			
+
 			pushdef(`BINFAC', `BINOMIAL(eval(l + k - 1), eval(k - 1)).')dnl
 			 LUNROLL(k, 1, eval(ORDER),`
 			 TMP(rtmp, l) mysign(k)= ifelse(BINFAC,1.f,,`BINFAC *') TMP(rcoeff, k);
 			 TMP(itmp, l) mysign(k)= ifelse(BINFAC,1.f,,`BINFAC *') TMP(icoeff, k);
 			 ')
 			popdef(`BINFAC')dnl
-        		
+
        			realtype rpartial = TMP(rtmp, l) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
        			realtype ipartial = TMP(rtmp, l) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
 
@@ -162,7 +162,7 @@ export void downward_l2p_8x8(
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;
-		
+
 		const realtype rz_1 = x0 + ix * h;
 		const realtype iz_1 = y0 + iy * h;
 
@@ -184,4 +184,3 @@ export void downward_l2p_8x8(
 		yresult[d] -= TMP(iresult, ORDER);
 	}
 }
-

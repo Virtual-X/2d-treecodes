@@ -1,6 +1,6 @@
 /*
  *  potential-kernels.h
- *  Part of MRAG/2d-treecode-potential
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-11-25.
  *  Copyright 2015. All rights reserved.
@@ -12,25 +12,22 @@
 
 #pragma once
 
-#ifdef __cplusplus
 extern "C"
 {
-#endif
+    __attribute__ ((visibility ("hidden")))
     realtype potential_p2p(const realtype * __restrict__ const xsources,
 			   const realtype * __restrict__ const ysources,
 			   const realtype * __restrict__ const sources,
 			   const int nsources,
-			   const realtype _xt,
-			   const realtype _yt);
- 
+			   const realtype xtarget,
+			   const realtype ytarget);
+
+    __attribute__ ((visibility ("hidden")))
     realtype potential_e2p(
-	const realtype * rzs,
-	const realtype * izs,
+	const realtype * target_xs,
+	const realtype * target_ys,
 	const realtype * masses,
 	const realtype * const * rxps,
 	const realtype * const * ixps,
 	const int ndst);
-    
-#ifdef __cplusplus
 }
-#endif

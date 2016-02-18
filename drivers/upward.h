@@ -1,6 +1,6 @@
 /*
  *  upward.h
- *  Part of MRAG/2d-treecode-potential
+ *  Part of 2d-treecodes
  *
  *  Created and authored by Diego Rossinelli on 2015-09-25.
  *  Copyright 2015. All rights reserved.
@@ -12,13 +12,6 @@
 
 #pragma once
 
-#include <cassert>
-#include <cmath>
-
-#include <parallel/algorithm>
-#include <limits>
-#include <utility>
-
 typedef REAL realtype;
 
 namespace Tree
@@ -26,7 +19,7 @@ namespace Tree
     struct Node
     {
 	int s, e;
-	
+
 	realtype mass, xcom, ycom, r;
 
 	union
@@ -34,7 +27,7 @@ namespace Tree
 	    bool innernode;
 	    int childbase;
 	} state;
-	
+
 	void setup(int s, int e)
 	    {
 		this->s = s;
@@ -46,12 +39,13 @@ namespace Tree
     extern realtype *xdata, *ydata, *vdata, *expansions;
 
     extern Node *nodes;
-    
+
     void build(const realtype * const xsrc,
 	       const realtype * const ysrc,
 	       const realtype * const vsrc,
 	       const int nsrc,
 	       const int leaf_maxcapacity);
-    
+
     void dispose();
 };
+

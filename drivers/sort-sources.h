@@ -10,6 +10,8 @@
  *  before getting a written permission from the author of this file.
  */
 
+#pragma once
+
 extern "C"
 __attribute__ ((visibility ("hidden")))
 void sort_sources(const realtype * const xsrc,

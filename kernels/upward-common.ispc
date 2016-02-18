@@ -1,3 +1,14 @@
+/*
+ *  upward-common.ispc
+ *  Part of 2d-treecodes
+ *
+ *  Created and authored by Diego Rossinelli on 2015-11-25.
+ *  Copyright 2015. All rights reserved.
+ *
+ *  Users are NOT authorized
+ *  to employ the present software for their own publications
+ *  before getting a written permission from the author of this file.
+ */
 
 export void upward_setup(
     const uniform realtype xsources[],
@@ -11,7 +22,7 @@ export void upward_setup(
     uniform realtype * uniform radius)
 {
     realtype msum = 0, wsum = 0, wxsum = 0, wysum = 0;
-	
+
     foreach(i = 0 ... nsources)
     {
 	const realtype x = xsources[i];
@@ -58,7 +69,7 @@ export uniform int lower_bound_vec(
 
     if (keys[e - 1] < val)
 	return e;
- 
+
     while (c)
     {
 	int candidate_s = s, candidate_e = e;
@@ -99,7 +110,7 @@ export uniform int upper_bound_vec
 
 	const float h = (e - s) * 1.f / programCount;
 	const int i = min(e - 1, (int)(s + programIndex * h + 0.499999f));
-	    
+
 	const bool isless = keys[i] <= val;
 	candidate_s = isless ? i : s;
 	candidate_e = isless ? e : i;
@@ -124,10 +135,10 @@ export void minmax_vec(
     {
 	const realtype xval = xsrc[i];
 	const realtype yval = ysrc[i];
-	
+
 	lxmi = min(lxmi, xval);
 	lxma = max(lxma, xval);
-	
+
 	lymi = min(lymi, yval);
 	lyma = max(lyma, yval);
     }
@@ -137,5 +148,4 @@ export void minmax_vec(
     xmin_xmax_ymin_ymax[2] = reduce_min(lymi);
     xmin_xmax_ymin_ymax[3] = reduce_max(lyma);
 }
-    
-    
+

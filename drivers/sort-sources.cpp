@@ -9,10 +9,10 @@
  *  to employ the present software for their own publications
  *  before getting a written permission from the author of this file.
  */
+#include <omp.h>
 
 #include <cassert>
 #include <cstdio>
-#include <omp.h>
 #include <parallel/algorithm>
 
 #include "upward-kernels.h"
