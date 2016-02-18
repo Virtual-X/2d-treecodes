@@ -1,4 +1,4 @@
-# 2d-treecode-potential
+# 2d-treecodes
 This repository is about efficient 2D fast multipole solver (open BC) implementation for multicore CPUs and GPUs.
 Two function signatures are exposed to the client code:
 
@@ -42,6 +42,7 @@ The data necessary for the benchmark can be downloaded here as 3 different TAR+G
 * [Dataset for testing the scalar Poisson solver][3]
 * [Dataset for testing the vector Poisson solver at moderate system sizes][4]
 * [Dataset for testing the vector Poisson solver at larger system sizes][5]
+
 Unpack the datasets in the top level folder.
 
 
