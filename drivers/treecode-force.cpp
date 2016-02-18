@@ -16,11 +16,11 @@
 #include <tuple>
 #include <algorithm>
 
-#include "upward.h"
+#include "treecode-force.h"
+#include "upward-kernels.h"
 #include "downward-kernels.h"
 #include "force-kernels.h"
-
-#include "treecode-force.h"
+#include "upward.h"
 
 namespace EvaluateForce
 {
@@ -63,8 +63,7 @@ namespace EvaluateForce
 	    }
     };
 
-#define TILE 8
-#define BRICKSIZE (TILE * TILE)
+#define BRICKSIZE 8
 
     void evaluate(realtype * const xresultbase, realtype * const yresultbase,
 		  const realtype x0, const realtype y0, const realtype h,
@@ -74,28 +73,30 @@ namespace EvaluateForce
 
 	int stack[LMAX * 3];
 
-	realtype result[2 * BRICKSIZE];
+	realtype xresult[BRICKSIZE][BRICKSIZE], yresult[BRICKSIZE][BRICKSIZE];
 
 	realtype rlocal[ORDER + 1], ilocal[ORDER + 1];
 
 	E2LWork<32> e2lwork(rlocal, ilocal);
 
-	const realtype rbrick = 1.4142135623730951 * h * (TILE - 1) * 0.5;
+	const realtype rbrick = 1.4142135623730951 * h * (BRICKSIZE - 1) * 0.5;
 
-	for(int by = 0; by < BLOCKSIZE; by += TILE)
-	    for(int bx = 0; bx < BLOCKSIZE; bx += TILE)
+	for(int by = 0; by < BLOCKSIZE; by += BRICKSIZE)
+	    for(int bx = 0; bx < BLOCKSIZE; bx += BRICKSIZE)
 	    {
-		const realtype x0brick = x0 + h * (bx + 0.5 * (TILE - 1));
-		const realtype y0brick = y0 + h * (by + 0.5 * (TILE - 1));
+		const realtype x0brick = x0 + h * (bx + 0.5 * (BRICKSIZE - 1));
+		const realtype y0brick = y0 + h * (by + 0.5 * (BRICKSIZE - 1));
 
 		for(int i = 0; i <= ORDER; ++i)
-		{
-		    rlocal[i] = 0;
-		    ilocal[i] = 0;
-		}
+		    rlocal[i] = ilocal[i] = 0;
 
-		for(int i = 0; i < 2 * BRICKSIZE; ++i)
-		    result[i] = 0;
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			xresult[iy][ix] = 0;
+
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			yresult[iy][ix] = 0;
 
 		int stackentry = 0;
 		stack[0] = 0;
@@ -118,8 +119,8 @@ namespace EvaluateForce
 				     Tree::expansions + ORDER * (2 * nodeid + 1));
 		    else
 		    {
-			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + TILE - 1) * h, xcom));
-			const double yt = std::max(y0 + by * h, std::min(y0 + (by + TILE - 1) * h, ycom));
+			const double xt = std::max(x0 + bx * h, std::min(x0 + (bx + BRICKSIZE - 1) * h, xcom));
+			const double yt = std::max(y0 + by * h, std::min(y0 + (by + BRICKSIZE - 1) * h, ycom));
 
 			const realtype r2 = pow(xt - xcom, 2) + pow(yt - ycom, 2);
 
@@ -128,7 +129,7 @@ namespace EvaluateForce
 			    force_e2p_8x8(node->mass, x0 + (bx + 0) * h - xcom, y0 + (by + 0) * h - ycom, h,
 					  Tree::expansions + ORDER * (2 * nodeid + 0),
 					  Tree::expansions + ORDER * (2 * nodeid + 1),
-					  result, result + BRICKSIZE);
+					  &xresult[0][0], &yresult[0][0]);
 			}
 			else
 			{
@@ -138,7 +139,7 @@ namespace EvaluateForce
 
 				force_p2p_8x8(&Tree::xdata[s], &Tree::ydata[s], &Tree::vdata[s], node->e - s,
 					      x0 + (bx + 0) * h, y0 + (by + 0) * h, h,
-					      result, result + BRICKSIZE);
+					      &xresult[0][0], &yresult[0][0]);
 			    }
 			    else
 			    {
@@ -153,17 +154,18 @@ namespace EvaluateForce
 
 		e2lwork.finalize();
 
-		downward_l2p_8x8(h * (0 - 0.5 * (TILE - 1)),
-				 h * (0 - 0.5 * (TILE - 1)),
-				 h, rlocal, ilocal, result, result + BRICKSIZE);
+		downward_l2p_8x8(h * (0 - 0.5 * (BRICKSIZE - 1)),
+				 h * (0 - 0.5 * (BRICKSIZE - 1)),
+				 h, rlocal, ilocal,
+				 &xresult[0][0], &yresult[0][0]);
 
-		for(int iy = 0; iy < TILE; ++iy)
-		    for(int ix = 0; ix < TILE; ++ix)
-			xresultbase[bx + ix + BLOCKSIZE * (by + iy)] = result[ix + TILE * iy];
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			xresultbase[bx + ix + BLOCKSIZE * (by + iy)] = xresult[iy][ix];
 
-		for(int iy = 0; iy < TILE; ++iy)
-		    for(int ix = 0; ix < TILE; ++ix)
-			yresultbase[bx + ix + BLOCKSIZE * (by + iy)] = result[BRICKSIZE + ix + TILE * iy];
+		for(int iy = 0; iy < BRICKSIZE; ++iy)
+		    for(int ix = 0; ix < BRICKSIZE; ++ix)
+			yresultbase[bx + ix + BLOCKSIZE * (by + iy)] = yresult[iy][ix];
 	    }
     }
 
