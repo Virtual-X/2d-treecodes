@@ -12,20 +12,20 @@
 
 include(unroll.m4)
 
-export void force_p2p_8x8(
-			 uniform const realtype xsources[],
-			 uniform const realtype ysources[],
-			 uniform const realtype vsources[],
-			 uniform const int nsources,
-			 uniform const realtype x0,
-			 uniform const realtype y0,
-			 uniform const realtype h,
-			 uniform realtype xresult[],
-			 uniform realtype yresult[])
+extern "C" void force_p2p_8x8(
+			  const realtype xsources[],
+			  const realtype ysources[],
+			  const realtype vsources[],
+			  const int nsources,
+			  const realtype x0,
+			  const realtype y0,
+			  const realtype h,
+			  realtype xresult[],
+			  realtype yresult[])
 {
 	const double eps = 10 * __DBL_EPSILON__;
 
-	foreach(d = 0 ... 64)
+	for(int d = 0; d < 64 ; ++d)
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;
@@ -49,17 +49,17 @@ export void force_p2p_8x8(
 	}
 }
 
-export void force_e2p_8x8(
-			uniform const realtype mass,
-			uniform const realtype x0,
-			uniform const realtype y0,
-			uniform const realtype h,
-			uniform const realtype rxp[],
-			uniform const realtype ixp[],
-			uniform realtype xresult[],
-			uniform realtype yresult[])
+extern "C" void force_e2p_8x8(
+			 const realtype mass,
+			 const realtype x0,
+			 const realtype y0,
+			 const realtype h,
+			 const realtype rxp[],
+			 const realtype ixp[],
+			 realtype xresult[],
+			 realtype yresult[])
 {
-	foreach(d = 0 ... 64)
+	for(int d = 0; d < 64 ; ++d)
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;
@@ -94,17 +94,17 @@ export void force_e2p_8x8(
 
 define(mysign, `ifelse(eval((-1)**($1)), -1,-,+)')
 
-export void downward_e2l(
-	uniform const realtype x0s[],
-	uniform const realtype y0s[],
-	uniform const realtype masses[],
-	uniform const realtype * uniform rxps[],
-	uniform const realtype * uniform ixps[],
-	uniform const int nexpansions,
-	uniform realtype rlocal[],
-	uniform realtype ilocal[])
+extern "C" void downward_e2l(
+	 const realtype x0s[],
+	 const realtype y0s[],
+	 const realtype masses[],
+	 const realtype *  rxps[],
+	 const realtype *  ixps[],
+	 const int nexpansions,
+	 realtype rlocal[],
+	 realtype ilocal[])
 {
-	foreach(i = 0 ... nexpansions)
+	for(int i = 0; i < nexpansions ; ++i)
 	{
 		const realtype mass = masses[i];
 
@@ -115,8 +115,8 @@ export void downward_e2l(
     		const realtype rinvz_1 = x0 / r2z0;
     		const realtype iinvz_1 = -y0 / r2z0;
 
-		uniform const realtype * const rxp = rxps[i];
-		uniform const realtype * const ixp = ixps[i];
+		 const realtype * const rxp = rxps[i];
+		 const realtype * const ixp = ixps[i];
 
 		dnl
     		LUNROLL(j, 1, eval(ORDER),`
@@ -143,22 +143,22 @@ export void downward_e2l(
        			realtype rpartial = TMP(rtmp, l) * TMP(rinvz, l) - TMP(itmp, l) * TMP(iinvz, l);
        			realtype ipartial = TMP(rtmp, l) * TMP(iinvz, l) + TMP(itmp, l) * TMP(rinvz, l);
 
-			rlocal[l] += reduce_add(rpartial);
-			ilocal[l] += reduce_add(ipartial);
+			rlocal[l] += rpartial;
+			ilocal[l] += ipartial;
 		}')
 	}
 }
 
-export void downward_l2p_8x8(
-       uniform const realtype x0,
-       uniform const realtype y0,
-       uniform const realtype h,
-       uniform const realtype rlocal[],
-       uniform const realtype ilocal[],
-       uniform realtype xresult[],
-       uniform realtype yresult[])
+extern "C" void downward_l2p_8x8(
+        const realtype x0,
+        const realtype y0,
+        const realtype h,
+        const realtype rlocal[],
+        const realtype ilocal[],
+        realtype xresult[],
+        realtype yresult[])
 {
-	foreach(d = 0 ... 64)
+	for(int d = 0; d < 64 ; ++d)
 	{
 		const int ix = d & 7;
 		const int iy = d >> 3;

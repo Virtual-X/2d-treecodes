@@ -22,18 +22,16 @@ endif
 
 potential force: $(OBJS)
 
-%.o: %.ispc Makefile
-	ispc  $< -Drealtype=$(real) -O3 --arch=x86-64 --math-lib=fast \
-	--opt=disable-assertions --opt=fast-math \
-	--cpu=haswell --target=avx2-i64x4 \
-	--wno-perf --pic -o $@
+%.o: %.cpp Makefile
+	$(CXX) -O4 -fstrict-aliasing -march=native -mtune=native -ffast-math \
+	 -fPIC -Drealtype=$(real) -c  $< 
 
-order$(order)-%.ispc: %.m4 Makefile
+order$(order)-%.cpp: %.m4 Makefile
 	m4 -D realtype=$(real) -D ORDER=$(order) $< > $@
 
 clean:
-	rm -f *.o *kernels*.c *kernels*.ispc
+	rm -f *.o *kernels*.c *kernels*.cpp
 
-.PRECIOUS: order$(order)-%.ispc order$(order)-%.o
+.PRECIOUS: order$(order)-%.cpp order$(order)-%.o
 
 .PHONY = clean potential force

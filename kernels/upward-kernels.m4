@@ -15,15 +15,15 @@ divert(-1)
 define(GANGSIZE, 8)
 divert(0) dnl dnl dnl
 
-export void upward_p2e(
-       const uniform realtype xsources[],
-       const uniform realtype ysources[],
-       const uniform realtype vsources[],
-       const uniform int nsources,
-       const uniform realtype xcom,
-       const uniform realtype ycom,
-       uniform realtype rexpansions[],
-       uniform realtype iexpansions[])
+extern "C" void upward_p2e(
+       const  realtype xsources[],
+       const  realtype ysources[],
+       const  realtype vsources[],
+       const  int nsources,
+       const  realtype xcom,
+       const  realtype ycom,
+        realtype rexpansions[],
+        realtype iexpansions[])
 {
 	realtype LUNROLL(n, 0, eval(ORDER - 1),`ifelse(n,0,,`,')
             TMP(rxp, n) = 0, TMP(ixp, n) = 0');
@@ -50,7 +50,8 @@ export void upward_p2e(
 		')
 	}
 #else
- 	foreach(i = 0 ... nsources)
+
+	for(int i = 0; i < nsources; ++i)
  	{
  		const realtype rprod_0 = xsources[i] - xcom;
  		const realtype iprod_0 = ysources[i] - ycom;
@@ -83,8 +84,8 @@ export void upward_p2e(
  	}
 #endif
 	LUNROLL(i, 0, eval(ORDER - 1), `
-   	uniform realtype TMP(rsum, i) = reduce_add(TMP(rxp, i));
-	uniform realtype TMP(isum, i) = reduce_add(TMP(ixp, i));')
+   	 realtype TMP(rsum, i) = TMP(rxp, i);
+	 realtype TMP(isum, i) = TMP(ixp, i);')
 
 	LUNROLL(i, 0, eval(ORDER - 1), `
       	rexpansions[i] = TMP(rsum, i);
@@ -92,17 +93,26 @@ export void upward_p2e(
 	')
 }
 
-export void upward_e2e(
-            uniform const realtype x0s[],
-            uniform const realtype y0s[],
-            uniform const realtype masses[],
-            uniform const realtype * uniform vrxps[],
-            uniform const realtype * uniform vixps[],
-            uniform realtype rdstxp[],
-            uniform realtype idstxp[])
+extern "C" void upward_e2e(
+             const realtype x0s[],
+             const realtype y0s[],
+             const realtype masses[],
+             const realtype *  vrxps[],
+             const realtype *  vixps[],
+             realtype rdstxp[],
+             realtype idstxp[])
             {
-		const uniform realtype * rxps = vrxps[programIndex];
-		const uniform realtype * ixps = vixps[programIndex];
+
+	    for(int i = 0; i < ORDER; ++i)
+	    	    rdstxp[i] = 0;
+
+	    for(int i = 0; i < ORDER; ++i)
+	    	    idstxp[i] = 0;
+	    
+	    for(int programIndex = 0; programIndex < 4; ++programIndex)
+	    {
+		const  realtype * rxps = vrxps[programIndex];
+		const  realtype * ixps = vixps[programIndex];
 
 	         const realtype x0 = x0s[programIndex];
             	 const realtype y0 = y0s[programIndex];
@@ -143,7 +153,8 @@ export void upward_e2e(
 			const realtype rpartial = TMP(rtmp, l) * TMP(rz, l) - TMP(itmp, l) * TMP(iz, l);
 			const realtype ipartial = TMP(rtmp, l) * TMP(iz, l) + TMP(itmp, l) * TMP(rz, l);
 
-			rdstxp[eval(l - 1)] = reduce_add(rpartial);
-			idstxp[eval(l - 1)] = reduce_add(ipartial);
+			rdstxp[eval(l - 1)] += rpartial;
+			idstxp[eval(l - 1)] += ipartial;
 		}')
+		}
 	}
