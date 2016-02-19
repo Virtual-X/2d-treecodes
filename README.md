@@ -1,6 +1,6 @@
 # 2d-treecodes
-This repository is about efficient 2D fast multipole solver (open BC) implementation for multicore CPUs and GPUs.
-Two function signatures are exposed to the client code:
+This repository is about efficient implementations of 2D Fast Multipole Methods (with open BC) for CPUs and GPUs.
+Two functions are exposed to the client:
 
      void treecode_potential(const double theta,
 		const double * const xsources,
@@ -13,7 +13,7 @@ Two function signatures are exposed to the client code:
 		double * const targetvalues);
 			
      void treecode_force_mrag(const double theta,
-     	  	const double * const xsources,
+		const double * const xsources,
 		const double * const ysources,
 		const double * const sourcevalues,
 		const int nsources,
@@ -30,7 +30,7 @@ however the pointers cannot be aliased. Two copies of the same vectors must be s
 Theta is the opening criterion "c" as in the [short course on FMM][1].
 This function has a complexity of O(M log(N)), where M is the number of targets, and N is the number of sources.
 
-The second function is solving a 2-components Poisson equation in a 2D domain.
+The second function is solving a 2-components Poisson equation in a 2D domain in O(M).
 The sources are represented as pointwise particles, whereas the destination are organized into 2D blocks.
 The number of destinations within a block can be choosen at compile time (default is 32x32 points).
 The destination coordinates are computed by the block's origin and spacing (h represents the gridspacing between two adjacent grid points within the same block). The output is written into a contiguous array containing all the results.
