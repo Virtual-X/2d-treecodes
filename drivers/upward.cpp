@@ -64,17 +64,26 @@ namespace Tree
 	Node * node = nodes + nodeid;
 	NodeHelper * helper = bufhelpers + nodeid;
 
+	realtype w = 0, wx = 0, wy = 0;
 	upward_setup(xdata + s, ydata + s, vdata + s, e - s,
-		     &node->mass, &helper->w, &helper->wx, &helper->wy, &node->r);
+		     &node->mass, &w, &wx, &wy, &node->r);
 
-	node->xcom = helper->w ? helper->wx / helper->w : (x0 + 0.5 * h);
-	node->ycom = helper->w ? helper->wy / helper->w : (y0 + 0.5 * h);
+	node->xcom = w ? wx / w : (x0 + 0.5 * h);
+	node->ycom = w ? wy / w : (y0 + 0.5 * h);
+	
+	helper->w = w;
+	helper->wx = wx;
+	helper->wy = wy;
 	
 	upward_p2e(xdata + s, ydata + s, vdata + s, e - s,
 		   node->xcom, node->ycom,
 		   expansions + ORDER * (2 * nodeid + 0),
 		   expansions + ORDER * (2 * nodeid + 1));
-		
+#ifndef NDEBUG
+	for(int i = 0; i < 2 * ORDER; ++i)
+	    assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
+#endif
+
 	assert(node->r < 1.5 * h);
 
 #ifndef NDEBUG
@@ -153,17 +162,22 @@ namespace Tree
 	    for(int c = 0; c < 4; ++c)
 	    {
 		const realtype val = bufhelpers[childbase + c].w;
-		const bool negligible = fabs(val) < 1e-20;
+		const bool negligible = fabs(val) < 1.1e-16;
 		
 		zcount += negligible;
 		nzentry += (!negligible) * (childbase + c);
 	    }
-		
+	
 	    realtype * const dst = expansions + ORDER * (2 * helper->parent + 0);
 
 	    if (zcount == 4)
+	    {
 		for(int i = 0; i < 2 * ORDER; ++i)
-		    dst[i] =0;
+		    dst[i] = 0;
+
+		node->state.innernode = false;
+		node->s = node->e = 0;
+	    }
 	    else
 		if (zcount == 3)
 		{
@@ -184,20 +198,20 @@ namespace Tree
 			srcmass[c] = nodes[childid].mass;
 			rx[c] = nodes[childid].xcom - parent->xcom;
 			ry[c] = nodes[childid].ycom - parent->ycom;
-		
-			if (bufhelpers[childid].w == 0)
-			    rx[c] = ry[c] = 1;
-			
+
+			assert(rx[c] != 0 || ry[c] != 0);
+
 			chldrxp[c] = expansions + ORDER * (2 * childid + 0);
 			chldixp[c] = expansions + ORDER * (2 * childid + 1);
 		    }
 
 		    upward_e2e(rx, ry, srcmass, chldrxp, chldixp, dst, dst + ORDER);
-		}
 #ifndef NDEBUG
-	    for(int i = 0; i < 2 * ORDER; ++i)
-		assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
+		    for(int i = 0; i < 2 * ORDER; ++i)
+			assert(!isnan(expansions[ORDER * (2 * helper->parent + 0) + i]));
 #endif
+
+		}
 		
 	    node = parent; 
 	    helper = parenthelper;
