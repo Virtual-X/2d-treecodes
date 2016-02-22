@@ -21,7 +21,7 @@ CXXFLAGS += -DREAL=$(real) -DBLOCKSIZE=$(mrag-blocksize) -DORDER=$(order) -DLMAX
 CXXFLAGS += -O3 -march=native -fopenmp -fvisibility=hidden -fstrict-aliasing
 
 ifeq "$(config)" "release"
-	CXXFLAGS +=  -DNDEBUG --fast-math 
+	CXXFLAGS +=  -DNDEBUG --fast-math
 else
 	CXXFLAGS += -g
 endif

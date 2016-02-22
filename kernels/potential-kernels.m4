@@ -80,7 +80,7 @@ export uniform realtype potential_e2p(
 
 	   LUNROLL(j, 1, ORDER, `
 	   realtype TMP(rsum, eval(j - 1)) = rxps[i][eval(j - 1)] * TMP(rinvz, j) - ixps[i][eval(j - 1)] * TMP(iinvz, j);')
- 	   REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum,i)'))
+ 	   REDUCE(`+=', LUNROLL(i, 0, eval(ORDER - 1),`ifelse(i,0,,`,')TMP(rsum, i)'))
 
 	   result += masses[i] * log(r2) / 2 + TMP(rsum, 0);
 	 }
