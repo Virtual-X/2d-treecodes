@@ -23,29 +23,34 @@ export void force_p2p_8x8(
 			 uniform realtype xresult[],
 			 uniform realtype yresult[])
 {
-	const double eps = 10 * __DBL_EPSILON__;
+	uniform const double eps = 10 * __DBL_EPSILON__;
+	
+	LUNROLL(ix, 0, 1, `
+	const realtype TMP(xt, ix) = x0 + (eval(ix * 4) + programIndex) * h;')
+	
+	LUNROLL(iy, 0, 7,`
+	uniform const realtype TMP(yt, iy) = y0 + iy * h;') 
 
-	foreach(d = 0 ... 64)
+	for(uniform int s = 0; s < nsources; ++s)
 	{
-		const int ix = d & 7;
-		const int iy = d >> 3;
+		uniform const realtype xsrc = xsources[s];
+		uniform const realtype ysrc = ysources[s];
+		uniform const realtype vsrc = vsources[s];
+		
+		LUNROLL(ix, 0, 1, `
+		const realtype TMP(xr, ix) = TMP(xt, ix) - xsrc;
+		const realtype TMP(xr2, ix) = TMP(xr, ix) * TMP(xr, ix);')
+    		
+		LUNROLL(iy, 0, 7, `
+		uniform const realtype TMP(yr, iy) = TMP(yt, iy) - ysrc;
+		uniform const realtype TMP(yr2, iy) = TMP(yr, iy) * TMP(yr, iy) + eps;')
 
-		const realtype xt = x0 + ix * h;
-		const realtype yt = y0 + iy * h;
-
-		realtype xsum = 0, ysum = 0;
-		for(int s = 0; s < nsources; ++s)
-		{
-			const realtype xr = xt - xsources[s];
-	    		const realtype yr = yt - ysources[s];
-	    		const realtype factor = vsources[s] / (xr * xr + yr * yr + eps);
-
-			xsum += xr * factor;
-	    		ysum += yr * factor;
-		}
-
-		xresult[d] += xsum;
-		yresult[d] += ysum;
+		LUNROLL(iy, 0, 7, `
+		LUNROLL(ix, 0, 1, `
+    		const realtype TMP(factor, eval(4 * ix + 8 * iy)) = vsrc / (TMP(xr2, ix) + TMP(yr2, iy));
+		xresult[programIndex + eval(4 * ix + 8 * iy)] += TMP(xr, ix) * TMP(factor, eval(4 * ix + 8 * iy));
+    		yresult[programIndex + eval(4 * ix + 8 * iy)] += TMP(yr, iy) * TMP(factor, eval(4 * ix + 8 * iy));
+		')')
 	}
 }
 
